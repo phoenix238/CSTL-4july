@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// One record per client — the app's index. The client's Drive folder + Google Doc
+// (pointed at by driveFolderId / docId) remain the system of record for notes.
+model Client {
+  id            String        @id @default(cuid())
+  name          String
+  email         String        @default("")
+  phone         String        @default("")
+  clinic        String        @default("waterloo") // preferred clinic: waterloo | bethnal
+  marketing     Boolean       @default(false)
+  intakeDone    Boolean       @default(false)
+  welcomeSent   Boolean       @default(false) // access note + intake link go in the FIRST email only
+  dob           String        @default("")
+  occupation    String        @default("")
+  doctor        String        @default("")
+  meds          String        @default("")
+  conditions    String        @default("")
+  emergency     String        @default("")
+  referred      String        @default("")
+  driveFolderId String        @default("")
+  docId         String        @default("")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  bookings      Booking[]
+  notes         SessionNote[]
+
+  @@index([name])
+  @@index([email])
+}
+
+// Cached copy of a session note for instant profile views;
+// the authoritative copy is appended to the client's Google Doc on save.
+model SessionNote {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date      DateTime
+  clinic    String
+  raw       String
+  bullets   String[]
+  createdAt DateTime @default(now())
+
+  @@index([clientId, date])
+}
+
+model Booking {
+  id               String   @id @default(cuid())
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  startsAt         DateTime // start of the 60-min session
+  clinic           String // waterloo | bethnal
+  status           String   @default("confirmed") // confirmed | cancelled | done
+  personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
+  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: 2h "Phoenix" Chalk Farm block
+  emailSent        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@index([startsAt])
+  @@index([clientId])
+}
+
+model Enquiry {
+  id        String   @id @default(cuid())
+  via       String   @default("PASTED") // WHATSAPP | EMAIL | PASTED
+  name      String   @default("")
+  text      String
+  status    String   @default("waiting") // waiting | booked | dismissed
+  createdAt DateTime @default(now())
+}
+
+// Single row (id = 1). Holds editable settings and the Google wiring.
+model AppSettings {
+  id                    Int    @id @default(1)
+  accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
+  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
+  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
+  paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
+  intakeFormUrl         String @default("https://forms.gle/2nPTLzHcffgzmydo8")
+  googleRefreshToken    String @default("")
+  personalCalendarId    String @default("primary")
+  roomCalendarId        String @default("") // R5 room calendar
+  chalkFarmCalendarId   String @default("") // Bethnal Green 2h blocks
+  clientsFolderId       String @default("") // Drive › CSTL › Clients
+  marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
+}
