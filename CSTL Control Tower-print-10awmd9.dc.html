@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style data-omelette-print-defaults>
+@media print {
+  @page { margin: 0.5in; }
+  h1, h2, h3, h4, h5, h6 { break-after: avoid; }
+  figure, table, pre, blockquote, img, svg, tr, [class~="card" i] { break-inside: avoid; }
+  img, svg { max-width: 100%; }
+  p { orphans: 3; widows: 3; }
+}
+</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&amp;family=Work+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+html,body{margin:0;height:100%;}
+@keyframes ct-pulse{0%,100%{opacity:1}50%{opacity:0.45}}
+::placeholder{color:oklch(0.62 0.02 60);}
+</style>
+</helmet>
+
+<div style="display:flex; height:100vh; min-width:1120px; overflow:hidden; background:oklch(0.966 0.013 83); color:oklch(0.3 0.02 60); font-family:'Work Sans',sans-serif;">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside style="width:212px; flex:none; padding:22px 14px 18px; display:flex; flex-direction:column; gap:2px; border-right:1px solid oklch(0.9 0.015 80);">
+    <div style="display:flex; align-items:center; gap:10px; padding:0 10px 22px;">
+      <div style="width:36px; height:36px; flex:none; border-radius:50%; background:oklch(0.58 0.115 42); color:oklch(0.98 0.008 85); display:flex; align-items:center; justify-content:center; font:500 17px 'Newsreader',serif;" data-comment-anchor="a961f207d0-div">P</div>
+      <div>
+        <div style="font:500 15px/1.15 'Newsreader',serif;">Phoenix Tanner</div>
+        <div style="font:600 9.5px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); margin-top:2px;">CSTL · CRANIOSACRAL</div>
+      </div>
+    </div>
+    <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+      <div onClick="{{ n.go }}" style="display:flex; align-items:center; justify-content:space-between; padding:9px 12px; border-radius:10px; font-size:13.5px; cursor:pointer; user-select:none; background:{{ n.bg }}; color:{{ n.color }}; font-weight:{{ n.weight }};" style-hover="background:{{ n.hoverBg }}">
+        <span>{{ n.label }}</span>
+        <sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}">
+          <span style="font:600 11px 'Work Sans',sans-serif; background:oklch(0.58 0.115 42); color:oklch(0.98 0.008 85); border-radius:999px; padding:1px 7px;">{{ n.badge }}</span>
+        </sc-if>
+      </div>
+    </sc-for>
+    <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px;">
+      <div onClick="{{ goSettings }}" style="padding:9px 12px; font-size:13.5px; border-radius:10px; cursor:pointer; user-select:none; background:{{ setBg }}; color:{{ setColor }}; font-weight:{{ setWeight }};" style-hover="background:oklch(0.94 0.015 82)">Settings</div>
+      <div style="padding:11px 12px 2px; border-top:1px solid oklch(0.9 0.015 80); display:flex; align-items:flex-start; gap:8px;">
+        <span style="width:7px; height:7px; flex:none; border-radius:50%; background:oklch(0.62 0.13 148); margin-top:4px;"></span>
+        <div style="font-size:11px; line-height:1.45; color:oklch(0.55 0.03 55);">Google connected<br>Drive · Calendar · Gmail</div>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex:1; min-width:0; overflow-y:auto;">
+
+  <!-- ============ TODAY ============ -->
+  <sc-if value="{{ tabToday }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="Today" style="padding:26px 30px 40px; display:flex; flex-direction:column; gap:20px; max-width:1080px;">
+    <header style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px;">
+      <div>
+        <h1 style="margin:0; font:400 30px/1.1 'Newsreader',serif;">Good morning, Phoenix</h1>
+        <div style="margin-top:5px; font-size:13.5px; color:oklch(0.55 0.03 55);">Thursday 2 July · 3 clients · Waterloo &amp; Bethnal Green</div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button onClick="{{ goEnquiries }}" style="font:600 13.5px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:10px 20px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">New enquiry</button>
+      </div>
+    </header>
+
+    <div style="display:flex; gap:20px; align-items:flex-start;">
+      <section style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+        <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">CLIENTS TODAY</div>
+        <sc-for list="{{ todayRows }}" as="r" hint-placeholder-count="3">
+          <div style="display:flex; align-items:center; gap:18px; padding:16px 18px; background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+            <div style="width:62px; flex:none; text-align:center;">
+              <div style="font:600 20px 'Work Sans',sans-serif; font-variant-numeric:tabular-nums;">{{ r.time }}</div>
+              <div style="font-size:11px; color:oklch(0.55 0.03 55); margin-top:1px;">60 min</div>
+            </div>
+            <div style="width:1px; align-self:stretch; background:oklch(0.91 0.015 80);"></div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:baseline; gap:9px;">
+                <span style="font:500 18px 'Newsreader',serif;">{{ r.name }}</span>
+                <sc-if value="{{ r.isNew }}" hint-placeholder-val="{{ false }}"><span style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.06em; color:oklch(0.58 0.115 42);">NEW CLIENT</span></sc-if>
+              </div>
+              <div style="display:flex; gap:7px; margin-top:7px; flex-wrap:wrap;">
+                <sc-for list="{{ r.chips }}" as="c" hint-placeholder-count="2">
+                  <span style="font:500 11.5px 'Work Sans',sans-serif; border-radius:999px; padding:3px 10px; color:{{ c.color }}; background:{{ c.bg }};">{{ c.label }}</span>
+                </sc-for>
+              </div>
+            </div>
+            <button onClick="{{ r.onGo }}" style="flex:none; font:600 13px 'Work Sans',sans-serif; color:oklch(0.42 0.1 42); background:transparent; border:1.5px solid oklch(0.58 0.115 42 / 0.45); border-radius:999px; padding:9px 16px; cursor:pointer;" style-hover="background:oklch(0.94 0.03 48)">Go to client</button>
+          </div>
+        </sc-for>
+        <div style="display:flex; align-items:center; gap:8px; padding:6px 4px 0; font-size:12px; color:oklch(0.55 0.03 55);">
+          <span style="width:6px; height:6px; border-radius:50%; background:oklch(0.62 0.13 148);"></span>
+          Calendar synced — invites &amp; reminders out for all three
+        </div>
+      </section>
+
+      <aside style="width:290px; flex:none; display:flex; flex-direction:column; gap:10px;">
+        <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">NEEDS ATTENTION</div>
+        <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05); padding:6px 16px;">
+          <sc-for list="{{ attn }}" as="a" hint-placeholder-count="3">
+            <div style="display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:{{ a.border }};">
+              <div style="flex:1; min-width:0;">
+                <div style="font:600 13.5px 'Work Sans',sans-serif;">{{ a.name }}</div>
+                <div style="font-size:12px; color:oklch(0.55 0.03 55); margin-top:2px;">{{ a.desc }}</div>
+              </div>
+              <button onClick="{{ a.onClick }}" style="flex:none; font:600 12px 'Work Sans',sans-serif; border:none; border-radius:999px; padding:6px 13px; cursor:pointer; color:{{ a.btnColor }}; background:{{ a.btnBg }};">{{ a.btn }}</button>
+            </div>
+          </sc-for>
+        </div>
+      </aside>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ CLIENTS ============ -->
+  <sc-if value="{{ tabClients }}" hint-placeholder-val="{{ false }}">
+  <div style="padding:26px 30px 40px; max-width:1080px;">
+
+    <sc-if value="{{ showList }}" hint-placeholder-val="{{ true }}">
+    <div data-screen-label="Clients list" style="display:flex; flex-direction:column; gap:16px;">
+      <header style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+        <h1 style="margin:0; font:400 28px/1.1 'Newsreader',serif;">Clients</h1>
+        <div style="font-size:12.5px; color:oklch(0.55 0.03 55);">One record each · synced to Drive</div>
+      </header>
+      <input value="{{ searchVal }}" onChange="{{ onSearch }}" placeholder="Search name or email…" style="width:100%; box-sizing:border-box; font:400 14.5px 'Work Sans',sans-serif; color:oklch(0.3 0.02 60); background:oklch(0.995 0.005 88); border:1px solid oklch(0.89 0.015 80); border-radius:999px; padding:13px 20px; outline:none;" style-focus="border-color:oklch(0.58 0.115 42 / 0.6)">
+      <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05); padding:2px 20px;">
+        <sc-for list="{{ clientRows }}" as="c" hint-placeholder-count="6">
+          <div onClick="{{ c.open }}" style="display:flex; align-items:center; gap:14px; padding:14px 0; border-bottom:{{ c.border }}; cursor:pointer;">
+            <div style="width:38px; height:38px; flex:none; border-radius:50%; background:oklch(0.93 0.02 60); color:oklch(0.45 0.04 55); display:flex; align-items:center; justify-content:center; font:500 14px 'Newsreader',serif;">{{ c.initials }}</div>
+            <div style="width:200px; flex:none; min-width:0;">
+              <div style="font:500 15.5px 'Newsreader',serif;">{{ c.name }}</div>
+              <div style="font-size:11.5px; color:oklch(0.55 0.03 55); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ c.email }}</div>
+            </div>
+            <span style="flex:none; font:500 11.5px 'Work Sans',sans-serif; border-radius:999px; padding:3px 10px; color:{{ c.chipColor }}; background:{{ c.chipBg }};">{{ c.chipLabel }}</span>
+            <div style="flex:1;"></div>
+            <div style="width:130px; flex:none; font-size:12px; color:oklch(0.55 0.03 55); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Last · {{ c.last }}</div>
+            <div style="width:190px; flex:none; font-size:12px; color:oklch(0.42 0.06 60); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.next }}</div>
+            <div style="width:95px; flex:none; font-size:12px; color:{{ c.mktColor }}; white-space:nowrap;">{{ c.mkt }}</div>
+            <div style="color:oklch(0.62 0.03 55); font-size:15px;">›</div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:26px 0; font-size:13.5px; color:oklch(0.55 0.03 55); text-align:center;">No clients match "{{ searchVal }}"</div>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ showProfile }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Client profile" style="display:flex; flex-direction:column; gap:16px;">
+      <div onClick="{{ backToClients }}" style="font:600 12.5px 'Work Sans',sans-serif; color:oklch(0.55 0.03 55); cursor:pointer; width:fit-content;" style-hover="color:oklch(0.42 0.1 42)">‹ All clients</div>
+
+      <div style="display:flex; align-items:center; gap:18px; padding:20px 22px; background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+        <div style="width:56px; height:56px; flex:none; border-radius:50%; background:oklch(0.58 0.115 42); color:oklch(0.98 0.008 85); display:flex; align-items:center; justify-content:center; font:500 22px 'Newsreader',serif;">{{ pInitials }}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font:500 24px 'Newsreader',serif;">{{ pName }}</div>
+          <div style="font-size:13px; color:oklch(0.55 0.03 55); margin-top:3px;">{{ pContact }}</div>
+          <div style="display:flex; gap:7px; margin-top:9px; flex-wrap:wrap;">
+            <sc-for list="{{ pChips }}" as="c" hint-placeholder-count="3">
+              <span style="font:500 11.5px 'Work Sans',sans-serif; border-radius:999px; padding:3px 10px; color:{{ c.color }}; background:{{ c.bg }};">{{ c.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch;">
+          <button onClick="{{ pBookNext }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:9px 18px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">Book next session</button>
+          <button onClick="{{ pOpenDoc }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.42 0.1 42); background:oklch(0.94 0.03 48); border:none; border-radius:999px; padding:9px 18px; cursor:pointer;">Open Google Doc</button>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:20px; align-items:flex-start;">
+        <section style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px;">
+            <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55);">SESSION NOTES</div>
+            <button onClick="{{ toggleNote }}" style="font:600 12px 'Work Sans',sans-serif; color:oklch(0.42 0.1 42); background:oklch(0.94 0.03 48); border:none; border-radius:999px; padding:6px 14px; cursor:pointer;">{{ noteBtnLabel }}</button>
+          </div>
+
+          <sc-if value="{{ noteOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="background:oklch(0.995 0.005 88); border:1.5px solid oklch(0.58 0.115 42 / 0.35); border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+            <textarea value="{{ noteText }}" onChange="{{ onNote }}" placeholder="Type, or press Dictate and just talk…" style="width:100%; box-sizing:border-box; min-height:130px; resize:vertical; font:400 14px/1.6 'Work Sans',sans-serif; color:oklch(0.3 0.02 60); background:oklch(0.975 0.01 84); border:1px solid oklch(0.91 0.015 80); border-radius:12px; padding:12px 14px; outline:none;" style-focus="border-color:oklch(0.58 0.115 42 / 0.5)"></textarea>
+            <sc-if value="{{ hasBullets }}" hint-placeholder-val="{{ false }}">
+              <div style="background:oklch(0.94 0.03 148 / 0.45); border:1px solid oklch(0.85 0.05 148 / 0.5); border-radius:12px; padding:12px 16px;">
+                <div style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.42 0.08 148); margin-bottom:7px;">SUMMARY — GOES TO THE DOC</div>
+                <sc-for list="{{ bullets }}" as="b" hint-placeholder-count="3">
+                  <div style="display:flex; gap:8px; font-size:13px; line-height:1.55; color:oklch(0.35 0.03 60);"><span style="color:oklch(0.42 0.08 148);">•</span><span>{{ b }}</span></div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="display:flex; gap:9px; align-items:center;">
+              <button onClick="{{ toggleMic }}" style="display:flex; align-items:center; gap:8px; font:600 13px 'Work Sans',sans-serif; border:none; border-radius:999px; padding:9px 17px; cursor:pointer; color:{{ micColor }}; background:{{ micBg }};">
+                <span style="width:8px; height:8px; border-radius:50%; background:{{ micDot }}; animation:{{ micAnim }};"></span>{{ micLabel }}
+              </button>
+              <button onClick="{{ summarise }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.38 0.02 60); background:transparent; border:1px solid oklch(0.85 0.02 75); border-radius:999px; padding:9px 17px; cursor:pointer;" style-hover="background:oklch(0.94 0.015 82)">Summarise</button>
+              <div style="flex:1;"></div>
+              <button onClick="{{ saveNote }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:9px 20px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">Save to Doc</button>
+            </div>
+          </div>
+          </sc-if>
+
+          <sc-for list="{{ pSessions }}" as="s" hint-placeholder-count="2">
+            <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:15px 18px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="font:500 15px 'Newsreader',serif;">{{ s.date }}</div>
+                <span style="font:500 11px 'Work Sans',sans-serif; border-radius:999px; padding:2px 9px; color:{{ s.chipColor }}; background:{{ s.chipBg }};">{{ s.clinic }}</span>
+                <div style="flex:1;"></div>
+                <div onClick="{{ s.onToggle }}" style="font:600 11.5px 'Work Sans',sans-serif; color:oklch(0.55 0.03 55); cursor:pointer;" style-hover="color:oklch(0.42 0.1 42)">{{ s.rawLabel }}</div>
+              </div>
+              <div style="margin-top:9px; display:flex; flex-direction:column; gap:4px;">
+                <sc-for list="{{ s.bullets }}" as="b" hint-placeholder-count="3">
+                  <div style="display:flex; gap:8px; font-size:13.5px; line-height:1.55;"><span style="color:oklch(0.58 0.115 42);">•</span><span>{{ b }}</span></div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ s.rawShown }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:10px; padding:11px 14px; background:oklch(0.975 0.01 84); border-radius:10px; font-size:12.5px; line-height:1.6; color:oklch(0.45 0.02 60);">{{ s.raw }}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <sc-if value="{{ pNoSessions }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:22px; text-align:center; font-size:13px; color:oklch(0.55 0.03 55); background:oklch(0.975 0.01 84); border-radius:16px; border:1px dashed oklch(0.87 0.02 78);">No sessions yet — first one is today.</div>
+          </sc-if>
+        </section>
+
+        <aside style="width:300px; flex:none; display:flex; flex-direction:column; gap:10px;">
+          <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">NEXT SESSION</div>
+          <div style="background:oklch(0.94 0.03 48 / 0.55); border:1px solid oklch(0.87 0.05 48 / 0.5); border-radius:16px; padding:13px 16px; font-size:13.5px; color:oklch(0.4 0.07 45);">{{ pNext }}</div>
+          <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:8px 2px 0;">FROM THE INTAKE FORM</div>
+          <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:6px 16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+            <sc-for list="{{ pDetails }}" as="d" hint-placeholder-count="8">
+              <div style="padding:11px 0; border-bottom:{{ d.border }};">
+                <div style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.08em; color:oklch(0.58 0.03 55);">{{ d.label }}</div>
+                <div style="font-size:13px; line-height:1.5; margin-top:3px;">{{ d.value }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </aside>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ ENQUIRIES ============ -->
+  <sc-if value="{{ tabEnquiries }}" hint-placeholder-val="{{ false }}">
+  <div style="padding:26px 30px 40px; max-width:1080px;">
+
+    <sc-if value="{{ enqStep0 }}" hint-placeholder-val="{{ true }}">
+    <div data-screen-label="Enquiries inbox" style="display:flex; flex-direction:column; gap:16px;">
+      <header>
+        <h1 style="margin:0; font:400 28px/1.1 'Newsreader',serif;">Enquiries</h1>
+        <div style="margin-top:5px; font-size:13.5px; color:oklch(0.55 0.03 55);">Paste a message — details get picked out for you, nothing is sent without your say-so.</div>
+      </header>
+      <div style="display:flex; gap:20px; align-items:flex-start;">
+        <section style="width:330px; flex:none; display:flex; flex-direction:column; gap:10px;">
+          <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">WAITING</div>
+          <sc-for list="{{ inbox }}" as="q" hint-placeholder-count="2">
+            <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:14px 16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <div style="font:600 14px 'Work Sans',sans-serif;">{{ q.name }}</div>
+                <div style="font:600 10px 'Work Sans',sans-serif; letter-spacing:0.08em; color:oklch(0.55 0.03 55);">{{ q.via }}</div>
+              </div>
+              <div style="font-size:12.5px; line-height:1.55; color:oklch(0.5 0.02 58); margin-top:5px;">{{ q.preview }}</div>
+              <button onClick="{{ q.open }}" style="margin-top:10px; font:600 12px 'Work Sans',sans-serif; color:oklch(0.42 0.1 42); background:oklch(0.94 0.03 48); border:none; border-radius:999px; padding:6px 14px; cursor:pointer;">Open</button>
+            </div>
+          </sc-for>
+          <sc-if value="{{ inboxEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px; text-align:center; font-size:13px; color:oklch(0.55 0.03 55); background:oklch(0.975 0.01 84); border-radius:16px; border:1px dashed oklch(0.87 0.02 78);">Inbox clear ✓</div>
+          </sc-if>
+        </section>
+        <section style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+          <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">NEW ENQUIRY</div>
+          <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:12px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+            <textarea value="{{ enqText }}" onChange="{{ onEnqText }}" placeholder="Paste the WhatsApp or email message here…" style="width:100%; box-sizing:border-box; min-height:170px; resize:vertical; font:400 14px/1.6 'Work Sans',sans-serif; color:oklch(0.3 0.02 60); background:oklch(0.975 0.01 84); border:1px solid oklch(0.91 0.015 80); border-radius:12px; padding:12px 14px; outline:none;" style-focus="border-color:oklch(0.58 0.115 42 / 0.5)"></textarea>
+            <div style="display:flex; gap:9px;">
+              <button onClick="{{ useSample }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.38 0.02 60); background:transparent; border:1px solid oklch(0.85 0.02 75); border-radius:999px; padding:9px 17px; cursor:pointer;" style-hover="background:oklch(0.94 0.015 82)">Use a sample message</button>
+              <div style="flex:1;"></div>
+              <button onClick="{{ analyse }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:9px 22px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">Read message →</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ enqStep1 }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Book a session" style="display:flex; flex-direction:column; gap:16px;">
+      <div onClick="{{ backToInbox }}" style="font:600 12.5px 'Work Sans',sans-serif; color:oklch(0.55 0.03 55); cursor:pointer; width:fit-content;" style-hover="color:oklch(0.42 0.1 42)">‹ Enquiries</div>
+
+      <div style="display:flex; align-items:center; gap:16px; padding:16px 20px; background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:baseline; gap:10px;">
+            <span style="font:500 21px 'Newsreader',serif;">{{ bName }}</span>
+            <sc-if value="{{ bIsNew }}" hint-placeholder-val="{{ false }}"><span style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.06em; color:oklch(0.58 0.115 42);">NEW CLIENT</span></sc-if>
+            <sc-if value="{{ bIsExisting }}" hint-placeholder-val="{{ false }}"><span style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.06em; color:oklch(0.42 0.08 148);">EXISTING — ONE RECORD KEPT</span></sc-if>
+          </div>
+          <div style="font-size:12.5px; color:oklch(0.55 0.03 55); margin-top:3px;">{{ bSub }}</div>
+          <sc-if value="{{ hasSuggest }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12.5px; color:oklch(0.5 0.07 45); margin-top:6px;">Suggested: {{ suggestLine }} — change it below if that's wrong.</div>
+          </sc-if>
+        </div>
+        <div style="display:flex; background:oklch(0.955 0.012 82); border:1px solid oklch(0.9 0.015 80); border-radius:999px; padding:3px; flex:none;">
+          <div onClick="{{ pickWaterloo }}" style="font:600 12.5px 'Work Sans',sans-serif; padding:8px 16px; border-radius:999px; cursor:pointer; user-select:none; background:{{ segWBg }}; color:{{ segWColor }};">Waterloo · £80</div>
+          <div onClick="{{ pickBethnal }}" style="font:600 12.5px 'Work Sans',sans-serif; padding:8px 16px; border-radius:999px; cursor:pointer; user-select:none; background:{{ segBBg }}; color:{{ segBColor }};">Bethnal Green · £30–60</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:20px; align-items:flex-start;">
+        <section style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; align-items:center; gap:14px; padding:0 2px;">
+            <div style="flex:none; white-space:nowrap; font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55);">NEXT 7 DAYS · {{ clinicLabelUpper }}</div>
+            <div style="flex:1;"></div>
+            <div style="display:flex; align-items:center; gap:5px; font-size:11px; color:oklch(0.55 0.03 55);"><span style="width:9px; height:9px; border-radius:3px; background:oklch(0.93 0.035 148);"></span>free</div>
+            <div style="display:flex; align-items:center; gap:5px; font-size:11px; color:oklch(0.55 0.03 55);"><span style="width:9px; height:9px; border-radius:3px; background:oklch(0.93 0.012 80);"></span>busy</div>
+            <div style="display:flex; align-items:center; gap:5px; font-size:11px; color:oklch(0.55 0.03 55);"><span style="width:9px; height:9px; border-radius:3px; background:oklch(0.58 0.115 42);"></span>chosen</div>
+          </div>
+          <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:16px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+            <div style="display:flex; gap:6px;">
+              <div style="width:42px; flex:none; padding-top:24px;">
+                <sc-for list="{{ hourLabels }}" as="h" hint-placeholder-count="12">
+                  <div style="height:48px; font-size:10.5px; color:oklch(0.55 0.03 55); font-variant-numeric:tabular-nums;">{{ h }}</div>
+                </sc-for>
+              </div>
+              <sc-for list="{{ gridDays }}" as="d" hint-placeholder-count="7">
+                <div style="flex:1; min-width:0;">
+                  <div style="height:24px; text-align:center; font:600 11.5px 'Work Sans',sans-serif; color:{{ d.headColor }};">{{ d.label }}</div>
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <sc-for list="{{ d.slots }}" as="s" hint-placeholder-count="12">
+                      <div onClick="{{ s.onClick }}" title="{{ s.t }}" style="height:10px; border-radius:3px; background:{{ s.bg }}; cursor:{{ s.cursor }};" style-hover="filter:brightness(0.94)"></div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </section>
+
+        <aside style="width:330px; flex:none; display:flex; flex-direction:column; gap:10px;">
+          <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">BOOKING</div>
+          <sc-if value="{{ noSlot }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:26px 20px; text-align:center; font-size:13px; color:oklch(0.55 0.03 55); background:oklch(0.975 0.01 84); border-radius:16px; border:1px dashed oklch(0.87 0.02 78);">Pick a free slot — you'll see exactly what gets created before anything happens.</div>
+          </sc-if>
+          <sc-if value="{{ hasSlot }}" hint-placeholder-val="{{ false }}">
+            <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; gap:13px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+              <div>
+                <div style="font:500 18px 'Newsreader',serif;">{{ slotTitle }}</div>
+                <div style="font-size:12.5px; color:oklch(0.55 0.03 55); margin-top:2px;">{{ slotSub }}</div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:7px;">
+                <div style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.58 0.03 55);">CALENDAR EVENTS TO CREATE</div>
+                <sc-for list="{{ bkEvents }}" as="e" hint-placeholder-count="2">
+                  <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; background:oklch(0.975 0.01 84); border-radius:10px;">
+                    <span style="width:8px; height:8px; flex:none; border-radius:50%; margin-top:4px; background:{{ e.dot }};"></span>
+                    <div style="flex:1; min-width:0;">
+                      <div style="font:600 13px 'Work Sans',sans-serif;">{{ e.title }}</div>
+                      <div style="font-size:11.5px; color:oklch(0.55 0.03 55); margin-top:1px;">{{ e.cal }} · {{ e.range }} · reminders on</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:7px;">
+                <div style="font:600 10.5px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.58 0.03 55);">CONFIRMATION EMAIL</div>
+                <sc-for list="{{ bkEmail }}" as="m" hint-placeholder-count="3">
+                  <div style="display:flex; gap:8px; font-size:12.5px; line-height:1.5; color:oklch(0.42 0.02 60);"><span style="color:oklch(0.42 0.08 148);">✓</span><span>{{ m }}</span></div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ bIsNew }}" hint-placeholder-val="{{ false }}">
+                <label style="display:flex; align-items:center; gap:9px; font-size:13px; cursor:pointer; padding:10px 12px; background:oklch(0.94 0.03 48 / 0.5); border-radius:10px;">
+                  <input type="checkbox" checked="{{ sendPayment }}" onChange="{{ togglePayment }}" style="accent-color:oklch(0.58 0.115 42); width:15px; height:15px;">
+                  <span>New client — send payment details ({{ priceLine }})</span>
+                </label>
+              </sc-if>
+              <button onClick="{{ confirmBooking }}" style="font:600 14px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:12px 20px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">Create events &amp; send email</button>
+            </div>
+          </sc-if>
+        </aside>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ enqStep2 }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Booking confirmed" style="display:flex; justify-content:center; padding-top:40px;">
+      <div style="width:520px; background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:20px; padding:32px 34px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05); text-align:center;">
+        <div style="width:52px; height:52px; margin:0 auto; border-radius:50%; background:oklch(0.94 0.03 148); color:oklch(0.42 0.08 148); display:flex; align-items:center; justify-content:center; font-size:24px;">✓</div>
+        <div style="font:500 24px 'Newsreader',serif; margin-top:14px;">{{ doneTitle }}</div>
+        <div style="font-size:13.5px; color:oklch(0.55 0.03 55); margin-top:4px;">{{ doneWhen }}</div>
+        <div style="margin:20px 0 4px; text-align:left; display:flex; flex-direction:column; gap:8px;">
+          <sc-for list="{{ doneItems }}" as="i" hint-placeholder-count="5">
+            <div style="display:flex; gap:9px; font-size:13px; line-height:1.5; color:oklch(0.42 0.02 60);"><span style="color:oklch(0.42 0.08 148);">✓</span><span>{{ i }}</span></div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:10px; justify-content:center; margin-top:22px;">
+          <button onClick="{{ goBookedClient }}" style="font:600 13.5px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:10px 20px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">Go to client</button>
+          <button onClick="{{ goToday }}" style="font:600 13.5px 'Work Sans',sans-serif; color:oklch(0.38 0.02 60); background:transparent; border:1px solid oklch(0.85 0.02 75); border-radius:999px; padding:10px 20px; cursor:pointer;" style-hover="background:oklch(0.94 0.015 82)">Back to Today</button>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ CALENDAR ============ -->
+  <sc-if value="{{ tabCalendar }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Calendar week" style="padding:26px 30px 40px; max-width:1200px; display:flex; flex-direction:column; gap:16px;">
+    <header style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px;">
+      <div>
+        <h1 style="margin:0; font:400 28px/1.1 'Newsreader',serif;">This week</h1>
+        <div style="margin-top:5px; font-size:13.5px; color:oklch(0.55 0.03 55);">2 – 8 July · mirrors your Google Calendars</div>
+      </div>
+      <div style="display:flex; gap:14px;">
+        <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:oklch(0.55 0.03 55);"><span style="width:8px; height:8px; border-radius:50%; background:oklch(0.58 0.115 42);"></span>Personal</div>
+        <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:oklch(0.55 0.03 55);"><span style="width:8px; height:8px; border-radius:50%; background:oklch(0.62 0.1 78);"></span>R5 room</div>
+        <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:oklch(0.55 0.03 55);"><span style="width:8px; height:8px; border-radius:50%; background:oklch(0.62 0.13 148);"></span>Chalk Farm block</div>
+      </div>
+    </header>
+    <div style="display:flex; gap:10px; align-items:stretch;">
+      <sc-for list="{{ weekDays }}" as="d" hint-placeholder-count="7">
+        <div style="flex:1; min-width:0; background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:14px; padding:12px 10px; display:flex; flex-direction:column; gap:8px; min-height:340px;" data-comment-anchor="9d01a1e2bd-div">
+          <div style="text-align:center; font:600 12px 'Work Sans',sans-serif; color:{{ d.headColor }}; padding-bottom:8px; border-bottom:1px solid oklch(0.93 0.012 80);">{{ d.label }}</div>
+          <sc-for list="{{ d.events }}" as="e" hint-placeholder-count="2">
+            <div style="display:flex; gap:7px; align-items:flex-start; padding:8px 9px; background:oklch(0.975 0.01 84); border-radius:9px;">
+              <span style="width:7px; height:7px; flex:none; border-radius:50%; margin-top:4px; background:{{ e.dot }};"></span>
+              <div style="min-width:0;">
+                <div style="font:600 11.5px 'Work Sans',sans-serif; font-variant-numeric:tabular-nums;">{{ e.time }}</div>
+                <div style="font-size:11.5px; line-height:1.4; color:oklch(0.42 0.02 60); margin-top:1px;">{{ e.title }}</div>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ d.empty }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center; font-size:11.5px; color:oklch(0.62 0.02 60); padding-top:12px;">—</div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ IMPORT ============ -->
+  <sc-if value="{{ tabImport }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Import clients" style="padding:26px 30px 40px; max-width:900px; display:flex; flex-direction:column; gap:16px;">
+    <header>
+      <h1 style="margin:0; font:400 28px/1.1 'Newsreader',serif;">Import existing clients</h1>
+      <div style="margin-top:5px; font-size:13.5px; color:oklch(0.55 0.03 55);">Bring your old files in — each client ends up with one record, one Drive folder, one Doc.</div>
+    </header>
+
+    <sc-if value="{{ impEmpty }}" hint-placeholder-val="{{ true }}">
+      <div onClick="{{ startScan }}" style="border:1.5px dashed oklch(0.83 0.03 60); border-radius:20px; background:oklch(0.98 0.008 85); padding:60px 30px; text-align:center; cursor:pointer;" style-hover="border-color:oklch(0.58 0.115 42 / 0.6); background:oklch(0.975 0.015 70)">
+        <div style="width:52px; height:52px; margin:0 auto 14px; border-radius:50%; background:oklch(0.94 0.03 48); color:oklch(0.42 0.1 42); display:flex; align-items:center; justify-content:center; font-size:22px;">↑</div>
+        <div style="font:500 19px 'Newsreader',serif;">Drop client files here, or click to choose</div>
+        <div style="font-size:13px; color:oklch(0.55 0.03 55); margin-top:6px;">PDF · DOCX · TXT · CSV — whole folders welcome. Nothing is written to Drive until you review.</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ impReview }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">REVIEW — 24 FILES · 18 CLIENTS DETECTED</div>
+        <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:2px 18px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+          <sc-for list="{{ importRows }}" as="f" hint-placeholder-count="6">
+            <div style="display:flex; align-items:center; gap:14px; padding:12px 0; border-bottom:{{ f.border }};">
+              <div style="width:230px; flex:none; font:500 12.5px ui-monospace,Menlo,monospace; color:oklch(0.45 0.02 60); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ f.file }}</div>
+              <div style="color:oklch(0.62 0.03 55);">→</div>
+              <div style="flex:1; min-width:0; font:600 13.5px 'Work Sans',sans-serif;">{{ f.client }}</div>
+              <div style="font-size:12px; color:oklch(0.55 0.03 55);">{{ f.found }}</div>
+              <span style="flex:none; font:600 11px 'Work Sans',sans-serif; border-radius:999px; padding:3px 10px; color:{{ f.actColor }}; background:{{ f.actBg }};">{{ f.action }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; padding:14px 18px; background:oklch(0.94 0.03 148 / 0.45); border:1px solid oklch(0.85 0.05 148 / 0.5); border-radius:16px;">
+          <div style="flex:1; font-size:13px; line-height:1.55; color:oklch(0.35 0.04 148);">Will create <b>18 folders + Docs</b> in Drive › Clients, merge 3 duplicates, and add 18 rows to the marketing sheet (12 consented).</div>
+          <button onClick="{{ impCancel }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.38 0.02 60); background:transparent; border:1px solid oklch(0.85 0.02 75); border-radius:999px; padding:9px 16px; cursor:pointer;">Cancel</button>
+          <button onClick="{{ runImport }}" style="font:600 13px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:9px 18px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">Import all</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ impDone }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; justify-content:center; padding-top:20px;">
+        <div style="width:480px; background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:20px; padding:32px 34px; text-align:center; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+          <div style="width:52px; height:52px; margin:0 auto; border-radius:50%; background:oklch(0.94 0.03 148); color:oklch(0.42 0.08 148); display:flex; align-items:center; justify-content:center; font-size:24px;">✓</div>
+          <div style="font:500 24px 'Newsreader',serif; margin-top:14px;">18 clients imported</div>
+          <div style="margin:18px 0 4px; text-align:left; display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; gap:9px; font-size:13px; color:oklch(0.42 0.02 60);"><span style="color:oklch(0.42 0.08 148);">✓</span><span>18 Docs created in Drive › Clients › (client name)</span></div>
+            <div style="display:flex; gap:9px; font-size:13px; color:oklch(0.42 0.02 60);"><span style="color:oklch(0.42 0.08 148);">✓</span><span>Old notes appended to each Doc, originals kept in the folder</span></div>
+            <div style="display:flex; gap:9px; font-size:13px; color:oklch(0.42 0.02 60);"><span style="color:oklch(0.42 0.08 148);">✓</span><span>Marketing sheet updated — 12 consented, 6 no</span></div>
+            <div style="display:flex; gap:9px; font-size:13px; color:oklch(0.42 0.02 60);"><span style="color:oklch(0.42 0.08 148);">✓</span><span>3 duplicates merged — still one record each</span></div>
+          </div>
+          <button onClick="{{ goClients }}" style="margin-top:20px; font:600 13.5px 'Work Sans',sans-serif; color:oklch(0.98 0.008 85); background:oklch(0.58 0.115 42); border:none; border-radius:999px; padding:10px 22px; cursor:pointer;" style-hover="background:oklch(0.52 0.115 42)">View clients</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <!-- ============ SETTINGS ============ -->
+  <sc-if value="{{ tabSettings }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Settings" style="padding:26px 30px 40px; max-width:760px; display:flex; flex-direction:column; gap:16px;">
+    <h1 style="margin:0; font:400 28px/1.1 'Newsreader',serif;">Settings</h1>
+
+    <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:0 2px;">CLINICS &amp; BOOKING RULES</div>
+    <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:6px 20px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+      <div style="padding:15px 0; border-bottom:1px solid oklch(0.93 0.012 80);">
+        <div style="display:flex; align-items:baseline; gap:10px;"><span style="font:500 16px 'Newsreader',serif;">Waterloo</span><span style="font:600 12px 'Work Sans',sans-serif; color:oklch(0.42 0.1 42);">£80 · 60 min</span></div>
+        <div style="font-size:12.5px; line-height:1.6; color:oklch(0.5 0.02 58); margin-top:4px;">Creates two 1-hour events: "(Client) — Waterloo" on your personal calendar + "R5 - Phoenix" on the room calendar.</div>
+      </div>
+      <div style="padding:15px 0;">
+        <div style="display:flex; align-items:baseline; gap:10px;"><span style="font:500 16px 'Newsreader',serif;">Bethnal Green</span><span style="font:600 12px 'Work Sans',sans-serif; color:oklch(0.42 0.08 148);">£30–60 sliding · 60 min</span></div>
+        <div style="font-size:12.5px; line-height:1.6; color:oklch(0.5 0.02 58); margin-top:4px;">Creates a 2-hour "Phoenix" block on the Chalk Farm calendar with the 1-hour "(Client) — Bethnal Green" personal event in the middle.</div>
+      </div>
+    </div>
+
+    <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:8px 2px 0;" data-comment-anchor="4e96b73063-div">ACCESS NOTE — SENT WITH EVERY BOOKING</div>
+    <div style="background:oklch(0.94 0.03 48 / 0.5); border:1px solid oklch(0.87 0.05 48 / 0.5); border-radius:16px; padding:14px 18px; font-size:13px; line-height:1.6; color:oklch(0.4 0.06 48);">"My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs."</div>
+
+    <div style="font:600 11px 'Work Sans',sans-serif; letter-spacing:0.1em; color:oklch(0.55 0.03 55); padding:8px 2px 0;">GOOGLE</div>
+    <div style="background:oklch(0.995 0.005 88); border:1px solid oklch(0.91 0.015 80); border-radius:16px; padding:6px 20px; box-shadow:0 1px 2px oklch(0.4 0.03 60 / 0.05), 0 8px 24px oklch(0.4 0.03 60 / 0.05);">
+      <div style="display:flex; justify-content:space-between; gap:14px; padding:13px 0; border-bottom:1px solid oklch(0.93 0.012 80); font-size:13px;" data-comment-anchor="f8fe7e5630-div"><span style="color:oklch(0.55 0.03 55);">Client folders &amp; Docs</span><span style="font-weight:600;">Drive › Clients › (client name)</span></div>
+      <div style="display:flex; justify-content:space-between; gap:14px; padding:13px 0; border-bottom:1px solid oklch(0.93 0.012 80); font-size:13px;" data-comment-anchor="e7b481efac-div"><span style="color:oklch(0.55 0.03 55);">Marketing spreadsheet</span><span style="font-weight:600;">Drive › Clients › Email list (email + consent)</span></div>
+      <div style="display:flex; justify-content:space-between; gap:14px; padding:13px 0; border-bottom:1px solid oklch(0.93 0.012 80); font-size:13px;"><span style="color:oklch(0.55 0.03 55);">Intake form</span><span style="font-weight:600;">CSTL Phoenix — Client Intake (Google Form)</span></div>
+      <div style="display:flex; justify-content:space-between; gap:14px; padding:13px 0; font-size:13px;"><span style="color:oklch(0.55 0.03 55);">Event reminders</span><span style="font-weight:600;" data-comment-anchor="24bdc59550-span">Email 24 h before · popup 1 h before</span></div>
+    </div>
+  </div>
+  </sc-if>
+
+  </main>
+
+  <!-- toast -->
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:oklch(0.3 0.02 60); color:oklch(0.97 0.01 85); font:500 13px 'Work Sans',sans-serif; padding:11px 22px; border-radius:999px; box-shadow:0 8px 24px oklch(0.3 0.02 60 / 0.25); z-index:50;">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;gridStartHour&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:8,&quot;min&quot;:6,&quot;max&quot;:12,&quot;section&quot;:&quot;Availability grid&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;gridEndHour&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:21,&quot;min&quot;:16,&quot;max&quot;:22,&quot;section&quot;:&quot;Availability grid&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;sundayClosed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;section&quot;:&quot;Availability grid&quot;,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.CLAY = 'oklch(0.58 0.115 42)';
+    this.CLAYTXT = 'oklch(0.42 0.1 42)'; this.CLAYTINT = 'oklch(0.94 0.03 48)';
+    this.SAGETXT = 'oklch(0.42 0.08 148)'; this.SAGETINT = 'oklch(0.94 0.03 148)';
+    this.AMBTXT = 'oklch(0.5 0.09 75)'; this.AMBTINT = 'oklch(0.95 0.035 85)';
+    this.CREAM = 'oklch(0.98 0.008 85)';
+    this.dayShort = ['Thu 2','Fri 3','Sat 4','Sun 5','Mon 6','Tue 7','Wed 8'];
+    this.dayFull = ['Thursday 2 July','Friday 3 July','Saturday 4 July','Sunday 5 July','Monday 6 July','Tuesday 7 July','Wednesday 8 July'];
+    this.clients = [
+      { id:'maya', name:'Maya Okafor', email:'maya.okafor@gmail.com', phone:'07700 900321', clinic:'waterloo', marketing:true, intake:true, dob:'14 Mar 1988', occupation:'Architect', doctor:'Dr Amin — Borough Medical Centre', meds:'None', conditions:'Migraines (diagnosed 2019)', emergency:'Sam Okafor · 07700 900322', referred:'Google search', next:'Today · 10:00 · Waterloo', sessions:[
+        { date:'24 Jun 2026', clinic:'waterloo', bullets:['Migraine frequency down to one this fortnight','Worked occipital base and sacrum','Strong stillpoint mid-session','Keep monthly rhythm'], raw:'Migraines down to one since last time. Started supine, occipital hold — lots of heat. Sacrum settled quickly. Stillpoint around 30 mins, long. Advised hydration and a gentle walk after.' },
+        { date:'27 May 2026', clinic:'waterloo', bullets:['First session after referral','Baseline: weekly migraines, jaw clenching at night','Gentle introduction, full protocol','Rebooked monthly'], raw:'Intake reviewed. Weekly migraines, clenches jaw at night. Very settled on the table. Went gently — cranial vault, sacral hold. Rebooked for a month.' }]},
+      { id:'daniel', name:'Daniel Reeve', email:'d.reeve@outlook.com', phone:'07700 900412', clinic:'bethnal', marketing:false, intake:false, dob:'02 Nov 1991', occupation:'Chef', doctor:'Dr Osei — Globe Town Surgery', meds:'Ibuprofen (occasional)', conditions:'Tension headaches, lower back pain', emergency:'Ella Reeve · 07700 900413', referred:'Friend — Maya Okafor', next:'Today · 13:30 · Bethnal Green', sessions:[]},
+      { id:'priya', name:'Priya Shah', email:'priya.shah@me.com', phone:'07700 900733', clinic:'waterloo', marketing:true, intake:true, dob:'30 Jul 1979', occupation:'Solicitor', doctor:'Dr Lam — Waterloo Health Centre', meds:'Levothyroxine 50µg', conditions:'Hypothyroidism, chronic neck tension', emergency:'Anil Shah · 07700 900734', referred:'Instagram', next:'Today · 16:00 · Waterloo', sessions:[
+        { date:'30 Jun 2026', clinic:'waterloo', bullets:['(draft) Neck tension easing','Worked upper cervicals'], raw:'DRAFT — neck better this week, worked C1–C2, need to finish this note…' },
+        { date:'09 Jun 2026', clinic:'waterloo', bullets:['Post-holiday reset','Sleep improved','Focused on diaphragm work'], raw:'Back from holiday, sleeping better. Diaphragm work, respiratory and pelvic. Quiet session.' }]},
+      { id:'sarah', name:'Sarah Kimani', email:'sarah.kimani@gmail.com', phone:'07700 900518', clinic:'waterloo', marketing:true, intake:true, dob:'21 Sep 1984', occupation:'Teacher', doctor:'Dr Field — Kennington Park Practice', meds:'None', conditions:'Sciatica (resolved), stress', emergency:'David Kimani · 07700 900519', referred:'Colleague', next:null, sessions:[
+        { date:'12 May 2026', clinic:'waterloo', bullets:['Sciatica fully settled','Focus shifted to stress and sleep','Long stillpoint'], raw:'Sciatica gone. Work stress high — focused on parasympathetic settling. Long stillpoint. She may rebook over summer.' }]},
+      { id:'amara', name:'Amara Wilson', email:'amara.w@hotmail.com', phone:'07700 900611', clinic:'bethnal', marketing:true, intake:true, dob:'05 Jan 1996', occupation:'Nurse', doctor:'Dr Chen — Bethnal Green Health Centre', meds:'Sertraline 50mg', conditions:'Anxiety, TMJ tension', emergency:'Grace Wilson · 07700 900612', referred:'Instagram', next:'Mon 6 Jul · 14:00 · Bethnal Green', sessions:[
+        { date:'22 Jun 2026', clinic:'bethnal', bullets:['Jaw noticeably softer','Worked TMJ and cranial base','Sleep improving'], raw:'Jaw much softer this session. TMJ work, cranial base. Sleeping through most nights now.' }]},
+      { id:'tom', name:'Tom Hartley', email:'tom.hartley@gmail.com', phone:'07700 900822', clinic:'waterloo', marketing:false, intake:true, dob:'17 Jun 1972', occupation:'Taxi driver', doctor:'Dr Adeoye — Lambeth Walk Group', meds:'Amlodipine 5mg', conditions:'Lower back pain, hypertension (managed)', emergency:'Jean Hartley · 07700 900823', referred:'Wife', next:'Fri 3 Jul · 09:30 · Waterloo', sessions:[
+        { date:'19 Jun 2026', clinic:'waterloo', bullets:['Back pain easing with fortnightly sessions','Sacral and lumbar focus','Advised gentle stretching'], raw:'Back easing. Sacral + lumbar holds, good response. Showed him two gentle stretches for between sessions.' }]},
+      { id:'beatrice', name:'Beatrice Lang', email:'bea.lang@icloud.com', phone:'07700 900934', clinic:'bethnal', marketing:true, intake:true, dob:'28 Feb 2001', occupation:'Illustrator', doctor:'Dr Novak — Globe Town Surgery', meds:'None', conditions:'Migraines with aura', emergency:'Petra Lang · 07700 900935', referred:'Friend', next:'Tue 7 Jul · 11:00 · Bethnal Green', sessions:[
+        { date:'16 Jun 2026', clinic:'bethnal', bullets:['One aura episode since last session','Cranial vault and occiput focus','Discussed screen-break routine'], raw:'One aura in three weeks — big improvement. Vault + occiput. Talked about screen breaks; she is drawing 10h days.' }]}
+    ];
+    this.inboxData = [
+      { id:'jonah', name:'Jonah M', via:'WHATSAPP', preview:'"…tension headaches, I\'m out east near Victoria Park so Bethnal Green would be easiest…"',
+        text:"Hi Phoenix! I'm Jonah — a friend of Maya's. I've been having tension headaches for months and she said craniosacral really helped her. I'm out east near Victoria Park so Bethnal Green would be easiest for me. Could do next Tuesday or Wednesday after 5? My number is 07700 900412. Thanks!" },
+      { id:'sarahq', name:'Sarah Kimani', via:'EMAIL', preview:'"…could I book another Waterloo session? Weekday mornings work best…"',
+        text:"Hi Phoenix, it's Sarah Kimani — I'd love to come back in. Could I book another Waterloo session? Weekday mornings work best for me. Thanks so much, Sarah" }
+    ];
+    this.state = {
+      tab:'today', clientId:null, search:'', expanded:{},
+      enqStep:0, enqText:'', bName:'', bPhone:'', bClinic:'waterloo', bIsNew:true, bClientId:null, suggestLine:'', slot:null, sendPayment:true,
+      usedInbox:[], booked:[], lastBooked:null,
+      noteOpen:false, recording:false, noteText:'', bullets:null,
+      importState:'empty', toast:null
+    };
+    this.micWords = "Client settled quickly today. Worked with the sacrum first, then the occipital base — a lot of heat and unwinding through the neck. Long stillpoint around the middle of the session. Headaches reported easier this week, sleep still a little broken. Suggested gentle walking and water, review jaw tension next time.".split(' ');
+  }
+
+  componentWillUnmount() { clearInterval(this.micTimer); clearTimeout(this.toastTimer); }
+
+  toastMsg(m) {
+    clearTimeout(this.toastTimer);
+    this.setState({ toast:m });
+    this.toastTimer = setTimeout(() => this.setState({ toast:null }), 2600);
+  }
+
+  clinicLabel(c) { return c === 'waterloo' ? 'Waterloo' : 'Bethnal Green'; }
+  clinicChip(c) {
+    return c === 'waterloo'
+      ? { label:'Waterloo · R5 Phoenix', color:this.CLAYTXT, bg:this.CLAYTINT }
+      : { label:'Bethnal Green', color:this.SAGETXT, bg:this.SAGETINT };
+  }
+  fmt(min) { const h = Math.floor(min/60), m = min%60; return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0'); }
+
+  stopMic() { clearInterval(this.micTimer); this.micTimer = null; this.setState({ recording:false }); }
+
+  analyseText(text) {
+    const t = text.trim();
+    if (!t) { this.toastMsg('Paste a message first'); return; }
+    let name = 'New client';
+    const nm = t.match(/(?:i'm|i am|this is|it's)\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)/i);
+    if (nm) name = nm[1];
+    const ph = t.match(/(07\d{2}[\d ]{7,})/);
+    let clinic = null, reason = '';
+    if (/bethnal|victoria park|hackney|east london|out east/i.test(t)) { clinic = 'bethnal'; reason = 'Bethnal Green — the message mentions the east'; }
+    else if (/waterloo|south bank|southwark|kennington/i.test(t)) { clinic = 'waterloo'; reason = 'Waterloo — named in the message'; }
+    const existing = this.clients.find(c => c.name.toLowerCase().includes(name.toLowerCase()) && name.length > 3);
+    this.setState({
+      enqStep:1, bName: existing ? existing.name : name, bPhone: ph ? ph[1].trim() : (existing ? existing.phone : ''),
+      bClinic: clinic || (existing ? existing.clinic : 'waterloo'), bIsNew: !existing, bClientId: existing ? existing.id : null,
+      suggestLine: reason, slot:null, sendPayment: !existing
+    });
+  }
+
+  busyAt(clinic, d, slotMin) {
+    if ((this.props.sundayClosed ?? true) && d === 3) return true;
+    if (d === 0) {
+      if (clinic === 'waterloo' && ((slotMin >= 600 && slotMin < 660) || (slotMin >= 960 && slotMin < 1020))) return true;
+      if (clinic === 'bethnal' && slotMin >= 780 && slotMin < 930) return true;
+      if (slotMin < 9*60 + 30) return true;
+    }
+    const seed = clinic === 'waterloo' ? 3 : 7;
+    const s = Math.floor(slotMin / 15);
+    const h = (d * 47 + s * 13 + seed * 29 + Math.floor(s / 4) * 11) % 10;
+    return h < 3;
+  }
+
+  renderVals() {
+    const st = this.state, self = this;
+    const go = t => () => this.setState({ tab:t, clientId:null });
+    const navDef = [
+      ['Today','today'], ['Clients','clients'], ['Enquiries','enquiries'], ['Calendar','calendar'], ['Import','import']
+    ];
+    const inbox = this.inboxData.filter(q => !st.usedInbox.includes(q.id));
+    const nav = navDef.map(([label, key]) => {
+      const active = st.tab === key;
+      return {
+        label, go: go(key),
+        badge: key === 'enquiries' && inbox.length ? inbox.length : null,
+        bg: active ? this.CLAYTINT : 'transparent',
+        color: active ? this.CLAYTXT : 'oklch(0.42 0.02 60)',
+        weight: active ? 600 : 400,
+        hoverBg: active ? this.CLAYTINT : 'oklch(0.94 0.015 82)'
+      };
+    });
+
+    const openClient = id => () => this.setState({ tab:'clients', clientId:id, noteOpen:false, noteText:'', bullets:null });
+
+    // ---- Today ----
+    const todayData = [
+      { time:'10:00', c: this.clients[0], status:{ label:'Intake ✓', color:this.SAGETXT, bg:this.SAGETINT } },
+      { time:'13:30', c: this.clients[1], status:{ label:'Intake pending', color:this.AMBTXT, bg:this.AMBTINT } },
+      { time:'16:00', c: this.clients[2], status:{ label:'Intake ✓', color:this.SAGETXT, bg:this.SAGETINT } }
+    ];
+    const todayRows = todayData.map(r => ({
+      time:r.time, name:r.c.name, isNew: r.c.sessions.length === 0,
+      chips:[ this.clinicChip(r.c.clinic), r.status ], onGo: openClient(r.c.id)
+    }));
+    const attnData = [
+      { name:'Jonah M', desc:'WhatsApp enquiry · wants an evening next week', btn:'Book', primary:true,
+        onClick: () => { this.setState({ tab:'enquiries', enqText:this.inboxData[0].text }); this.analyseText(this.inboxData[0].text); } },
+      { name:'Daniel Reeve', desc:'Intake form not returned — session at 13:30', btn:'Resend',
+        onClick: () => this.toastMsg('Intake form re-sent to Daniel ✓') },
+      { name:'Priya Shah', desc:"Tuesday's session note unfinished", btn:'Finish',
+        onClick: () => this.setState({ tab:'clients', clientId:'priya', noteOpen:true, noteText:this.clients[2].sessions[0].raw, bullets:null }) }
+    ];
+    const attn = attnData.map((a,i) => ({
+      ...a, border: i === attnData.length-1 ? 'none' : '1px solid oklch(0.93 0.012 80)',
+      btnColor: a.primary ? this.CREAM : this.CLAYTXT, btnBg: a.primary ? this.CLAY : this.CLAYTINT
+    }));
+
+    // ---- Clients list ----
+    const q = st.search.toLowerCase();
+    const filtered = this.clients.filter(c => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+    const clientRows = filtered.map((c,i) => {
+      const chip = this.clinicChip(c.clinic);
+      return {
+        name:c.name, email:c.email, initials:c.name.split(' ').map(w=>w[0]).join(''),
+        chipLabel: this.clinicLabel(c.clinic), chipColor:chip.color, chipBg:chip.bg,
+        last: c.sessions.length ? c.sessions[0].date : '—',
+        next: c.next ? 'Next · ' + c.next : 'Not booked',
+        mkt: c.marketing ? '✓ marketing' : '— no mktg', mktColor: c.marketing ? this.SAGETXT : 'oklch(0.6 0.02 60)',
+        border: i === filtered.length-1 ? 'none' : '1px solid oklch(0.93 0.012 80)',
+        open: openClient(c.id)
+      };
+    });
+
+    // ---- Profile ----
+    const pc = this.clients.find(c => c.id === st.clientId) || null;
+    let pv = {};
+    if (pc) {
+      const chips = [ this.clinicChip(pc.clinic),
+        pc.intake ? { label:'Intake ✓', color:this.SAGETXT, bg:this.SAGETINT } : { label:'Intake pending', color:this.AMBTXT, bg:this.AMBTINT },
+        pc.marketing ? { label:'Email marketing ✓', color:this.SAGETXT, bg:this.SAGETINT } : { label:'No marketing', color:'oklch(0.5 0.02 58)', bg:'oklch(0.94 0.01 80)' } ];
+      const details = [
+        ['DATE OF BIRTH', pc.dob], ['OCCUPATION', pc.occupation], ['DOCTOR', pc.doctor],
+        ['MEDICATIONS', pc.meds], ['HEALTH CONDITIONS', pc.conditions], ['EMERGENCY CONTACT', pc.emergency],
+        ['REFERRED BY', pc.referred], ['EMAIL MARKETING', pc.marketing ? 'Yes — on the sheet' : 'No']
+      ];
+      pv = {
+        pName:pc.name, pInitials:pc.name.split(' ').map(w=>w[0]).join(''),
+        pContact: [pc.email, pc.phone].filter(Boolean).join(' · '), pChips:chips,
+        pDetails: details.map((d,i) => ({ label:d[0], value:d[1], border: i === details.length-1 ? 'none' : '1px solid oklch(0.93 0.012 80)' })),
+        pNext: pc.next ? pc.next + ' — invite & reminders on' : 'Nothing booked — use "Book next session".',
+        pSessions: pc.sessions.map((s,i) => {
+          const key = pc.id + '-' + i, chip = this.clinicChip(s.clinic);
+          return { date:s.date, clinic:this.clinicLabel(s.clinic), chipColor:chip.color, chipBg:chip.bg,
+            bullets:s.bullets, raw:s.raw, rawShown: !!st.expanded[key],
+            rawLabel: st.expanded[key] ? 'Hide raw note' : 'Show raw note',
+            onToggle: () => this.setState({ expanded: { ...st.expanded, [key]: !st.expanded[key] } }) };
+        }),
+        pNoSessions: pc.sessions.length === 0 && !st.noteOpen,
+        pOpenDoc: () => this.toastMsg('Opens Drive › Clients › ' + pc.name + ' › Doc'),
+        pBookNext: () => this.setState({ tab:'enquiries', enqStep:1, bName:pc.name, bPhone:pc.phone, bClinic:pc.clinic, bIsNew:false, bClientId:pc.id, suggestLine:'', slot:null, sendPayment:false })
+      };
+    }
+
+    // ---- Notes composer ----
+    const toggleMic = () => {
+      if (st.recording) { this.stopMic(); return; }
+      this.setState({ recording:true });
+      let i = 0;
+      const base = this.state.noteText ? this.state.noteText.replace(/\s+$/,'') + ' ' : '';
+      let acc = base;
+      this.micTimer = setInterval(() => {
+        if (i >= this.micWords.length) { this.stopMic(); return; }
+        acc += (i ? ' ' : '') + this.micWords[i]; i++;
+        this.setState({ noteText: acc });
+      }, 150);
+    };
+    const summarise = () => {
+      const t = this.state.noteText.trim();
+      if (!t) { this.toastMsg('Nothing to summarise yet'); return; }
+      const bullets = t.split(/[.!?\n]+/).map(s => s.trim().replace(/^[—–-]\s*/,'')).filter(s => s.length > 8).slice(0,6);
+      this.setState({ bullets: bullets.length ? bullets : [t] });
+    };
+    const saveNote = () => {
+      if (!pc) return;
+      const t = this.state.noteText.trim();
+      if (!t) { this.toastMsg('Nothing to save yet'); return; }
+      this.stopMic();
+      let bl = this.state.bullets;
+      if (!bl) bl = t.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 8).slice(0,5);
+      const isDraftFinish = pc.sessions.length && pc.sessions[0].raw.indexOf('DRAFT') === 0;
+      if (isDraftFinish) { pc.sessions[0] = { ...pc.sessions[0], bullets: bl.length ? bl : pc.sessions[0].bullets, raw:t }; }
+      else pc.sessions.unshift({ date:'2 Jul 2026', clinic:pc.clinic, bullets: bl.length ? bl : ['Session note'], raw:t });
+      this.setState({ noteOpen:false, noteText:'', bullets:null });
+      this.toastMsg('Saved to ' + pc.name + "'s Doc in Drive ✓");
+    };
+
+    // ---- Enquiry step 1: grid ----
+    const startH = this.props.gridStartHour ?? 8, endH = this.props.gridEndHour ?? 20;
+    const hourLabels = [];
+    for (let h = startH; h < endH; h++) hourLabels.push(this.fmt(h*60));
+    const gridDays = this.dayShort.map((label, d) => {
+      const closed = (this.props.sundayClosed ?? true) && d === 3;
+      const slots = [];
+      for (let m = startH*60; m < endH*60; m += 15) {
+        const busy = this.busyAt(st.bClinic, d, m);
+        const sel = st.slot && st.slot.d === d && st.slot.m === m;
+        slots.push({
+          t: this.dayShort[d] + ' · ' + this.fmt(m) + (busy ? ' — busy' : ''),
+          bg: sel ? this.CLAY : (busy ? 'oklch(0.93 0.012 80)' : 'oklch(0.93 0.035 148)'),
+          cursor: busy ? 'default' : 'pointer',
+          onClick: busy ? () => {} : () => this.setState({ slot:{ d, m } })
+        });
+      }
+      return { label, headColor: closed ? 'oklch(0.65 0.02 60)' : 'oklch(0.42 0.02 60)', slots };
+    });
+
+    // ---- Booking summary ----
+    let bk = { slotTitle:'', slotSub:'', bkEvents:[], bkEmail:[] };
+    const price = st.bClinic === 'waterloo' ? '£80' : '£30–60 sliding scale';
+    if (st.slot) {
+      const m = st.slot.m, name = st.bName || 'Client';
+      const events = st.bClinic === 'waterloo'
+        ? [ { dot:this.CLAY, title: name + ' — Waterloo', cal:'Personal calendar', range:this.fmt(m)+'–'+this.fmt(m+60) },
+            { dot:'oklch(0.62 0.1 78)', title:'R5 - Phoenix', cal:'Room calendar', range:this.fmt(m)+'–'+this.fmt(m+60) } ]
+        : [ { dot:'oklch(0.62 0.13 148)', title:'Phoenix', cal:'Chalk Farm calendar · 2 h block', range:this.fmt(m-30)+'–'+this.fmt(m+90) },
+            { dot:this.CLAY, title: name + ' — Bethnal Green', cal:'Personal calendar', range:this.fmt(m)+'–'+this.fmt(m+60) } ];
+      const email = [ 'Google Calendar invite attached', 'Link to the CSTL intake form', 'Access note — stairs, no step-free access' ];
+      if (st.bIsNew && st.sendPayment) email.push('Payment details — ' + price);
+      bk = { slotTitle: this.dayFull[st.slot.d] + ' · ' + this.fmt(m), slotSub: '60 min · ' + this.clinicLabel(st.bClinic) + ' · ' + price, bkEvents:events, bkEmail:email };
+    }
+    const confirmBooking = () => {
+      const s = this.state; if (!s.slot) return;
+      let cid = s.bClientId;
+      if (s.bIsNew) {
+        cid = 'new-' + Date.now();
+        this.clients.unshift({ id:cid, name:s.bName, email:'', phone:s.bPhone, clinic:s.bClinic, marketing:false, intake:false,
+          dob:'—', occupation:'—', doctor:'—', meds:'—', conditions:'—', emergency:'—', referred:'—',
+          next: this.dayShort[s.slot.d] + ' Jul · ' + this.fmt(s.slot.m) + ' · ' + this.clinicLabel(s.bClinic), sessions:[] });
+      } else {
+        const c = this.clients.find(x => x.id === cid);
+        if (c) c.next = this.dayShort[s.slot.d] + ' Jul · ' + this.fmt(s.slot.m) + ' · ' + this.clinicLabel(s.bClinic);
+      }
+      const used = this.inboxData.find(x => s.bName.toLowerCase().indexOf(x.name.split(' ')[0].toLowerCase()) === 0 || x.name.toLowerCase().indexOf(s.bName.split(' ')[0].toLowerCase()) === 0);
+      this.setState({
+        enqStep:2, usedInbox: used ? [...s.usedInbox, used.id] : s.usedInbox,
+        booked: [...s.booked, { d:s.slot.d, m:s.slot.m, name:s.bName, clinic:s.bClinic }],
+        lastBooked: { cid, title:'Booked — ' + s.bName, when: this.dayFull[s.slot.d] + ' · ' + this.fmt(s.slot.m) + ' · ' + this.clinicLabel(s.bClinic),
+          items: [ ...bk.bkEvents.map(e => '"' + e.title + '" created (' + e.cal + ', ' + e.range + ', reminders on)'),
+            'Email sent — invite, intake form link, access note' + (s.bIsNew && s.sendPayment ? ', payment details' : ''),
+            s.bIsNew ? 'Client record created · Drive folder + Doc ready' : 'Added to ' + s.bName + "'s existing record — one record kept" ] }
+      });
+    };
+
+    // ---- Calendar week ----
+    const baseEvents = [
+      { d:0, m:600, name:'Maya Okafor', clinic:'waterloo' },
+      { d:0, m:810, name:'Daniel Reeve', clinic:'bethnal' },
+      { d:0, m:960, name:'Priya Shah', clinic:'waterloo' },
+      { d:1, m:570, name:'Tom Hartley', clinic:'waterloo' },
+      { d:4, m:840, name:'Amara Wilson', clinic:'bethnal' },
+      { d:5, m:660, name:'Beatrice Lang', clinic:'bethnal' }
+    ].concat(st.booked);
+    const weekDays = this.dayShort.map((label, d) => {
+      const evs = [];
+      baseEvents.filter(e => e.d === d).sort((a,b) => a.m - b.m).forEach(e => {
+        if (e.clinic === 'waterloo') {
+          evs.push({ time:this.fmt(e.m)+'–'+this.fmt(e.m+60), title:e.name + ' — Waterloo', dot:this.CLAY });
+          evs.push({ time:this.fmt(e.m)+'–'+this.fmt(e.m+60), title:'R5 - Phoenix', dot:'oklch(0.62 0.1 78)' });
+        } else {
+          evs.push({ time:this.fmt(e.m-30)+'–'+this.fmt(e.m+90), title:'Phoenix — Chalk Farm', dot:'oklch(0.62 0.13 148)' });
+          evs.push({ time:this.fmt(e.m)+'–'+this.fmt(e.m+60), title:e.name + ' — Bethnal Green', dot:this.CLAY });
+        }
+      });
+      return { label: label + ' Jul', headColor: d === 0 ? this.CLAYTXT : 'oklch(0.42 0.02 60)', events:evs, empty: evs.length === 0 };
+    });
+
+    // ---- Import ----
+    const importFiles = [
+      ['maya-okafor-intake.pdf','Maya Okafor','intake + 4 notes', true],
+      ['notes_tom_hartley_2024.docx','Tom Hartley','6 session notes', true],
+      ['bea lang.docx','Beatrice Lang','intake + 2 notes', false],
+      ['clients_2023.csv','9 clients','contact details', false],
+      ['j-osborne-sessions.txt','Jack Osborne','3 session notes', false],
+      ['sarah kimani (old).pdf','Sarah Kimani','duplicate — will merge', true]
+    ];
+    const importRows = importFiles.map((f,i) => ({
+      file:f[0], client:f[1], found:f[2],
+      action: f[3] ? 'Merge' : 'New client',
+      actColor: f[3] ? this.SAGETXT : this.CLAYTXT, actBg: f[3] ? this.SAGETINT : this.CLAYTINT,
+      border: i === importFiles.length-1 ? 'none' : '1px solid oklch(0.93 0.012 80)'
+    }));
+
+    return {
+      nav, goSettings: go('settings'),
+      setBg: st.tab === 'settings' ? this.CLAYTINT : 'transparent',
+      setColor: st.tab === 'settings' ? this.CLAYTXT : 'oklch(0.42 0.02 60)',
+      setWeight: st.tab === 'settings' ? 600 : 400,
+      tabToday: st.tab === 'today', tabClients: st.tab === 'clients', tabEnquiries: st.tab === 'enquiries',
+      tabCalendar: st.tab === 'calendar', tabImport: st.tab === 'import', tabSettings: st.tab === 'settings',
+      goEnquiries: () => this.setState({ tab:'enquiries', enqStep:0 }),
+      todayRows, attn,
+      // clients
+      searchVal: st.search, onSearch: e => this.setState({ search: e.target.value }),
+      clientRows, noResults: filtered.length === 0,
+      showList: !pc, showProfile: !!pc,
+      backToClients: () => { this.stopMic(); this.setState({ clientId:null, noteOpen:false, noteText:'', bullets:null }); },
+      ...pv,
+      noteOpen: st.noteOpen, noteBtnLabel: st.noteOpen ? 'Close' : '+ Add note',
+      toggleNote: () => { this.stopMic(); this.setState({ noteOpen: !st.noteOpen, bullets:null }); },
+      noteText: st.noteText, onNote: e => this.setState({ noteText: e.target.value }),
+      recording: st.recording, toggleMic, summarise, saveNote,
+      micLabel: st.recording ? 'Listening…' : 'Dictate',
+      micBg: st.recording ? 'oklch(0.45 0.13 30)' : this.CLAYTINT,
+      micColor: st.recording ? this.CREAM : this.CLAYTXT,
+      micDot: st.recording ? 'oklch(0.9 0.05 30)' : this.CLAYTXT,
+      micAnim: st.recording ? 'ct-pulse 1.1s ease-in-out infinite' : 'none',
+      bullets: st.bullets || [], hasBullets: !!(st.bullets && st.bullets.length),
+      // enquiries
+      enqStep0: st.enqStep === 0, enqStep1: st.enqStep === 1, enqStep2: st.enqStep === 2,
+      inbox: inbox.map(q2 => ({ ...q2, open: () => this.setState({ enqText: q2.text }) })),
+      inboxEmpty: inbox.length === 0,
+      enqText: st.enqText, onEnqText: e => this.setState({ enqText: e.target.value }),
+      useSample: () => this.setState({ enqText: this.inboxData[0].text }),
+      analyse: () => this.analyseText(this.state.enqText),
+      backToInbox: () => this.setState({ enqStep:0, slot:null }),
+      bName: st.bName, bIsNew: st.bIsNew, bIsExisting: !st.bIsNew,
+      bSub: (st.bPhone ? st.bPhone + ' · ' : '') + '60 min session',
+      hasSuggest: !!st.suggestLine, suggestLine: st.suggestLine,
+      pickWaterloo: () => this.setState({ bClinic:'waterloo', slot:null }),
+      pickBethnal: () => this.setState({ bClinic:'bethnal', slot:null }),
+      segWBg: st.bClinic === 'waterloo' ? this.CLAY : 'transparent', segWColor: st.bClinic === 'waterloo' ? this.CREAM : 'oklch(0.45 0.02 60)',
+      segBBg: st.bClinic === 'bethnal' ? this.CLAY : 'transparent', segBColor: st.bClinic === 'bethnal' ? this.CREAM : 'oklch(0.45 0.02 60)',
+      clinicLabelUpper: this.clinicLabel(st.bClinic).toUpperCase(),
+      hourLabels, gridDays,
+      noSlot: !st.slot, hasSlot: !!st.slot,
+      slotTitle: bk.slotTitle, slotSub: bk.slotSub, bkEvents: bk.bkEvents, bkEmail: bk.bkEmail,
+      sendPayment: st.sendPayment, togglePayment: e => this.setState({ sendPayment: e.target.checked }),
+      priceLine: price, confirmBooking,
+      doneTitle: st.lastBooked ? st.lastBooked.title : '', doneWhen: st.lastBooked ? st.lastBooked.when : '',
+      doneItems: st.lastBooked ? st.lastBooked.items : [],
+      goBookedClient: () => { if (st.lastBooked) this.setState({ tab:'clients', clientId: st.lastBooked.cid, enqStep:0, enqText:'' }); },
+      goToday: () => this.setState({ tab:'today', enqStep:0, enqText:'' }),
+      // calendar
+      weekDays,
+      // import
+      impEmpty: st.importState === 'empty', impReview: st.importState === 'review', impDone: st.importState === 'done',
+      startScan: () => this.setState({ importState:'review' }),
+      impCancel: () => this.setState({ importState:'empty' }),
+      runImport: () => this.setState({ importState:'done' }),
+      goClients: () => this.setState({ tab:'clients', clientId:null, importState:'empty' }),
+      // toast
+      toast: st.toast, hasToast: !!st.toast
+    };
+  }
+}
+</script>
+<script>
+(async () => {
+  if (!document.title || !document.title.trim()) document.title = "CSTL Control Tower";
+  // Prepend so page-supplied @page / break rules (deck-stage's margin:0,
+  // author CSS) keep source-order precedence over the baseline.
+  const baseCss = document.createElement('style');
+  baseCss.textContent = "@media print {\n  figure, table { break-inside: avoid; }\n  *, *::before, *::after {\n    print-color-adjust: exact; -webkit-print-color-adjust: exact;\n    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;\n    animation-delay: -99s !important; animation-duration: .001s !important;\n    animation-iteration-count: 1 !important; animation-fill-mode: both !important;\n    animation-play-state: running !important; transition-duration: 0s !important;\n  }\n}";
+  document.head.prepend(baseCss);
+  if (document.readyState === 'loading') {
+    await new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
+  }
+  let ds = document.querySelector('deck-stage');
+  // whenDefined never resolves when nothing registers the element, so only
+  // await it when a <deck-stage> tag exists (and race a timeout regardless).
+  if (ds && !customElements.get('deck-stage')) {
+    try {
+      await Promise.race([
+        customElements.whenDefined('deck-stage'),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
+    } catch (e) {}
+    ds = document.querySelector('deck-stage');
+  }
+  // dc-runtime assigns window.DCLogic at init and mounts into #dc-root on
+  // DOMContentLoaded; settle on that subtree so React has rendered before
+  // print(). Non-DC pages fall through to weighing body.
+  const isDc = !ds && 'DCLogic' in window;
+  const settleRoot = ds || (isDc ? document.getElementById('dc-root') : null) || document.body;
+  if (settleRoot) {
+    // Weigh only content children — skip script/style/template so inline
+    // Babel/CSS doesn't register as stable "content" before the framework
+    // has mounted anything.
+    const MEDIA = 'img,svg,canvas,video,picture,iframe,embed,object';
+    const weigh = () => {
+      let text = 0, media = 0;
+      for (const c of settleRoot.children) {
+        const t = c.tagName;
+        if (t === 'SCRIPT' || t === 'STYLE' || t === 'TEMPLATE') continue;
+        text += (c.textContent || '').trim().length;
+        media += c.querySelectorAll(MEDIA).length + (c.matches(MEDIA) ? 1 : 0);
+      }
+      return text + media * 100;
+    };
+    // "Non-zero and stable" alone is not sufficient to mean rendered: generic
+    // body can carry a static shell while async main content is pending, and
+    // #dc-root can carry the root DC's static text while child refs are still
+    // .sc-placeholder boxes. Gate generic on readyState 'complete', and never
+    // accept stability while a dc-runtime placeholder is present.
+    const isGeneric = settleRoot === document.body;
+    const deadline = Date.now() + 15000;
+    let last = -1, stable = 0;
+    while (Date.now() < deadline) {
+      const n = weigh();
+      const ready =
+        (!isGeneric || document.readyState === 'complete') &&
+        !settleRoot.querySelector('.sc-placeholder');
+      if (n > 0 && n === last && ready) { if (++stable >= 2) break; } else { stable = 0; }
+      last = n;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  // Project support.js may predate runtime default-seeding; push via bridge.
+  if (isDc && window.__dcSetProps && window.__dcRootName) {
+    try {
+      const dpEl = document.querySelector('script[data-dc-script]');
+      const meta = JSON.parse((dpEl && dpEl.getAttribute('data-props')) || '{}');
+      const bag = {};
+      for (const k in meta)
+        if (k[0] !== '$' && meta[k] && meta[k].default !== undefined)
+          bag[k] = meta[k].default;
+      if (Object.keys(bag).length) {
+        window.__dcSetProps(window.__dcRootName(), bag);
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    } catch (e) {}
+  }
+  // Reveal content gated on scroll or visibility before printing. Lazy <img>,
+  // IntersectionObserver fade-ins, and collapsed <details> don't render while
+  // off-screen, so a long page would print with them blank or closed. Open
+  // every <details>, force native-lazy images eager, and scroll the document
+  // through its full height to trip lazy-load + IO; then wait (bounded) for the
+  // newly-triggered images. Inert for deck-stage (slides aren't scroll-gated).
+  try {
+    for (const d of document.querySelectorAll('details')) d.open = true;
+    for (const img of document.querySelectorAll('img[loading="lazy"]'))
+      img.loading = 'eager';
+    const scroller = document.scrollingElement || document.documentElement;
+    const full = Math.max(scroller.scrollHeight, document.body.scrollHeight);
+    const step = window.innerHeight || 800;
+    for (let y = 0; y <= full; y += step) {
+      window.scrollTo(0, y);
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    window.scrollTo(0, 0);
+    await Promise.race([
+      Promise.all(
+        [...document.images].map((img) =>
+          img.complete
+            ? null
+            : new Promise((res) => {
+                img.addEventListener('load', res, { once: true });
+                img.addEventListener('error', res, { once: true });
+              })
+        )
+      ),
+      new Promise((r) => setTimeout(r, 4000)),
+    ]);
+  } catch (e) {}
+  try { await document.fonts.ready; } catch (e) {}
+  // Jump every animation to its end state so print() never captures a slide
+  // mid-entrance. Ordering matters: the 0s-transition style must be live
+  // BEFORE data-deck-active is set so attribute-keyed transitions don't
+  // start a (now-0s) run from the pre-active base.
+  const st = document.createElement('style');
+  st.textContent = '*,*::before,*::after{animation-delay:-99s !important;animation-duration:.001s !important;animation-iteration-count:1 !important;animation-fill-mode:both !important;animation-play-state:running !important;transition-duration:0s !important}';
+  document.head.appendChild(st);
+  for (const d of document.querySelectorAll('deck-stage')) {
+    for (const c of d.children) {
+      const t = c.tagName;
+      if (t === 'SCRIPT' || t === 'STYLE' || t === 'TEMPLATE') continue;
+      c.setAttribute('data-deck-active', '');
+    }
+  }
+  // Re-append deck-stage's @page last so no author @page can add a margin and
+  // spill each full-bleed slide onto two sheets. Backstop for old copies.
+  if (ds) {
+    let pg = document.getElementById('deck-stage-print-page');
+    if (!pg) {
+      pg = document.createElement('style');
+      pg.textContent = '@page{size:' + (+ds.getAttribute('width') || 1920) +
+        'px ' + (+ds.getAttribute('height') || 1080) + 'px;margin:0}';
+    }
+    document.body.appendChild(pg);
+  }
+  try {
+    const sweep = () => {
+      for (const a of document.getAnimations()) {
+        try { a.finish(); } catch (e) {
+          try { a.currentTime = (a.effect && a.effect.getComputedTiming().duration) || 0; a.pause(); } catch (e2) {}
+        }
+      }
+    };
+    sweep();
+    await new Promise((r) => requestAnimationFrame(r));
+    sweep();
+    await new Promise((r) => requestAnimationFrame(r));
+  } catch (e) {}
+  // Size the PDF page to the rendered design unless the file opted into
+  // standard paper via @page{size:letter|A4|…}. Decks own their own @page.
+  // Wrappers (body, …) lose padding+margin so the frame sits at (0,0); the
+  // frame itself loses only margin — its padding is INSIDE the measured
+  // rect and must stay, or content shifts and leaves a gap at bottom/right.
+  var __m = null;
+  try { __m = (() => {
+  var STAMP = true;
+  var docEl = document.documentElement;
+  var doc = { width: docEl.scrollWidth, height: docEl.scrollHeight };
+
+  var ds = document.querySelector('deck-stage');
+  if (ds) {
+    var dw = Number(ds.getAttribute('width')) || 1920;
+    var dh = Number(ds.getAttribute('height')) || 1080;
+    var n = typeof ds.length === 'number' ? ds.length : ds.children.length;
+    var idx = typeof ds.index === 'number' ? ds.index : 0;
+    var frames = [];
+    for (var i = 0; i < n; i++) frames.push({ left: 0, top: 0, width: dw, height: dh });
+    return { kind: 'deck', source: 'declared', doc: doc, frames: frames,
+      authored: frames.map(function(){return{width:true,height:true}}),
+      deck: { width: dw, height: dh, slideCount: n, index: idx },
+      signals: { paperPage: false, pxPage: false } };
+  }
+
+  // Declared kind: a doc-page tag names the kind outright, so no signal
+  // heuristics run (like the deck branch above, signals report false —
+  // they describe inferred classifications only). The tag alone is not
+  // trusted: the element must have upgraded (shadowRoot present), so a
+  // leftover tag whose script was deleted falls through to the heuristics
+  // that handle plain markup.
+  var stageSx = window.scrollX || 0, stageSy = window.scrollY || 0;
+  var dp = document.querySelector('doc-page');
+  if (dp && dp.shadowRoot) {
+    // Crop to the sheet, not the host — the desk around it is screen-only
+    // chrome that must not land in PNG exports.
+    var sheet = dp.shadowRoot.querySelector('.sheet');
+    var sr = (sheet || dp).getBoundingClientRect();
+    return { kind: 'paper-doc', source: 'declared', doc: doc,
+      frames: [{ left: sr.left + stageSx, top: sr.top + stageSy,
+        width: sr.width, height: sr.height }],
+      authored: [{ width: false, height: false }],
+      signals: { paperPage: false, pxPage: false } };
+  }
+  var paperPage = false, pxPage = false;
+  var eachRule = function (fn) {
+    for (var s = 0; s < document.styleSheets.length; s++) {
+      var rs; try { rs = document.styleSheets[s].cssRules; } catch (e) { continue; }
+      for (var r = 0; r < rs.length; r++) {
+        fn(rs[r]);
+        if (rs[r].cssRules) for (var n = 0; n < rs[r].cssRules.length; n++) fn(rs[r].cssRules[n]);
+      }
+    }
+  };
+  eachRule(function (r) {
+    if (r.type !== 6) return;
+    var m = /\bsize\s*:\s*([^;}]+)/i.exec(r.cssText || '');
+    if (!m) return;
+    if (/\b(letter|a[3-5]|legal|ledger)\b/i.test(m[1])) paperPage = true;
+    if (/\d+(?:\.\d+)?px\b/i.test(m[1])) pxPage = true;
+  });
+  var signals = { paperPage: paperPage, pxPage: pxPage };
+
+  var pxVal = function (v) {
+    var m = /^(\d+(?:\.\d+)?)px$/.exec(v || ''); return m ? +m[1] : 0;
+  };
+  var authoredPx = function (el, prop) {
+    if (pxVal(el.style[prop])) return true;
+    var attr = el.getAttribute(prop);
+    if (attr && /^\d+$/.test(attr)) return true;
+    var hit = false;
+    eachRule(function (r) {
+      if (hit || r.type !== 1 || !r.style) return;
+      try { if (el.matches(r.selectorText) && pxVal(r.style[prop])) hit = true; } catch (e) {}
+    });
+    return hit;
+  };
+
+  var el = document.body, rootPxW = false;
+  for (;;) {
+    var kids = [];
+    for (var c = 0; c < el.children.length; c++) {
+      var t = el.children[c].tagName;
+      if (t !== 'SCRIPT' && t !== 'STYLE' && t !== 'TEMPLATE') kids.push(el.children[c]);
+    }
+    if (kids.length !== 1 || !(kids[0] instanceof HTMLElement)) break;
+    if (STAMP) el.setAttribute('data-om-frame-wrap', '');
+    el = kids[0];
+    rootPxW = authoredPx(el, 'width');
+    if (rootPxW) break;
+  }
+  if (!rootPxW) rootPxW = authoredPx(el, 'width');
+
+  // @page{size:letter} alone is a flowing doc; with a px-width root it's a
+  // fixed sheet pretending to be paper — fall through and size to render.
+  if (paperPage && !rootPxW) {
+    return { kind: 'paper-doc', source: 'inferred', doc: doc, signals: signals,
+      frames: [{ left: 0, top: 0, width: doc.width, height: doc.height }],
+      authored: [{ width: false, height: false }] };
+  }
+
+  var sx = window.scrollX || 0, sy = window.scrollY || 0;
+  var rectOf = function (e) {
+    var r = e.getBoundingClientRect();
+    var oy; try { oy = getComputedStyle(e).overflowY; } catch (err) {}
+    var h = oy === 'visible' ? Math.max(r.height, e.scrollHeight || 0) : r.height;
+    return { left: r.left + sx, top: r.top + sy, width: r.width, height: h };
+  };
+
+  // Multi-frame: ≥2 visible non-fixed children, each with authored px width
+  // AND height, all within ±2px of each other. Off unless the page opts in
+  // via data-om-multi-frame on the stop element — guards against card grids
+  // and pricing tables that match the geometry but aren't separate canvases.
+  if (el.hasAttribute('data-om-multi-frame')) {
+    var cands = [];
+    for (var k = 0; k < el.children.length; k++) {
+      var ch = el.children[k];
+      var cs; try { cs = getComputedStyle(ch); } catch (e) { continue; }
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.position === 'fixed') continue;
+      var rc = rectOf(ch);
+      if (rc.width < 2 || rc.height < 2) continue;
+      if (!authoredPx(ch, 'width') || !authoredPx(ch, 'height')) continue;
+      cands.push(rc);
+    }
+    if (cands.length >= 2) {
+      var w0 = cands[0].width, h0 = cands[0].height, ok = true;
+      for (var q = 1; q < cands.length; q++)
+        if (Math.abs(cands[q].width - w0) > 2 || Math.abs(cands[q].height - h0) > 2) ok = false;
+      if (ok) return { kind: 'multi-frame', source: 'inferred', doc: doc, signals: signals,
+        frames: cands, authored: cands.map(function(){return{width:true,height:true}}) };
+    }
+  }
+
+  if (STAMP) el.setAttribute('data-om-frame', '');
+  return { kind: 'single-canvas', source: 'inferred', doc: doc, signals: signals,
+    frames: [rectOf(el)],
+    authored: [{ width: rootPxW, height: authoredPx(el, 'height') }] };
+})(); } catch (e) {}
+  var frame = null;
+  if (__m && __m.kind === 'single-canvas') {
+    var f = __m.frames && __m.frames[0];
+    if (f && f.width >= 200 && f.height >= 200) {
+      frame = f;
+      var fst = document.createElement('style');
+      fst.textContent = '@media print{@page{size:' + Math.ceil(f.width) + 'px ' +
+        Math.ceil(f.height) + 'px;margin:0}' +
+        'html,body,[data-om-frame-wrap]{padding:0!important;margin:0!important;background:none!important}' +
+        '[data-om-frame]{margin:0!important}}';
+      document.body.appendChild(fst);
+    }
+  }
+  // Relax break-inside on oversized elements. An element taller than a
+  // printable page can't honor break-inside: avoid — browsers either overflow
+  // it or push it whole to the next page, leaving a blank gap, then break it
+  // anyway at an arbitrary point. After the final layout (content revealed,
+  // animations jumped), find elements taller than a page that still compute
+  // break-inside: avoid and reset them to auto, so the browser breaks them at
+  // their children's boundaries instead (children keep their own avoid). PAGE_PX
+  // is a conservative portrait estimate at 96 CSS px/in — Letter/A4 usable
+  // height minus our 0.5in margins — so only clearly-oversized elements are
+  // touched and under-page elements still stay whole. Skipped for decks (slides
+  // are sized to the page) and for fixed-size canvases (frame set, or an author
+  // px-based @page) — runs as before for flowing docs on letter/A4.
+  try {
+    if (!ds && !frame && !(__m && __m.signals && __m.signals.pxPage)) {
+      const PAGE_PX = 1024;
+      // Our print defaults add a real @page margin only when the source has
+      // no @page of its own; computed style can't tell us (it reports screen
+      // media), so read the injected rule directly.
+      const defaults = document.querySelector('style[data-omelette-print-defaults]');
+      const pageInset = /@page\s*\{[^}]*margin/.test(defaults ? defaults.textContent || '' : '');
+      const SEL = 'section,article,figure,table,pre,blockquote,[class~="card" i],[class~="page" i],[class~="sheet" i]';
+      for (const el of document.body.querySelectorAll(SEL)) {
+        if (el instanceof HTMLElement && el.offsetHeight > PAGE_PX) {
+          el.setAttribute('data-om-oversized', '');
+          // Fake-paged docs simulate sheets with over-tall break-after:page
+          // boxes; honoring the break spills half-blank pages and ends a
+          // colored box mid-sheet. Flow them, and (only when we own the page
+          // inset) drop the redundant padding/background via the rule below.
+          const cs = getComputedStyle(el);
+          if (cs.breakAfter === 'page' || cs.pageBreakAfter === 'always') {
+            el.setAttribute('data-om-fakepage', '');
+          }
+        }
+      }
+      const ost = document.createElement('style');
+      ost.textContent = '@media print{' +
+        '[data-om-oversized]{break-inside:auto !important;page-break-inside:auto !important}' +
+        '[data-om-fakepage]{break-after:auto !important;page-break-after:auto !important}' +
+        (pageInset ? '[data-om-fakepage]{padding:0 !important;background:none !important}' : '') +
+        '}';
+      document.head.appendChild(ost);
+    }
+  } catch (e) {}
+  // macOS Preview renders Skia-PDF Luminosity soft-masks as opaque grey boxes;
+  // swap the CSS that triggers them for Preview-safe forms.
+  try {
+    for (const el of document.body.querySelectorAll('*')) {
+      const cs = getComputedStyle(el);
+
+      if (cs.boxShadow !== 'none' && cs.filter === 'none') {
+        const outs = [], kept = [];
+        for (const s of cs.boxShadow.split(/,(?![^(]*[)])/)) {
+          const t = s.trim();
+          const m = t.match(/^(rgba?[(][^)]+[)]) (-?[0-9.]+px) (-?[0-9.]+px) ([0-9.]+px) -?[0-9.]+px$/);
+          if (m && parseFloat(m[4]) > 0) outs.push('drop-shadow(' + m[2] + ' ' + m[3] + ' ' + m[4] + ' ' + m[1] + ')');
+          else kept.push(t);
+        }
+        if (outs.length) {
+          el.style.setProperty('filter', outs.join(' '), 'important');
+          el.style.setProperty('box-shadow', kept.join(', ') || 'none', 'important');
+        }
+      }
+
+      const mask = cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage;
+      if (mask && mask !== 'none' && cs.filter === 'none') el.style.setProperty('filter', 'opacity(1)', 'important');
+    }
+  } catch (e) {}
+  setTimeout(() => { try { window.print(); } catch (e) {} }, 200);
+})();
+</script>
+</body>
+</html>
