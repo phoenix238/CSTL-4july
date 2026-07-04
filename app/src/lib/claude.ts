@@ -1,9 +1,29 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
-const MODEL = "claude-sonnet-5";
+const MODEL = "anthropic/claude-haiku-4.5";
 
-const anthropic = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+async function chat(system: string, user: string, maxTokens: number): Promise<string> {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`OpenRouter request failed (${res.status}): ${await res.text()}`);
+  }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
 
 const enquirySchema = z.object({
   name: z.string(),
@@ -23,10 +43,8 @@ export type EnquiryAnalysis = z.infer<typeof enquirySchema>;
  * always offers a one-tap override.
  */
 export async function analyseEnquiry(message: string): Promise<EnquiryAnalysis> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: 500,
-    system: `You read new-client enquiries for Phoenix Tanner, a craniosacral therapist with two London clinics:
+  const text = await chat(
+    `You read new-client enquiries for Phoenix Tanner, a craniosacral therapist with two London clinics:
 - Waterloo (south/central: Waterloo, South Bank, Southwark, Kennington, Lambeth)
 - Bethnal Green (east: Bethnal Green, Victoria Park, Hackney, Mile End, "out east")
 
@@ -39,22 +57,20 @@ Extract from the message and reply with ONLY a JSON object, no other text:
   "clinicReason": "short human explanation like 'Bethnal Green — the message mentions Victoria Park', or empty string",
   "requestedWhen": "when they asked to come, in their words, e.g. 'Tuesday or Wednesday, after 5' — empty string if not stated"
 }`,
-    messages: [{ role: "user", content: message }],
-  });
-  const text = res.content.find((b) => b.type === "text")?.text ?? "{}";
+    message,
+    500,
+  );
   const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
   return enquirySchema.parse(json);
 }
 
 /** Turn a raw (often dictated) session note into short bullet points for the Doc. */
 export async function summariseNote(raw: string): Promise<string[]> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: 400,
-    system: `You summarise a craniosacral therapist's raw session notes into 3–6 short bullet points for the client's record. Keep her clinical vocabulary (stillpoint, occipital base, sacrum, unwinding, etc.). Each bullet is one short phrase or sentence. Reply with ONLY a JSON array of strings, no other text.`,
-    messages: [{ role: "user", content: raw }],
-  });
-  const text = res.content.find((b) => b.type === "text")?.text ?? "[]";
+  const text = await chat(
+    `You summarise a craniosacral therapist's raw session notes into 3–6 short bullet points for the client's record. Keep her clinical vocabulary (stillpoint, occipital base, sacrum, unwinding, etc.). Each bullet is one short phrase or sentence. Reply with ONLY a JSON array of strings, no other text.`,
+    raw,
+    400,
+  );
   const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
   return z.array(z.string()).min(1).parse(arr);
 }
@@ -81,10 +97,8 @@ export async function extractClientsFromFile(
   filename: string,
   content: string,
 ): Promise<ImportedClient[]> {
-  const res = await anthropic().messages.create({
-    model: MODEL,
-    max_tokens: 4000,
-    system: `You extract client records from a craniosacral therapist's old files (intake forms, session notes, CSV contact lists). A file may hold one client or many.
+  const text = await chat(
+    `You extract client records from a craniosacral therapist's old files (intake forms, session notes, CSV contact lists). A file may hold one client or many.
 
 Reply with ONLY a JSON array. Each element:
 {
@@ -94,9 +108,9 @@ Reply with ONLY a JSON array. Each element:
   "notes": "any session notes / history found, verbatim-ish, or empty string"
 }
 Use empty strings for anything the file doesn't say. Never invent details.`,
-    messages: [{ role: "user", content: `File: ${filename}\n\n${content.slice(0, 40_000)}` }],
-  });
-  const text = res.content.find((b) => b.type === "text")?.text ?? "[]";
+    `File: ${filename}\n\n${content.slice(0, 40_000)}`,
+    4000,
+  );
   const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
   return z.array(importedClientSchema).parse(arr);
 }

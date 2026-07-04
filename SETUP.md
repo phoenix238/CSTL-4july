@@ -13,7 +13,7 @@ you get it:
 | 3 | `AUTH_GOOGLE_ID` | Vercel env vars |
 | 4 | `AUTH_GOOGLE_SECRET` | Vercel env vars |
 | 5 | `ALLOWED_EMAIL` | Vercel env vars |
-| 6 | `ANTHROPIC_API_KEY` | Vercel env vars |
+| 6 | `OPENROUTER_API_KEY` | Vercel env vars |
 
 ---
 
@@ -72,13 +72,13 @@ else can use it.
 - **value 2: `AUTH_SECRET`** — any long random password. Easiest: go to https://generate-secret.vercel.app/32 and copy what it shows. ✅
 - **value 5: `ALLOWED_EMAIL`** — your own Gmail address (the one from step 2). Only this account will be able to sign in. ✅
 
-## 4. Claude API key (3 min)
+## 4. OpenRouter API key (3 min)
 
-Powers the "reads the enquiry message" and "summarise my note" features.
+Powers the "reads the enquiry message" and "summarise my note" features (routed to Claude Haiku).
 
-1. Go to **https://console.anthropic.com** → sign up / sign in.
-2. **Settings → Billing**: add a payment method and ~$5 credit (usage for this app is pennies per month).
-3. **Settings → API keys → Create key**, name it `cstl`. Copy it — **value 6: `ANTHROPIC_API_KEY`** ✅
+1. Go to **https://openrouter.ai** → sign up / sign in.
+2. Add credit under **Settings → Credits** (a few pounds covers a long time — usage is pennies per month).
+3. **Settings → API Keys → Create key**, name it `cstl`. Copy it — **value 6: `OPENROUTER_API_KEY`** ✅
 
 ## 5. Put the code on GitHub (if it isn't already)
 
