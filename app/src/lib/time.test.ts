@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { londonWeekStart, londonYMD, londonMinutes } from "./time";
+import { londonWeekStart, londonYMD, londonMinutes, calcAge } from "./time";
 
 describe("londonWeekStart", () => {
   it("returns the Monday of a mid-week date", () => {
@@ -34,5 +34,30 @@ describe("londonWeekStart", () => {
     const start = londonWeekStart(dstSunday);
     expect(londonYMD(start)).toEqual({ y: 2026, m: 10, d: 19 });
     expect(londonMinutes(start)).toBe(0);
+  });
+});
+
+describe("calcAge", () => {
+  const at = new Date("2026-07-06T12:00:00Z");
+
+  it("parses DD/MM/YYYY and computes age when the birthday has passed this year", () => {
+    expect(calcAge("14/03/1990", at)).toBe(36);
+  });
+
+  it("hasn't had the birthday yet this year", () => {
+    expect(calcAge("25/12/1990", at)).toBe(35);
+  });
+
+  it("counts the birthday itself as turning that age", () => {
+    expect(calcAge("06/07/2000", at)).toBe(26);
+  });
+
+  it("parses ISO-style YYYY-MM-DD", () => {
+    expect(calcAge("1990-03-14", at)).toBe(36);
+  });
+
+  it("returns null for empty or unparseable input", () => {
+    expect(calcAge("", at)).toBeNull();
+    expect(calcAge("not a date", at)).toBeNull();
   });
 });

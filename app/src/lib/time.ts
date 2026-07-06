@@ -65,6 +65,40 @@ export function londonWeekStart(from = new Date()): Date {
   return londonDayStart(-(idx < 0 ? 0 : idx), from);
 }
 
+/** Parse a free-typed date of birth ("14/03/1990", "1990-03-14", "14 March 1990"…) into y/m/d, or null. */
+function parseDob(raw: string): { y: number; m: number; d: number } | null {
+  const s = raw.trim();
+  if (!s) return null;
+
+  const dmy = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/); // 14/03/1990
+  if (dmy) {
+    const [, d, m, y] = dmy.map(Number);
+    return { y, m, d };
+  }
+  const ymd = s.match(/^(\d{4})[/.\-](\d{1,2})[/.\-](\d{1,2})$/); // 1990-03-14
+  if (ymd) {
+    const [, y, m, d] = ymd.map(Number);
+    return { y, m, d };
+  }
+  const parsed = new Date(s); // falls back to "14 March 1990" and similar
+  if (!Number.isNaN(parsed.getTime())) {
+    return { y: parsed.getFullYear(), m: parsed.getMonth() + 1, d: parsed.getDate() };
+  }
+  return null;
+}
+
+/** Current age in years from a free-typed date of birth, or null if it can't be parsed. */
+export function calcAge(dob: string, at = new Date()): number | null {
+  const parsed = parseDob(dob);
+  if (!parsed) return null;
+  const { y, m, d } = parsed;
+  if (y < 1900 || y > at.getFullYear()) return null;
+  let age = at.getFullYear() - y;
+  const hadBirthdayThisYear = at.getMonth() + 1 > m || (at.getMonth() + 1 === m && at.getDate() >= d);
+  if (!hadBirthdayThisYear) age--;
+  return age >= 0 && age < 130 ? age : null;
+}
+
 /** Minutes past London midnight for an instant. */
 export function londonMinutes(at: Date): number {
   const parts = new Intl.DateTimeFormat("en-GB", {

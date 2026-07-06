@@ -18,9 +18,12 @@ export default async function SettingsPage() {
         chalkFarmCalendarId: settings.chalkFarmCalendarId,
         googleConnected: !!settings.googleRefreshToken,
         intakeQuestions: resolveIntakeQuestions(settings.intakeQuestions),
-        mapsReviewUrl: settings.mapsReviewUrl,
-        reviewEmailSubject: settings.reviewEmailSubject,
-        reviewEmailBody: settings.reviewEmailBody,
+        mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
+        mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
+        reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
+        reviewEmailSubjectBethnal: settings.reviewEmailSubjectBethnal,
+        reviewEmailBodyWaterloo: settings.reviewEmailBodyWaterloo,
+        reviewEmailBodyBethnal: settings.reviewEmailBodyBethnal,
       }}
     />
   );

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Card, Chip, clinicChip } from "./ui";
+import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, useToast } from "./ui";
 
 export interface ClientRow {
   id: string;
@@ -15,18 +16,110 @@ export interface ClientRow {
 }
 
 export function ClientsList({ rows }: { rows: ClientRow[] }) {
+  const router = useRouter();
+  const toast = useToast();
   const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState<{ name: string; email: string; phone: string; clinic: "waterloo" | "bethnal" }>({
+    name: "",
+    email: "",
+    phone: "",
+    clinic: "waterloo",
+  });
+  const [saving, setSaving] = useState(false);
   const q = search.toLowerCase();
   const filtered = rows.filter(
     (c) => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q),
   );
 
+  const createClient = async () => {
+    if (!draft.name.trim()) {
+      toast("Add a name first");
+      return;
+    }
+    setSaving(true);
+    try {
+      const client = await api<{ id: string }>("/api/clients", { method: "POST", body: JSON.stringify(draft) });
+      toast(`${draft.name} added ✓`);
+      router.push(`/clients/${client.id}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't add that client");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex max-w-[1080px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
       <header className="flex items-center justify-between gap-4">
         <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Clients</h1>
-        <div className="text-[12.5px] text-muted">One record each · synced to Drive</div>
+        <div className="flex items-center gap-3">
+          <div className="hidden text-[12.5px] text-muted sm:block">One record each · synced to Drive</div>
+          <PrimaryButton
+            onClick={() => {
+              setDraft({ name: "", email: "", phone: "", clinic: "waterloo" });
+              setAdding(!adding);
+            }}
+            className="px-4 py-2 text-[13px]"
+          >
+            {adding ? "Cancel" : "+ New client"}
+          </PrimaryButton>
+        </div>
       </header>
+
+      {adding && (
+        <Card className="flex flex-col gap-3 border-[1.5px] border-clay/35 px-4 py-3.5">
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                FULL NAME
+              </span>
+              <input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                className={inputClass}
+                autoFocus
+              />
+            </label>
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">EMAIL</span>
+              <input
+                value={draft.email}
+                onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex flex-1 flex-col gap-1">
+              <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">PHONE</span>
+              <input
+                value={draft.phone}
+                onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                className={inputClass}
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">CLINIC</span>
+            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+              {(["waterloo", "bethnal"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setDraft({ ...draft, clinic: c })}
+                  className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12px] font-semibold select-none ${
+                    draft.clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                  }`}
+                >
+                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <PrimaryButton onClick={createClient} disabled={saving} className="self-start px-[18px] py-[9px] text-[13px]">
+            {saving ? "Adding…" : "Add client"}
+          </PrimaryButton>
+        </Card>
+      )}
+
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
