@@ -187,6 +187,24 @@ export function EnquiryFlow({
     router.refresh(); // sidebar badge
   }
 
+  async function deleteWaitingEnquiry(id: string) {
+    if (!window.confirm("Delete this enquiry? This can't be undone.")) return;
+    try {
+      await api(`/api/enquiries/${id}`, { method: "DELETE" });
+      toast("Enquiry deleted");
+      if (enquiryId === id) {
+        setAnalysis(null);
+        setEnquiryId(null);
+        setSaved(null);
+        setMatch(null);
+        setText("");
+      }
+      void refreshWaiting();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't delete that enquiry");
+    }
+  }
+
   function applyLoaded(
     enq: { id: string; text: string; clientId?: string | null; offeredTimes?: string[] },
     a: Analysis,
@@ -442,7 +460,7 @@ export function EnquiryFlow({
           </div>
         </header>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-          <Inbox waiting={waiting} onOpen={(id) => void loadEnquiry(id)} />
+          <Inbox waiting={waiting} onOpen={(id) => void loadEnquiry(id)} onDelete={(id) => void deleteWaitingEnquiry(id)} />
           <Card className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-5">
             <SectionLabel>NEW ENQUIRY</SectionLabel>
             <textarea
