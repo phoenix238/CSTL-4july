@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { londonWeekStart, londonYMD, londonMinutes, calcAge } from "./time";
+import { londonWeekStart, londonYMD, londonMinutes, calcAge, formatDateInput } from "./time";
 
 describe("londonWeekStart", () => {
   it("returns the Monday of a mid-week date", () => {
@@ -59,5 +59,23 @@ describe("calcAge", () => {
   it("returns null for empty or unparseable input", () => {
     expect(calcAge("", at)).toBeNull();
     expect(calcAge("not a date", at)).toBeNull();
+  });
+});
+
+describe("formatDateInput", () => {
+  it("inserts slashes as digits accumulate", () => {
+    expect(formatDateInput("1")).toBe("1");
+    expect(formatDateInput("14")).toBe("14");
+    expect(formatDateInput("1403")).toBe("14/03");
+    expect(formatDateInput("14031990")).toBe("14/03/1990");
+  });
+
+  it("strips non-digits typed along the way", () => {
+    expect(formatDateInput("14/03/1990")).toBe("14/03/1990");
+    expect(formatDateInput("14-03-1990")).toBe("14/03/1990");
+  });
+
+  it("caps at 8 digits (DDMMYYYY)", () => {
+    expect(formatDateInput("140319905678")).toBe("14/03/1990");
   });
 });

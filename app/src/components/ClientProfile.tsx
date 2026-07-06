@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
-import { calcAge } from "@/lib/time";
+import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
 
 export interface ProfileClient {
@@ -18,6 +18,7 @@ export interface ProfileClient {
   intakeDone: boolean;
   intakeEmailSentAt: string | null;
   reviewEmailSentAt: string | null;
+  consentGiven: boolean | null;
   dob: string;
   occupation: string;
   doctor: string;
@@ -178,6 +179,10 @@ export function ClientProfile({
     ["HEALTH CONDITIONS", client.conditions],
     ["EMERGENCY CONTACT", client.emergency],
     ["REFERRED BY", client.referred],
+    [
+      "CONSENT",
+      client.consentGiven === true ? "Yes" : client.consentGiven === false ? "No" : "",
+    ],
     ["EMAIL MARKETING", client.marketing ? "Yes — on the sheet" : "No"],
   ];
 
@@ -560,7 +565,10 @@ export function ClientProfile({
                   </span>
                   <input
                     value={draft[key] ?? ""}
-                    onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+                    onChange={(e) =>
+                      setDraft({ ...draft, [key]: key === "dob" ? formatDateInput(e.target.value) : e.target.value })
+                    }
+                    placeholder={key === "dob" ? "DD/MM/YYYY" : undefined}
                     className={inputClass}
                   />
                 </label>

@@ -78,6 +78,7 @@ export async function updateClientDetails(
     emergency: string;
     referred: string;
     intakeDone: boolean;
+    consentGiven: boolean;
   }>,
 ) {
   const before = await prisma.client.findUniqueOrThrow({ where: { id } });
