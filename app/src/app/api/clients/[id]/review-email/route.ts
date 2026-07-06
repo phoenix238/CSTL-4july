@@ -16,5 +16,7 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
   const optInLink = preferencesUrl(settings, await getOrCreateIntakeToken(client.id));
   const { subject, body } = composeReviewEmail(client.name, client.clinic as Clinic, settings, optInLink);
   await sendEmail(client.email, subject, body);
-  return NextResponse.json({ ok: true });
+  const sentAt = new Date();
+  await prisma.client.update({ where: { id }, data: { reviewEmailSentAt: sentAt } });
+  return NextResponse.json({ ok: true, sentAt });
 });

@@ -4,10 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
-import { IntakeForm } from "./IntakeForm";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge } from "@/lib/time";
-import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
 
 export interface ProfileClient {
@@ -18,7 +16,8 @@ export interface ProfileClient {
   clinic: string;
   marketing: boolean;
   intakeDone: boolean;
-  intakeToken: string;
+  intakeEmailSentAt: string | null;
+  reviewEmailSentAt: string | null;
   dob: string;
   occupation: string;
   doctor: string;
@@ -56,14 +55,12 @@ export function ClientProfile({
   nextSession,
   nextBookingId,
   activeOffer,
-  intakeQuestions,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
   nextSession: string | null;
   nextBookingId?: string | null;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
-  intakeQuestions: IntakeQuestion[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -79,7 +76,8 @@ export function ClientProfile({
   const [savingNote, setSavingNote] = useState(false);
   const [togglingIntake, setTogglingIntake] = useState(false);
   const [changingClinic, setChangingClinic] = useState(false);
-  const [inPersonIntake, setInPersonIntake] = useState(false);
+  const [sendingIntake, setSendingIntake] = useState(false);
+  const [sendingReview, setSendingReview] = useState(false);
 
   async function cancelNextSession() {
     if (!nextBookingId) return;
@@ -191,8 +189,11 @@ export function ClientProfile({
   const saveDetails = async () => {
     setSaving(true);
     try {
-      await api(`/api/clients/${client.id}`, { method: "PATCH", body: JSON.stringify(draft) });
-      toast(`Updated ${draft.name || client.name}'s details ✓`);
+      await api(`/api/clients/${client.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...draft, syncToDoc: true }),
+      });
+      toast(`Updated ${draft.name || client.name}'s details ✓ — also added to their Doc`);
       setEditing(false);
       router.refresh();
     } catch (err) {
@@ -483,36 +484,53 @@ export function ClientProfile({
               </button>
               <button
                 onClick={async () => {
+                  setSendingIntake(true);
                   try {
                     await api(`/api/clients/${client.id}/intake-email`, { method: "POST" });
                     toast(`Intake form sent to ${client.name.split(" ")[0]} ✓`);
+                    router.refresh();
                   } catch (err) {
                     toast(err instanceof Error ? err.message : "Couldn't send");
+                  } finally {
+                    setSendingIntake(false);
                   }
                 }}
-                className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text"
+                disabled={sendingIntake}
+                className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text disabled:cursor-default disabled:opacity-60"
               >
-                Send intake form
+                {sendingIntake ? "Sending…" : "Send intake form"}
               </button>
               <button
                 onClick={async () => {
+                  setSendingReview(true);
                   try {
                     await api(`/api/clients/${client.id}/review-email`, { method: "POST" });
                     toast(`Review request sent to ${client.name.split(" ")[0]} ✓`);
+                    router.refresh();
                   } catch (err) {
                     toast(err instanceof Error ? err.message : "Couldn't send");
+                  } finally {
+                    setSendingReview(false);
                   }
                 }}
-                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
+                disabled={sendingReview}
+                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg disabled:cursor-default disabled:opacity-60"
               >
-                Send review request
+                {sendingReview ? "Sending…" : "Send review request"}
               </button>
-              <button
-                onClick={() => setInPersonIntake(!inPersonIntake)}
-                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
-              >
-                {inPersonIntake ? "Close intake form" : "Fill in person"}
-              </button>
+            </div>
+          )}
+
+          {!editing && (
+            <div className="flex flex-col gap-0.5 px-0.5 text-[11px] text-muted">
+              <span>
+                Intake form:{" "}
+                {client.intakeEmailSentAt ? `sent ${client.intakeEmailSentAt}` : "not sent yet"}
+              </span>
+              <span>
+                Review request:{" "}
+                {client.reviewEmailSentAt ? `sent ${client.reviewEmailSentAt}` : "not sent yet"}
+              </span>
             </div>
           )}
 
@@ -554,23 +572,6 @@ export function ClientProfile({
           )}
         </aside>
       </div>
-
-      {inPersonIntake && (
-        <Card className="overflow-hidden px-0 py-0">
-          <IntakeForm
-            token={client.intakeToken}
-            clientName={client.name}
-            clientPhone={client.phone}
-            alreadyDone={client.intakeDone}
-            questions={intakeQuestions}
-            embedded
-            onSaved={() => {
-              toast(`Saved ${client.name.split(" ")[0]}'s intake ✓`);
-              router.refresh();
-            }}
-          />
-        </Card>
-      )}
     </div>
   );
 }
