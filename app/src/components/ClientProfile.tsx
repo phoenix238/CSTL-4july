@@ -49,11 +49,13 @@ export function ClientProfile({
   client,
   notes,
   nextSession,
+  nextBookingId,
   activeOffer,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
   nextSession: string | null;
+  nextBookingId?: string | null;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
 }) {
   const router = useRouter();
@@ -63,6 +65,41 @@ export function ClientProfile({
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [noteOpen, setNoteOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function cancelNextSession() {
+    if (!nextBookingId) return;
+    if (!window.confirm(`Cancel ${client.name}'s upcoming session? Both calendar events are deleted.`)) return;
+    setCancelling(true);
+    try {
+      await api(`/api/bookings/${nextBookingId}`, { method: "DELETE" });
+      toast("Booking cancelled");
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't cancel that booking");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function deleteThisClient() {
+    if (
+      !window.confirm(
+        `Delete ${client.name} completely? This removes their record, bookings and session notes from the app (any upcoming session is cancelled first). Their Drive folder and Doc are kept. This can't be undone.`,
+      )
+    )
+      return;
+    setDeleting(true);
+    try {
+      await api(`/api/clients/${client.id}`, { method: "DELETE" });
+      toast(`${client.name} deleted`);
+      router.push("/clients");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't delete this client");
+      setDeleting(false);
+    }
+  }
 
   const chip = clinicChip(client.clinic);
   const coreFields = ["dob", "occupation", "doctor", "meds", "conditions", "emergency", "referred"] as const;
@@ -159,6 +196,13 @@ export function ClientProfile({
               Doc pending
             </span>
           )}
+          <button
+            onClick={deleteThisClient}
+            disabled={deleting}
+            className="cursor-pointer rounded-full px-[18px] py-[9px] text-center text-[12px] font-semibold text-faint hover:text-[oklch(0.55_0.15_25)] disabled:cursor-default"
+          >
+            {deleting ? "Deleting…" : "Delete client"}
+          </button>
         </div>
       </Card>
 
@@ -245,15 +289,26 @@ export function ClientProfile({
 
         <aside className="flex w-full flex-none flex-col gap-2.5 lg:w-[300px]">
           <SectionLabel>NEXT SESSION</SectionLabel>
-          <button
-            onClick={() => router.push(`/enquiries?client=${client.id}`)}
-            className="flex cursor-pointer items-center justify-between gap-2.5 rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.55)] px-4 py-[13px] text-left text-[13.5px] text-[oklch(0.4_0.07_45)] hover:bg-[oklch(0.92_0.035_48_/_0.72)]"
-          >
-            <span>{nextSession ?? 'Nothing booked — use "Book next session".'}</span>
-            <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
-              Change ›
-            </span>
-          </button>
+          <div className="flex flex-col gap-1.5 rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.55)] px-4 py-[13px]">
+            <button
+              onClick={() => router.push(`/enquiries?client=${client.id}`)}
+              className="flex cursor-pointer items-center justify-between gap-2.5 text-left text-[13.5px] text-[oklch(0.4_0.07_45)]"
+            >
+              <span>{nextSession ?? 'Nothing booked — use "Book next session".'}</span>
+              <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
+                Change ›
+              </span>
+            </button>
+            {nextBookingId && (
+              <button
+                onClick={cancelNextSession}
+                disabled={cancelling}
+                className="cursor-pointer self-start text-[11.5px] font-semibold text-[oklch(0.55_0.12_25)] hover:text-[oklch(0.45_0.15_25)] disabled:cursor-default"
+              >
+                {cancelling ? "Cancelling…" : "Cancel this session"}
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center justify-between px-0.5 pt-2">
             <SectionLabel>FROM THE INTAKE FORM</SectionLabel>

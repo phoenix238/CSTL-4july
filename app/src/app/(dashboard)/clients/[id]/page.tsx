@@ -59,6 +59,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       }}
       notes={notes}
       nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
+      nextBookingId={nextBooking?.id ?? null}
       activeOffer={activeOffer}
     />
   );
