@@ -15,6 +15,18 @@ export interface IntakeQuestion {
 /** Standard keys that map onto Client columns (marketing is intentionally not here). */
 export const COLUMN_KEYS = new Set(["dob", "phone", "occupation", "doctor", "conditions", "meds", "emergency", "referred"]);
 
+/**
+ * Fixed consent wording, shown on every intake form and logged verbatim to
+ * the client's Doc alongside their answer — not part of the configurable
+ * question list, since it shouldn't be casually reworded or removed.
+ */
+export const CONSENT_PARAGRAPHS = [
+  "I consent to receiving craniosacral therapy and understand I can stop the session at any time.",
+  "I understand that this is not a substitute for medical treatment or diagnosis.",
+  "I give permission for Phoenix to take and securely store my information in line with data protection laws. My information will not be shared with anyone else and will only be used for therapeutic and record-keeping purposes.",
+  "I understand I can request to access or delete my data at any time by contacting Phoenix.",
+];
+
 /** The built-in questions, used when Settings hasn't customised them. */
 export const DEFAULT_INTAKE_QUESTIONS: IntakeQuestion[] = [
   { key: "dob", label: "Date of birth", type: "date", enabled: true },

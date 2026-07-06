@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { api, Card, PrimaryButton, inputClass, useToast } from "./ui";
-import type { IntakeQuestion } from "@/lib/intakeQuestions";
+import { formatDateInput } from "@/lib/time";
+import { CONSENT_PARAGRAPHS, type IntakeQuestion } from "@/lib/intakeQuestions";
 
 export function IntakeForm({
   token,
@@ -22,6 +23,7 @@ export function IntakeForm({
   const [answers, setAnswers] = useState<Record<string, string>>(
     questions.some((q) => q.key === "phone") ? { phone: clientPhone } : {},
   );
+  const [consent, setConsent] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -32,11 +34,15 @@ export function IntakeForm({
       toast("Please add your name");
       return;
     }
+    if (consent === null) {
+      toast("Please answer the consent question");
+      return;
+    }
     setSaving(true);
     try {
       await api(`/api/intake/${token}`, {
         method: "POST",
-        body: JSON.stringify({ name, answers }),
+        body: JSON.stringify({ name, answers, consent }),
       });
       setDone(true);
     } catch (err) {
@@ -92,15 +98,44 @@ export function IntakeForm({
               />
             ) : (
               <input
-                type={q.type === "date" ? "text" : "text"}
+                type="text"
+                inputMode={q.type === "date" ? "numeric" : undefined}
                 value={answers[q.key] ?? ""}
-                onChange={(e) => set(q.key, e.target.value)}
-                placeholder={q.type === "date" ? "e.g. 14/03/1990" : undefined}
+                onChange={(e) => set(q.key, q.type === "date" ? formatDateInput(e.target.value) : e.target.value)}
+                placeholder={q.type === "date" ? "DD/MM/YYYY" : undefined}
                 className={inputClass}
               />
             )}
           </label>
         ))}
+
+        <div className="flex flex-col gap-2 rounded-[10px] bg-inputbg px-3.5 py-3.5">
+          <span className="text-[12.5px] font-semibold text-ink-soft">Consent</span>
+          {CONSENT_PARAGRAPHS.map((p, i) => (
+            <p key={i} className="text-[12.5px] leading-[1.55] text-[oklch(0.4_0.02_60)]">
+              {p}
+            </p>
+          ))}
+          <div className="mt-1 flex gap-2">
+            {(
+              [
+                [true, "Yes"],
+                [false, "No"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setConsent(value)}
+                className={`cursor-pointer rounded-full px-4 py-1.5 text-[12.5px] font-semibold select-none ${
+                  consent === value ? "bg-clay text-cream" : "border border-line bg-card text-ink-soft"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <PrimaryButton onClick={submit} disabled={saving} className="mt-1 py-3">
           {saving ? "Sending…" : "Send to Phoenix"}

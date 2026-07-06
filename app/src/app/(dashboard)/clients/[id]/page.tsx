@@ -50,6 +50,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         intakeDone: client.intakeDone,
         intakeEmailSentAt: client.intakeEmailSentAt ? fmtDate(client.intakeEmailSentAt) : null,
         reviewEmailSentAt: client.reviewEmailSentAt ? fmtDate(client.reviewEmailSentAt) : null,
+        consentGiven: client.consentGiven,
         dob: client.dob,
         occupation: client.occupation,
         doctor: client.doctor,

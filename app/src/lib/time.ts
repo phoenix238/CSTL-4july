@@ -65,6 +65,12 @@ export function londonWeekStart(from = new Date()): Date {
   return londonDayStart(-(idx < 0 ? 0 : idx), from);
 }
 
+/** Auto-insert the "/" separators as digits are typed: "14031990" → "14/03/1990". */
+export function formatDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join("/");
+}
+
 /** Parse a free-typed date of birth ("14/03/1990", "1990-03-14", "14 March 1990"…) into y/m/d, or null. */
 function parseDob(raw: string): { y: number; m: number; d: number } | null {
   const s = raw.trim();

@@ -30,6 +30,7 @@ model Client {
   intakeToken   String        @default("") // private token for the client's in-app intake link
   intakeEmailSentAt DateTime? // last time the intake-form email was sent
   reviewEmailSentAt DateTime? // last time the post-session review email was sent
+  consentGiven  Boolean? // null = not yet answered; set from the intake form's Yes/No consent question
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]

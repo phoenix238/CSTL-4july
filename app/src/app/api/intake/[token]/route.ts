@@ -3,7 +3,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { updateClientDetails } from "@/lib/clients";
 import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
 import { fmtDate } from "@/lib/time";
-import { COLUMN_KEYS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
+import { COLUMN_KEYS, CONSENT_PARAGRAPHS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
 
 // Standard keys that read as short client-detail fields (vs. clinical paragraphs).
 const DETAIL_KEYS = new Set(["dob", "phone", "occupation", "doctor", "emergency", "referred"]);
@@ -18,7 +18,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const client = await prisma.client.findFirst({ where: { intakeToken: token } });
     if (!client) return NextResponse.json({ error: "This link has expired." }, { status: 404 });
 
-    const { name, answers } = (await req.json()) as { name?: string; answers?: Record<string, string> };
+    const { name, answers, consent } = (await req.json()) as {
+      name?: string;
+      answers?: Record<string, string>;
+      consent?: boolean;
+    };
     const a = answers ?? {};
     const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
     const finalName = str(name) || client.name;
@@ -28,6 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
     // Standard answers update the record; everything shows in the Doc too.
     const columnUpdate: Record<string, string | boolean> = { name: finalName, intakeDone: true };
+    if (typeof consent === "boolean") columnUpdate.consentGiven = consent;
     for (const q of questions) {
       if (COLUMN_KEYS.has(q.key) && a[q.key] !== undefined) columnUpdate[q.key] = str(a[q.key]);
     }
@@ -73,6 +78,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
         lines: [{ kind: "paragraph", value: str(a[caseHistoryQ.key]) }],
       });
     }
+    sections.push({
+      heading: "5. Consent",
+      lines: [
+        { kind: "field", label: "Consent given", value: consent === true ? "Yes" : consent === false ? "No" : "Not answered" },
+        { kind: "paragraph", value: CONSENT_PARAGRAPHS.join("\n\n") },
+      ],
+    });
 
     await appendFormattedSections(docId, `INTAKE / CASE HISTORY — submitted ${fmtDate(new Date())}`, sections);
 
