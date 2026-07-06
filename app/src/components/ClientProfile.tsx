@@ -6,6 +6,7 @@ import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
 import { IntakeForm } from "./IntakeForm";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { calcAge } from "@/lib/time";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
 
@@ -169,8 +170,10 @@ export function ClientProfile({
   const coreFields = ["dob", "occupation", "doctor", "meds", "conditions", "emergency", "referred"] as const;
   const incomplete = coreFields.some((k) => !client[k]);
 
+  const age = calcAge(client.dob);
+
   const details: Array<[string, string]> = [
-    ["DATE OF BIRTH", client.dob],
+    ["DATE OF BIRTH", age !== null ? `${client.dob} — age ${age}` : client.dob],
     ["OCCUPATION", client.occupation],
     ["DOCTOR", client.doctor],
     ["MEDICATIONS", client.meds],

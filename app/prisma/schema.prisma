@@ -100,7 +100,16 @@ model AppSettings {
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
   appUrl                String @default("") // base URL for building intake / share links
   intakeQuestions       Json? // configurable intake questions; null = built-in defaults
+  // Legacy single review-email fields — superseded by the per-clinic ones below
+  // (kept in place rather than dropped, so `prisma db push` never has to touch existing data).
   mapsReviewUrl         String @default("") // Google Maps "leave a review" link
   reviewEmailSubject    String @default("How was your session?")
   reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
+  // Post-session review email, one per clinic — each clinic has its own Google Business review link.
+  mapsReviewUrlWaterloo    String @default("") // Google Maps "leave a review" link — Waterloo
+  mapsReviewUrlBethnal     String @default("") // Google Maps "leave a review" link — Bethnal Green
+  reviewEmailSubjectWaterloo String @default("How was your session?")
+  reviewEmailSubjectBethnal  String @default("How was your session?")
+  reviewEmailBodyWaterloo  String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
+  reviewEmailBodyBethnal   String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
 }
