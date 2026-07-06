@@ -17,7 +17,6 @@ import {
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
 import { composeOfferMessage } from "@/lib/booking/offer";
-import { waLink } from "@/lib/whatsapp";
 import { fmtDayLong, fmtTime, londonDayStart, londonWeekStart } from "@/lib/time";
 import { Legend } from "./calendar/Legend";
 import { TimeGrid } from "./calendar/TimeGrid";
@@ -39,7 +38,6 @@ interface Match {
   name: string;
   clinic: string;
   email: string;
-  phone?: string;
   welcomeSent: boolean;
   saved?: boolean;
 }
@@ -60,7 +58,7 @@ export function EnquiryFlow({
   initialPick,
 }: {
   openEnquiryId?: string;
-  existingClient?: { id: string; name: string; clinic: string; email: string; phone?: string; welcomeSent: boolean };
+  existingClient?: { id: string; name: string; clinic: string; email: string; welcomeSent: boolean };
   initialWaiting: WaitingEnquiry[];
   initialText?: string;
   initialPick?: string;
@@ -108,8 +106,6 @@ export function EnquiryFlow({
 
   const stage: "paste" | "book" | "done" = result ? "done" : analysis || existingClient ? "book" : "paste";
   const activeClient = saved ?? (ignoreMatch ? null : match);
-  // WhatsApp needs a number from the message OR from the client's record (returning clients).
-  const phone = analysis?.phone?.trim() || activeClient?.phone?.trim() || "";
   const { spans, invalidate } = useWeekSpans(weekStart, 7);
 
   useEffect(() => {
@@ -307,7 +303,7 @@ export function EnquiryFlow({
     }
   }
 
-  async function sendOffer(channel: "email" | "whatsapp" | "none") {
+  async function sendOffer(channel: "email" | "copy" | "none") {
     if (!selected.length) {
       toast("Pick some times to offer first");
       return;
@@ -318,9 +314,9 @@ export function EnquiryFlow({
       toast("Save the client first so the offer can be tracked");
       return;
     }
-    // Open WhatsApp before the first await — popup blockers only allow it
-    // synchronously inside the click.
-    if (channel === "whatsapp") openWhatsApp(emailBody);
+    if (channel === "copy") {
+      await navigator.clipboard?.writeText(emailBody).catch(() => {});
+    }
     setOffering(true);
     try {
       await api(`/api/enquiries/${enquiryId ?? "new"}/offer`, {
@@ -338,8 +334,8 @@ export function EnquiryFlow({
       toast(
         channel === "email"
           ? "Times offered — email sent"
-          : channel === "whatsapp"
-            ? "Times offered — send the WhatsApp message"
+          : channel === "copy"
+            ? "Times offered — message text copied"
             : "Times offered",
       );
       void refreshWaiting();
@@ -362,15 +358,6 @@ export function EnquiryFlow({
     } finally {
       setOffering(false);
     }
-  }
-
-  function openWhatsApp(body: string) {
-    const link = waLink(phone, body);
-    if (!link) {
-      toast("No phone number on this enquiry to WhatsApp");
-      return;
-    }
-    window.open(link, "_blank");
   }
 
   async function confirmBooking(send: boolean) {
@@ -471,19 +458,10 @@ export function EnquiryFlow({
             ))}
           </div>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {result.emailTextForClipboard && phone && (
-              <PrimaryButton onClick={() => openWhatsApp(result.emailTextForClipboard!)}>
-                Send it on WhatsApp
-              </PrimaryButton>
-            )}
             <Link href={`/clients/${result.clientId}`}>
               <OutlineButton>Open client</OutlineButton>
             </Link>
-            {result.emailTextForClipboard && phone ? (
-              <OutlineButton onClick={() => router.push("/")}>Back to Today</OutlineButton>
-            ) : (
-              <PrimaryButton onClick={() => router.push("/")}>Back to Today</PrimaryButton>
-            )}
+            <PrimaryButton onClick={() => router.push("/")}>Back to Today</PrimaryButton>
           </div>
         </Card>
       </div>
@@ -813,15 +791,11 @@ export function EnquiryFlow({
             <PrimaryButton onClick={() => sendOffer("email")} disabled={offering}>
               {offering ? "Sending…" : "Send by email"}
             </PrimaryButton>
-            {phone ? (
-              <OutlineButton onClick={() => sendOffer("whatsapp")} disabled={offering}>
-                Send on WhatsApp
-              </OutlineButton>
-            ) : (
-              <span className="self-center text-[12px] text-muted">No number for WhatsApp</span>
-            )}
+            <OutlineButton onClick={() => sendOffer("copy")} disabled={offering}>
+              Copy text
+            </OutlineButton>
             <OutlineButton onClick={() => sendOffer("none")} disabled={offering}>
-              Just mark as offered
+              Mark as offered
             </OutlineButton>
           </div>
         </Card>
@@ -887,12 +861,6 @@ export function EnquiryFlow({
               Book without email — copy the text
             </OutlineButton>
           </div>
-          {phone && (
-            <div className="text-[12px] text-muted">
-              Prefer WhatsApp? Book without email — the finished message (with the real intake link) is ready to
-              send on WhatsApp from the next screen.
-            </div>
-          )}
         </Card>
       )}
 

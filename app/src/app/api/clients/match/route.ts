@@ -17,7 +17,6 @@ export const GET = guarded(async (req: Request) => {
           name: existing.name,
           clinic: existing.clinic,
           email: existing.email,
-          phone: existing.phone,
           welcomeSent: existing.welcomeSent,
         }
       : null,

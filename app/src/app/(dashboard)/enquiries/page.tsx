@@ -19,7 +19,7 @@ export default async function EnquiriesPage({
   const existingClient = clientId
     ? await prisma.client.findUnique({
         where: { id: clientId },
-        select: { id: true, name: true, clinic: true, email: true, phone: true, welcomeSent: true },
+        select: { id: true, name: true, clinic: true, email: true, welcomeSent: true },
       })
     : null;
 

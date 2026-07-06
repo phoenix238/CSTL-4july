@@ -5,7 +5,7 @@
 // events drawn as positioned blocks — a normal calendar.
 
 import { useMemo } from "react";
-import { blockedRange, type Clinic } from "@/lib/booking/rules";
+import { slotConflicts, type BusySpanLite, type Clinic } from "@/lib/booking/rules";
 import { fmtDayShort, fmtTime, londonMinutes, londonYMD } from "@/lib/time";
 import { layoutDayEvents, SPAN_COLORS, type SpanDTO } from "./layout";
 
@@ -91,6 +91,10 @@ export function TimeGrid({
   );
 
   // Picker: free 30-min session-start slots per day.
+  const spansLite: BusySpanLite[] = useMemo(
+    () => spans.map((s) => ({ start: new Date(s.start), end: new Date(s.end), source: s.source, known: s.known, clinic: s.clinic })),
+    [spans],
+  );
   const freeSlots: Date[][] = useMemo(() => {
     if (mode !== "picker" || !picker) return days.map(() => []);
     return days.map((day) => {
@@ -98,14 +102,12 @@ export function TimeGrid({
       for (let m = startHour * 60; m + 60 <= endHour * 60; m += slotMinutes) {
         const slot = new Date(day.getTime() + m * 60_000);
         if (slot < now) continue;
-        const { start, end } = blockedRange(picker.clinic, slot);
-        const busy = spans.some((s) => new Date(s.start) < end && new Date(s.end) > start);
-        if (!busy) out.push(slot);
+        if (!slotConflicts(picker.clinic, slot, spansLite)) out.push(slot);
       }
       return out;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, picker?.clinic, days, spans, startHour, endHour, slotMinutes]);
+  }, [mode, picker?.clinic, days, spansLite, startHour, endHour, slotMinutes]);
 
   const handleColumnClick = (day: Date) => (e: React.MouseEvent<HTMLDivElement>) => {
     if (mode !== "display" || !onSlotClick) return;

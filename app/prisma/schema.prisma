@@ -65,7 +65,7 @@ model Booking {
   clinic           String // waterloo | bethnal
   status           String   @default("confirmed") // confirmed | cancelled | done
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
-  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: 2h "Phoenix" Chalk Farm block
+  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: "Phoenix" Chalk Farm block — may be shared with other back-to-back Bethnal bookings
   emailSent        Boolean  @default(false)
   createdAt        DateTime @default(now())
 

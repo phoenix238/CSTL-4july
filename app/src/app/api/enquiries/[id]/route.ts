@@ -49,7 +49,6 @@ export const GET = guarded(async (_req: Request, ctx: { params: Promise<{ id: st
           name: existing.name,
           clinic: existing.clinic,
           email: existing.email,
-          phone: existing.phone,
           welcomeSent: existing.welcomeSent,
           saved: existing.id === enquiry.clientId,
         }

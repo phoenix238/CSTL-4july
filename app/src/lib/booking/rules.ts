@@ -36,7 +36,7 @@ export const CLINIC_PRICE: Record<Clinic, string> = {
   bethnal: "£30–60 sliding scale",
 };
 
-const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
+export const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 
 /** The exact calendar events a booking creates. Pure — unit-tested. */
 export function planBookingEvents(
@@ -105,4 +105,81 @@ export function blockedRange(clinic: Clinic, sessionStart: Date) {
     start: addMinutes(sessionStart, -30),
     end: addMinutes(sessionStart, 90),
   };
+}
+
+export interface BethnalBlock {
+  id: string;
+  start: Date;
+  end: Date;
+}
+
+export interface MergedBethnalGroup {
+  ids: string[];
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Bethnal Green sessions booked close together share one Chalk Farm block
+ * instead of each getting its own overlapping one — e.g. 6–7pm and
+ * 7:15–8:15pm merge into a single 5:30pm–8:45pm block, since she's already
+ * on site for both. Groups blocks that overlap (directly or transitively)
+ * and unions each group's time range. Pure — unit-tested.
+ */
+export function mergeBethnalBlocks(blocks: BethnalBlock[]): MergedBethnalGroup[] {
+  const remaining = [...blocks];
+  const groups: MergedBethnalGroup[] = [];
+  while (remaining.length) {
+    const seed = remaining.shift()!;
+    let group: MergedBethnalGroup = { ids: [seed.id], start: seed.start, end: seed.end };
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (let i = remaining.length - 1; i >= 0; i--) {
+        const b = remaining[i];
+        if (b.start < group.end && b.end > group.start) {
+          group = {
+            ids: [...group.ids, b.id],
+            start: b.start < group.start ? b.start : group.start,
+            end: b.end > group.end ? b.end : group.end,
+          };
+          remaining.splice(i, 1);
+          grew = true;
+        }
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
+export interface BusySpanLite {
+  start: Date;
+  end: Date;
+  source: CalendarKey | "booking";
+  /** true for our own bookings/calendar events (vs. a genuine outside commitment) */
+  known: boolean;
+  clinic?: Clinic;
+}
+
+/**
+ * Whether a candidate slot conflicts with existing bookings/calendar spans.
+ * Two Bethnal sessions booked close together share one travel buffer, so a
+ * Bethnal candidate only needs to clear other Bethnal *sessions* (not their
+ * buffer) and never conflicts with our own Chalk Farm block — booking it
+ * just grows the block to include it. Everything else (a different clinic,
+ * or a genuine outside commitment) still needs the full buffered range.
+ */
+export function slotConflicts(clinic: Clinic, slot: Date, spans: BusySpanLite[]): boolean {
+  const session = { start: slot, end: addMinutes(slot, SESSION_MINUTES) };
+  const buffered = blockedRange(clinic, slot);
+  return spans.some((s) => {
+    if (clinic === "bethnal") {
+      if (s.source === "chalkFarm" && s.known) return false;
+      if (s.source === "booking" && s.clinic === "bethnal") {
+        return s.start < session.end && s.end > session.start;
+      }
+    }
+    return s.start < buffered.end && s.end > buffered.start;
+  });
 }

@@ -2,8 +2,8 @@ import { fmtDayLong, fmtTime } from "@/lib/time";
 import { CLINIC_LABEL, type Clinic } from "./rules";
 
 /**
- * The message offering a client a few times to choose from. Pure — used both
- * for the email (server) and the WhatsApp text (client) so they read the same.
+ * The message offering a client a few times to choose from. Pure — shared by
+ * the offer email and the live preview shown before it's sent or copied.
  */
 export function composeOfferMessage(clientName: string, clinic: Clinic, times: Date[]): string {
   const first = clientName?.trim() ? clientName.trim().split(/\s+/)[0] : "there";
