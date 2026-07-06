@@ -16,6 +16,20 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     orderBy: { startsAt: "asc" },
   });
 
+  const offer = await prisma.enquiry.findFirst({
+    where: { clientId: id, status: "offered" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, offeredTimes: true },
+  });
+  const activeOffer =
+    offer && offer.offeredTimes.length
+      ? {
+          id: offer.id,
+          times: offer.offeredTimes
+            .map((t) => ({ iso: t.toISOString(), label: `${fmtDayLong(t)} · ${fmtTime(t)}` })),
+        }
+      : null;
+
   const notes: ProfileNote[] = client.notes.map((n) => ({
     id: n.id,
     date: fmtDate(n.date),
@@ -45,6 +59,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       }}
       notes={notes}
       nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
+      activeOffer={activeOffer}
     />
   );
 }

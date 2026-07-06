@@ -49,10 +49,12 @@ export function ClientProfile({
   client,
   notes,
   nextSession,
+  activeOffer,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
   nextSession: string | null;
+  activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -159,6 +161,26 @@ export function ClientProfile({
           )}
         </div>
       </Card>
+
+      {activeOffer && (
+        <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/40 bg-clay-tint/40 px-5 py-4">
+          <SectionLabel>ACTIVE OFFER — WHICH TIME DID THEY PICK?</SectionLabel>
+          <div className="text-[12.5px] text-muted">
+            You offered {client.name.split(" ")[0]} these times. Tap the one they chose to confirm the booking.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {activeOffer.times.map((t) => (
+              <button
+                key={t.iso}
+                onClick={() => router.push(`/enquiries?open=${activeOffer.id}&pick=${encodeURIComponent(t.iso)}`)}
+                className="cursor-pointer rounded-full bg-clay px-3.5 py-2 text-[12.5px] font-semibold text-cream hover:bg-clay-deep"
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="flex flex-col items-start gap-5 lg:flex-row">
         <section className="flex w-full min-w-0 flex-1 flex-col gap-2.5">
@@ -271,6 +293,19 @@ export function ClientProfile({
                 className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text"
               >
                 Send intake form
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await api(`/api/clients/${client.id}/review-email`, { method: "POST" });
+                    toast(`Review request sent to ${client.name.split(" ")[0]} ✓`);
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Couldn't send");
+                  }
+                }}
+                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
+              >
+                Send review request
               </button>
             </div>
           )}

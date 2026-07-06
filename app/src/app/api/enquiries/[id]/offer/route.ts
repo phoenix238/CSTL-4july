@@ -8,7 +8,7 @@ import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 /** Offer a client a group of times (nothing booked yet). Body: { clientName, clinic, times: ISO[], sendEmail, email?, emailBody? } */
 export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  const { clientName, clinic, times, sendEmail: send, email, emailBody } = await req.json();
+  const { clientName, clinic, times, sendEmail: send, email, emailBody, clientId } = await req.json();
   if (!Array.isArray(times) || times.length === 0) {
     return NextResponse.json({ error: "Pick at least one time to offer" }, { status: 400 });
   }
@@ -21,7 +21,12 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
 
   await prisma.enquiry.update({
     where: { id },
-    data: { status: "offered", offeredTimes: dates },
+    data: {
+      status: "offered",
+      offeredTimes: dates,
+      // link to the client so the offer also shows on their profile
+      ...(clientId ? { clientId } : {}),
+    },
   });
 
   return NextResponse.json({ ok: true, body });

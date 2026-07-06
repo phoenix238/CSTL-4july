@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./ui";
+import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
+import type { IntakeQuestion } from "@/lib/intakeQuestions";
 
 export interface SettingsData {
   accessNote: string;
@@ -14,6 +16,10 @@ export interface SettingsData {
   roomCalendarId: string;
   chalkFarmCalendarId: string;
   googleConnected: boolean;
+  intakeQuestions: IntakeQuestion[];
+  mapsReviewUrl: string;
+  reviewEmailSubject: string;
+  reviewEmailBody: string;
 }
 
 export function SettingsView({ settings }: { settings: SettingsData }) {
@@ -25,6 +31,12 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
   const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("waterloo");
   const [editingTemplate, setEditingTemplate] = useState(false);
   const [templateDraft, setTemplateDraft] = useState("");
+  const [editingReview, setEditingReview] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState({
+    mapsReviewUrl: settings.mapsReviewUrl,
+    reviewEmailSubject: settings.reviewEmailSubject,
+    reviewEmailBody: settings.reviewEmailBody,
+  });
   const [editingGoogle, setEditingGoogle] = useState(false);
   const [googleDraft, setGoogleDraft] = useState({
     personalCalendarId: settings.personalCalendarId,
@@ -223,6 +235,68 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
           ))}
           <PrimaryButton
             onClick={() => save({ ...googleDraft }, () => setEditingGoogle(false), "Google settings updated ✓")}
+            className="self-start px-[18px] py-[9px] text-[13px]"
+          >
+            Save
+          </PrimaryButton>
+        </Card>
+      )}
+
+      <SectionLabel className="pt-2">INTAKE FORM QUESTIONS</SectionLabel>
+      <IntakeQuestionsEditor initial={settings.intakeQuestions} />
+
+      <div className="flex items-center justify-between px-0.5 pt-2">
+        <SectionLabel>POST-SESSION REVIEW EMAIL</SectionLabel>
+        <button
+          onClick={() => setEditingReview(!editingReview)}
+          className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+        >
+          {editingReview ? "Cancel" : "Edit"}
+        </button>
+      </div>
+      {!editingReview ? (
+        <Card className="px-5 py-1.5">
+          <Row label="Google review link">{settings.mapsReviewUrl || "not set yet"}</Row>
+          <Row label="Subject">{settings.reviewEmailSubject}</Row>
+          <Row label="Body" last>
+            <span className="whitespace-pre-wrap">{settings.reviewEmailBody}</span>
+          </Row>
+        </Card>
+      ) : (
+        <Card className="flex flex-col gap-3 border-[1.5px] border-clay/35 px-4 py-3.5">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+              GOOGLE REVIEW LINK
+            </span>
+            <input
+              value={reviewDraft.mapsReviewUrl}
+              onChange={(e) => setReviewDraft({ ...reviewDraft, mapsReviewUrl: e.target.value })}
+              placeholder="https://g.page/r/…/review"
+              className={inputClass}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">SUBJECT</span>
+            <input
+              value={reviewDraft.reviewEmailSubject}
+              onChange={(e) => setReviewDraft({ ...reviewDraft, reviewEmailSubject: e.target.value })}
+              className={inputClass}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">BODY</span>
+            <textarea
+              value={reviewDraft.reviewEmailBody}
+              onChange={(e) => setReviewDraft({ ...reviewDraft, reviewEmailBody: e.target.value })}
+              className="min-h-[180px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+            />
+          </label>
+          <div className="text-[11.5px] text-muted">
+            Use {"{name}"} for their first name, {"{mapsUrl}"} for your review link, and {"{optInLink}"} for the
+            one-tap marketing opt-in link. Send it from a client&apos;s profile after their first session.
+          </div>
+          <PrimaryButton
+            onClick={() => save({ ...reviewDraft }, () => setEditingReview(false), "Review email updated ✓")}
             className="self-start px-[18px] py-[9px] text-[13px]"
           >
             Save

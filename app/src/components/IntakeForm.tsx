@@ -2,44 +2,33 @@
 
 import { useState } from "react";
 import { api, Card, PrimaryButton, inputClass, useToast } from "./ui";
-
-const FIELDS: Array<[string, string, string?]> = [
-  ["name", "Full name"],
-  ["dob", "Date of birth", "e.g. 14/03/1990"],
-  ["phone", "Phone number"],
-  ["occupation", "Occupation"],
-  ["doctor", "GP / doctor (name & surgery)"],
-  ["meds", "Any medications you take"],
-  ["conditions", "Health conditions / injuries I should know about"],
-  ["emergency", "Emergency contact (name & number)"],
-  ["referred", "How did you hear about me?"],
-];
+import type { IntakeQuestion } from "@/lib/intakeQuestions";
 
 export function IntakeForm({
   token,
   clientName,
   clientPhone,
   alreadyDone,
+  questions,
 }: {
   token: string;
   clientName: string;
   clientPhone: string;
   alreadyDone: boolean;
+  questions: IntakeQuestion[];
 }) {
   const toast = useToast();
-  const [values, setValues] = useState<Record<string, string>>({
-    name: clientName,
-    phone: clientPhone,
-  });
-  const [caseHistory, setCaseHistory] = useState("");
-  const [marketing, setMarketing] = useState(false);
+  const [name, setName] = useState(clientName);
+  const [answers, setAnswers] = useState<Record<string, string>>(
+    questions.some((q) => q.key === "phone") ? { phone: clientPhone } : {},
+  );
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
-  const set = (k: string, v: string) => setValues((prev) => ({ ...prev, [k]: v }));
+  const set = (k: string, v: string) => setAnswers((prev) => ({ ...prev, [k]: v }));
 
   async function submit() {
-    if (!values.name?.trim()) {
+    if (!name.trim()) {
       toast("Please add your name");
       return;
     }
@@ -47,7 +36,7 @@ export function IntakeForm({
     try {
       await api(`/api/intake/${token}`, {
         method: "POST",
-        body: JSON.stringify({ ...values, caseHistory, marketing }),
+        body: JSON.stringify({ name, answers }),
       });
       setDone(true);
     } catch (err) {
@@ -87,48 +76,31 @@ export function IntakeForm({
       </header>
 
       <Card className="flex flex-col gap-4 px-5 py-6">
-        {FIELDS.map(([key, label, placeholder]) => (
-          <label key={key} className="flex flex-col gap-1.5">
-            <span className="text-[12.5px] font-semibold text-ink-soft">{label}</span>
-            {key === "meds" || key === "conditions" ? (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+        </label>
+
+        {questions.map((q) => (
+          <label key={q.key} className="flex flex-col gap-1.5">
+            <span className="text-[12.5px] font-semibold text-ink-soft">{q.label}</span>
+            {q.type === "long" ? (
               <textarea
-                value={values[key] ?? ""}
-                onChange={(e) => set(key, e.target.value)}
-                placeholder={placeholder}
-                className={`${inputClass} min-h-[70px] resize-y`}
+                value={answers[q.key] ?? ""}
+                onChange={(e) => set(q.key, e.target.value)}
+                className={`${inputClass} min-h-[100px] resize-y leading-[1.55]`}
               />
             ) : (
               <input
-                value={values[key] ?? ""}
-                onChange={(e) => set(key, e.target.value)}
-                placeholder={placeholder}
+                type={q.type === "date" ? "text" : "text"}
+                value={answers[q.key] ?? ""}
+                onChange={(e) => set(q.key, e.target.value)}
+                placeholder={q.type === "date" ? "e.g. 14/03/1990" : undefined}
                 className={inputClass}
               />
             )}
           </label>
         ))}
-
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[12.5px] font-semibold text-ink-soft">
-            What brings you to therapy — anything you&apos;d like me to know
-          </span>
-          <textarea
-            value={caseHistory}
-            onChange={(e) => setCaseHistory(e.target.value)}
-            placeholder="In your own words — what you'd like to work on, how you're feeling, anything relevant…"
-            className={`${inputClass} min-h-[130px] resize-y leading-[1.55]`}
-          />
-        </label>
-
-        <label className="flex items-start gap-2.5 text-[13px] leading-snug">
-          <input
-            type="checkbox"
-            checked={marketing}
-            onChange={(e) => setMarketing(e.target.checked)}
-            className="mt-0.5"
-          />
-          <span>I&apos;m happy to receive occasional emails about offers and clinic news (optional).</span>
-        </label>
 
         <PrimaryButton onClick={submit} disabled={saving} className="mt-1 py-3">
           {saving ? "Sending…" : "Send to Phoenix"}

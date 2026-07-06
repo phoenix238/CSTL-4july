@@ -1,5 +1,6 @@
 import { getSettings } from "@/lib/db";
 import { SettingsView } from "@/components/SettingsView";
+import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 
 export default async function SettingsPage() {
   const settings = await getSettings();
@@ -16,6 +17,10 @@ export default async function SettingsPage() {
         roomCalendarId: settings.roomCalendarId,
         chalkFarmCalendarId: settings.chalkFarmCalendarId,
         googleConnected: !!settings.googleRefreshToken,
+        intakeQuestions: resolveIntakeQuestions(settings.intakeQuestions),
+        mapsReviewUrl: settings.mapsReviewUrl,
+        reviewEmailSubject: settings.reviewEmailSubject,
+        reviewEmailBody: settings.reviewEmailBody,
       }}
     />
   );
