@@ -24,11 +24,14 @@ export interface TimeGridProps {
   /** picker mode config */
   picker?: {
     clinic: Clinic;
-    selected: Date | null;
-    onSelect: (slot: Date) => void;
+    /** selected session-start(s); confirm mode passes 0–1, offer mode several */
+    selected: Date[];
+    onToggle: (slot: Date) => void;
     slotMinutes?: number;
   };
 }
+
+const sameTime = (list: Date[], slot: Date) => list.some((d) => d.getTime() === slot.getTime());
 
 interface DayEvent {
   span: SpanDTO;
@@ -173,13 +176,12 @@ export function TimeGrid({
                 {mode === "picker" &&
                   picker &&
                   freeSlots[di].map((slot) => {
-                    const isSelected = picker.selected?.getTime() === slot.getTime();
-                    if (isSelected) return null; // drawn as a block below
+                    if (sameTime(picker.selected, slot)) return null; // drawn as a block below
                     const min = londonMinutes(slot);
                     return (
                       <button
                         key={slot.toISOString()}
-                        onClick={() => picker.onSelect(slot)}
+                        onClick={() => picker.onToggle(slot)}
                         className="absolute right-[3px] left-[3px] z-10 cursor-pointer rounded-md bg-free px-1 text-[10.5px] font-semibold tabular-nums text-[oklch(0.35_0.05_148)] hover:bg-sage/40"
                         style={{ top: toY(min) + 1, height: (slotMinutes / 60) * HOUR_PX - 2 }}
                       >
@@ -188,15 +190,21 @@ export function TimeGrid({
                     );
                   })}
 
-                {/* picker: chosen slot = solid clay session block */}
-                {mode === "picker" && picker?.selected && sameLondonDay(picker.selected, day) && (
-                  <div
-                    className="absolute right-[3px] left-[3px] z-20 flex items-start justify-center rounded-lg bg-clay px-1 pt-1 text-[11px] font-semibold text-cream shadow-pop"
-                    style={{ top: toY(londonMinutes(picker.selected)), height: HOUR_PX }}
-                  >
-                    {fmtTime(picker.selected)} · chosen
-                  </div>
-                )}
+                {/* picker: chosen slot(s) = solid clay session block, tap to deselect */}
+                {mode === "picker" &&
+                  picker &&
+                  picker.selected
+                    .filter((s) => sameLondonDay(s, day))
+                    .map((s) => (
+                      <button
+                        key={s.toISOString()}
+                        onClick={() => picker.onToggle(s)}
+                        className="absolute right-[3px] left-[3px] z-20 flex cursor-pointer items-start justify-center rounded-lg bg-clay px-1 pt-1 text-[11px] font-semibold text-cream shadow-pop hover:bg-clay-deep"
+                        style={{ top: toY(londonMinutes(s)), height: HOUR_PX }}
+                      >
+                        {fmtTime(s)} · chosen
+                      </button>
+                    ))}
 
                 {/* event blocks */}
                 {laid.map(({ event, lane, lanes }, i) => {

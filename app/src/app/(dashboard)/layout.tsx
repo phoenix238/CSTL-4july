@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!session) redirect("/signin");
 
   const [enquiryCount, settings] = await Promise.all([
-    prisma.enquiry.count({ where: { status: "waiting" } }),
+    prisma.enquiry.count({ where: { status: { in: ["waiting", "offered"] } } }),
     getSettings(),
   ]);
 

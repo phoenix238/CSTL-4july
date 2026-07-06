@@ -7,7 +7,8 @@ import {
 } from "@/lib/google/calendar";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import { composeBookingEmail } from "./email";
+import { composeBookingEmail, INTAKE_SENTINEL } from "./email";
+import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
 
 export interface BookingRequest {
@@ -79,8 +80,10 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     );
   }
 
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings);
-  const body = req.emailBody?.trim() || email.body;
+  const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, intakeLink);
+  // Use her edited text if any, but always resolve the sentinel to the real link.
+  const body = (req.emailBody?.trim() || email.body).split(INTAKE_SENTINEL).join(intakeLink);
   let emailTextForClipboard: string | undefined;
   if (req.sendEmail && client.email) {
     await sendEmail(client.email, email.subject, body);

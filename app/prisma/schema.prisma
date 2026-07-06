@@ -27,6 +27,7 @@ model Client {
   referred      String        @default("")
   driveFolderId String        @default("")
   docId         String        @default("")
+  intakeToken   String        @default("") // private token for the client's in-app intake link
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
@@ -35,6 +36,7 @@ model Client {
 
   @@index([name])
   @@index([email])
+  @@index([intakeToken])
 }
 
 // Cached copy of a session note for instant profile views;
@@ -73,10 +75,11 @@ model Enquiry {
   via       String   @default("PASTED") // WHATSAPP | EMAIL | PASTED
   name      String   @default("")
   text      String
-  status    String   @default("waiting") // waiting | booked | dismissed
-  clientId  String? // set once the enquiry is saved as / matched to a client
-  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
+  status       String     @default("waiting") // waiting | offered | booked | dismissed
+  clientId     String? // set once the enquiry is saved as / matched to a client
+  client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  offeredTimes DateTime[] // slots offered to the client (offer mode), awaiting their pick
+  createdAt    DateTime   @default(now())
 
   @@index([clientId])
 }
@@ -95,4 +98,5 @@ model AppSettings {
   chalkFarmCalendarId   String @default("") // Bethnal Green 2h blocks
   clientsFolderId       String @default("") // Drive › CSTL › Clients
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
+  appUrl                String @default("") // base URL for building intake / share links
 }

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Newsreader, Work_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -8,6 +8,12 @@ const workSans = Work_Sans({ subsets: ["latin"], variable: "--font-worksans" });
 export const metadata: Metadata = {
   title: "CSTL Control Tower",
   description: "Phoenix Tanner — CSTL booking & documentation control tower",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "CSTL", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#b46a4a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

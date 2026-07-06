@@ -16,6 +16,8 @@ import {
 } from "./ui";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
+import { composeOfferMessage } from "@/lib/booking/offer";
+import { waLink } from "@/lib/whatsapp";
 import { fmtDayLong, fmtTime, londonDayStart, londonWeekStart } from "@/lib/time";
 import { Legend } from "./calendar/Legend";
 import { TimeGrid } from "./calendar/TimeGrid";
@@ -53,16 +55,18 @@ export function EnquiryFlow({
   openEnquiryId,
   existingClient,
   initialWaiting,
+  initialText,
 }: {
   openEnquiryId?: string;
   existingClient?: { id: string; name: string; clinic: string; email: string; welcomeSent: boolean };
   initialWaiting: WaitingEnquiry[];
+  initialText?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
 
   const [waiting, setWaiting] = useState<WaitingEnquiry[]>(initialWaiting);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [enquiryId, setEnquiryId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [reading, setReading] = useState(false);
@@ -77,7 +81,9 @@ export function EnquiryFlow({
   const [saving, setSaving] = useState(false);
   const [clinic, setClinic] = useState<Clinic>((existingClient?.clinic as Clinic) || "waterloo");
   const [weekStart, setWeekStart] = useState(() => londonWeekStart());
-  const [selected, setSelected] = useState<Date | null>(null);
+  const [selected, setSelected] = useState<Date[]>([]);
+  const [bookMode, setBookMode] = useState<"confirm" | "offer">("confirm");
+  const [offeredTimes, setOfferedTimes] = useState<Date[]>([]);
   const [showWaitingList, setShowWaitingList] = useState(false);
 
   // booking panel
@@ -86,7 +92,12 @@ export function EnquiryFlow({
   const [emailBody, setEmailBody] = useState("");
   const [emailDirty, setEmailDirty] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [offering, setOffering] = useState(false);
   const [result, setResult] = useState<BookResult | null>(null);
+
+  // one session-start for confirm mode
+  const confirmSlot = bookMode === "confirm" && selected.length ? selected[0] : null;
+  const phone = analysis?.phone?.trim() || "";
 
   // done step name edit
   const [editingName, setEditingName] = useState(false);
@@ -128,20 +139,41 @@ export function EnquiryFlow({
 
   // Live email preview — recomposed until the therapist edits it by hand.
   const composed = useMemo(() => {
-    if (!settings || !selected) return null;
-    const whenLabel = `${fmtDayLong(selected)} · ${fmtTime(selected)}`;
+    const displayName = (activeClient?.name || name || "there").trim();
+    if (!settings) return null;
+    if (bookMode === "offer") {
+      if (!selected.length) return null;
+      return { body: composeOfferMessage(displayName, clinic, selected) };
+    }
+    if (!confirmSlot) return null;
+    const whenLabel = `${fmtDayLong(confirmSlot)} · ${fmtTime(confirmSlot)}`;
     return composeBookingEmail(
-      { name: (activeClient?.name || name || "there").trim(), welcomeSent: activeClient?.welcomeSent ?? false },
+      { name: displayName, welcomeSent: activeClient?.welcomeSent ?? false },
       clinic,
       whenLabel,
       sendPayment,
       settings,
     );
-  }, [settings, selected, clinic, sendPayment, activeClient, name]);
+  }, [settings, bookMode, selected, confirmSlot, clinic, sendPayment, activeClient, name]);
 
   useEffect(() => {
     if (composed && !emailDirty) setEmailBody(composed.body);
   }, [composed, emailDirty]);
+
+  function toggleSlot(slot: Date) {
+    setEmailDirty(false);
+    setSelected((prev) => {
+      if (bookMode === "confirm") return [slot];
+      const exists = prev.some((d) => d.getTime() === slot.getTime());
+      return exists ? prev.filter((d) => d.getTime() !== slot.getTime()) : [...prev, slot];
+    });
+  }
+
+  function switchMode(m: "confirm" | "offer") {
+    setBookMode(m);
+    setSelected([]);
+    setEmailDirty(false);
+  }
 
   async function refreshWaiting() {
     try {
@@ -153,7 +185,11 @@ export function EnquiryFlow({
     router.refresh(); // sidebar badge
   }
 
-  function applyLoaded(enq: { id: string; text: string; clientId?: string | null }, a: Analysis, m: Match | null) {
+  function applyLoaded(
+    enq: { id: string; text: string; clientId?: string | null; offeredTimes?: string[] },
+    a: Analysis,
+    m: Match | null,
+  ) {
     setText(enq.text);
     setEnquiryId(enq.id);
     setAnalysis(a);
@@ -161,8 +197,12 @@ export function EnquiryFlow({
     setMatch(m && !m.saved ? m : null);
     setSaved(m?.saved ? m : null);
     setIgnoreMatch(false);
-    setSelected(null);
+    setSelected([]);
     setEmailDirty(false);
+    // Reopening an offered enquiry → confirm mode with the offered times as quick picks.
+    const offered = (enq.offeredTimes ?? []).map((t) => new Date(t)).filter((d) => !Number.isNaN(d.getTime()));
+    setOfferedTimes(offered);
+    setBookMode("confirm");
     if (m?.saved && m.clinic) setClinic(m.clinic as Clinic);
     else if (a.clinicSuggestion) setClinic(a.clinicSuggestion);
   }
@@ -170,9 +210,11 @@ export function EnquiryFlow({
   async function loadEnquiry(id: string) {
     setReading(true);
     try {
-      const d = await api<{ enquiry: { id: string; text: string; clientId: string | null }; analysis: Analysis; match: Match | null }>(
-        `/api/enquiries/${id}`,
-      );
+      const d = await api<{
+        enquiry: { id: string; text: string; clientId: string | null; offeredTimes?: string[] };
+        analysis: Analysis;
+        match: Match | null;
+      }>(`/api/enquiries/${id}`);
       applyLoaded(d.enquiry, d.analysis, d.match);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't load that enquiry");
@@ -227,13 +269,56 @@ export function EnquiryFlow({
     }
   }
 
+  async function sendOffer(alsoEmail: boolean) {
+    if (!enquiryId || !selected.length) {
+      toast("Pick some times to offer first");
+      return;
+    }
+    setOffering(true);
+    try {
+      await api(`/api/enquiries/${enquiryId}/offer`, {
+        method: "POST",
+        body: JSON.stringify({
+          clientName: activeClient?.name || name,
+          clinic,
+          times: selected.map((d) => d.toISOString()),
+          sendEmail: alsoEmail,
+          email: activeClient?.email || analysis?.email || undefined,
+          emailBody: emailBody.trim() || undefined,
+        }),
+      });
+      toast(alsoEmail ? "Times offered — email sent" : "Times offered");
+      void refreshWaiting();
+      // back to the inbox so it's clear it's now awaiting a reply
+      setAnalysis(null);
+      setEnquiryId(null);
+      setSelected([]);
+      setSaved(existingClient ? { ...existingClient, saved: true } : null);
+      setMatch(null);
+      setText("");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't send those times");
+    } finally {
+      setOffering(false);
+    }
+  }
+
+  function openWhatsApp(body: string) {
+    const link = waLink(phone, body);
+    if (!link) {
+      toast("No phone number on this enquiry to WhatsApp");
+      return;
+    }
+    window.open(link, "_blank");
+  }
+
   async function confirmBooking(send: boolean) {
-    if (!selected) return;
+    if (!confirmSlot) return;
     setBooking(true);
     try {
       const req: Record<string, unknown> = {
         clinic,
-        startISO: selected.toISOString(),
+        startISO: confirmSlot.toISOString(),
         sendEmail: send,
         sendPayment,
         emailBody: emailBody.trim() || undefined,
@@ -368,7 +453,9 @@ export function EnquiryFlow({
   /* ---------------- book ---------------- */
 
   const otherWaiting = waiting.filter((q) => q.id !== enquiryId);
-  const plan = selected ? planBookingEvents(clinic, (activeClient?.name || name || "New client").trim(), selected) : [];
+  const plan = confirmSlot
+    ? planBookingEvents(clinic, (activeClient?.name || name || "New client").trim(), confirmSlot)
+    : [];
   const isReturning = !!activeClient?.welcomeSent;
 
   return (
@@ -378,7 +465,7 @@ export function EnquiryFlow({
           onClick={() => {
             setAnalysis(null);
             setEnquiryId(null);
-            setSelected(null);
+            setSelected([]);
             setSaved(existingClient ? { ...existingClient, saved: true } : null);
             setMatch(null);
             setText("");
@@ -482,7 +569,7 @@ export function EnquiryFlow({
                 key={c}
                 onClick={() => {
                   setClinic(c);
-                  setSelected(null);
+                  setSelected([]);
                 }}
                 className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
                   clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
@@ -503,15 +590,31 @@ export function EnquiryFlow({
         )}
       </Card>
 
+      {/* mode toggle — offer several times, or confirm one */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionLabel>
-          PICK A SLOT — {CLINIC_LABEL[clinic]} · tap a green time
-        </SectionLabel>
+        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+          {(
+            [
+              ["confirm", "Confirm & book one"],
+              ["offer", "Offer a few times"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => switchMode(m)}
+              className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold select-none ${
+                bookMode === m ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => {
               setWeekStart((w) => londonDayStart(-7, w));
-              setSelected(null);
+              setSelected([]);
             }}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1 text-[13px] font-semibold hover:bg-hoverbg"
             aria-label="Previous week"
@@ -521,7 +624,7 @@ export function EnquiryFlow({
           <button
             onClick={() => {
               setWeekStart(londonWeekStart());
-              setSelected(null);
+              setSelected([]);
             }}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold hover:bg-hoverbg"
           >
@@ -530,7 +633,7 @@ export function EnquiryFlow({
           <button
             onClick={() => {
               setWeekStart((w) => londonDayStart(7, w));
-              setSelected(null);
+              setSelected([]);
             }}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1 text-[13px] font-semibold hover:bg-hoverbg"
             aria-label="Next week"
@@ -539,6 +642,30 @@ export function EnquiryFlow({
           </button>
         </div>
       </div>
+
+      <SectionLabel>
+        {bookMode === "offer"
+          ? `PICK A FEW TIMES TO OFFER — ${CLINIC_LABEL[clinic]}`
+          : `PICK A SLOT — ${CLINIC_LABEL[clinic]} · tap a green time`}
+      </SectionLabel>
+
+      {bookMode === "confirm" && offeredTimes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
+          <span className="text-muted">You offered:</span>
+          {offeredTimes.map((t) => (
+            <button
+              key={t.toISOString()}
+              onClick={() => {
+                setWeekStart(londonWeekStart(t));
+                setSelected([t]);
+              }}
+              className="cursor-pointer rounded-full bg-clay-tint px-2.5 py-1 font-semibold text-clay-text hover:bg-clay/20"
+            >
+              {fmtDayLong(t)} {fmtTime(t)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!spans ? (
         <div className="flex h-[220px] items-center justify-center rounded-2xl border border-line bg-card text-[13.5px] text-muted">
@@ -550,16 +677,60 @@ export function EnquiryFlow({
             weekStart={weekStart}
             spans={spans}
             mode="picker"
-            picker={{ clinic, selected, onSelect: setSelected }}
+            picker={{ clinic, selected, onToggle: toggleSlot }}
           />
           <Legend variant="picker" />
         </>
       )}
 
-      {selected && (
+      {/* OFFER panel */}
+      {bookMode === "offer" && selected.length > 0 && (
+        <Card className="flex flex-col gap-3 border-[1.5px] border-clay/35 px-5 py-4">
+          <SectionLabel>OFFERING {selected.length} TIME{selected.length === 1 ? "" : "S"}</SectionLabel>
+          <div className="flex flex-col gap-1 text-[13px]">
+            {[...selected]
+              .sort((a, b) => a.getTime() - b.getTime())
+              .map((t) => (
+                <div key={t.toISOString()} className="flex gap-2">
+                  <span className="text-clay">•</span>
+                  <span>
+                    {fmtDayLong(t)} at {fmtTime(t)}
+                  </span>
+                </div>
+              ))}
+          </div>
+          <div className="text-[12px] text-muted">
+            Nothing is booked yet — these are just offered. When they reply, reopen this enquiry and confirm one.
+          </div>
+          <SectionLabel>MESSAGE</SectionLabel>
+          <textarea
+            value={emailBody}
+            onChange={(e) => {
+              setEmailBody(e.target.value);
+              setEmailDirty(true);
+            }}
+            className={`${inputClass} min-h-[150px] resize-y leading-[1.55]`}
+          />
+          <div className="flex flex-wrap gap-2">
+            <PrimaryButton onClick={() => sendOffer(true)} disabled={offering}>
+              {offering ? "Sending…" : "Send by email"}
+            </PrimaryButton>
+            <OutlineButton onClick={() => openWhatsApp(emailBody)} disabled={!phone}>
+              Send on WhatsApp
+            </OutlineButton>
+            {!phone && <span className="self-center text-[12px] text-muted">No number found for WhatsApp</span>}
+            <OutlineButton onClick={() => sendOffer(false)} disabled={offering}>
+              Just mark as offered
+            </OutlineButton>
+          </div>
+        </Card>
+      )}
+
+      {/* CONFIRM panel */}
+      {bookMode === "confirm" && confirmSlot && (
         <Card className="flex flex-col gap-3 border-[1.5px] border-clay/35 px-5 py-4">
           <div className="text-[14px] font-semibold">
-            {fmtDayLong(selected)} · {fmtTime(selected)} — {CLINIC_LABEL[clinic]}
+            {fmtDayLong(confirmSlot)} · {fmtTime(confirmSlot)} — {CLINIC_LABEL[clinic]}
           </div>
           <SectionLabel>CALENDAR EVENTS TO CREATE</SectionLabel>
           <div className="flex flex-col gap-1.5 text-[13px]">
@@ -607,18 +778,21 @@ export function EnquiryFlow({
             </button>
           )}
           <div className="flex flex-wrap gap-2">
-            <OutlineButton onClick={() => setSelected(null)}>Change slot</OutlineButton>
+            <OutlineButton onClick={() => setSelected([])}>Change slot</OutlineButton>
             <PrimaryButton onClick={() => confirmBooking(true)} disabled={booking}>
               {booking ? "Booking…" : "Create events & send email"}
             </PrimaryButton>
             <OutlineButton onClick={() => confirmBooking(false)} disabled={booking}>
               Copy text & register — no email
             </OutlineButton>
+            <OutlineButton onClick={() => openWhatsApp(emailBody)} disabled={!phone}>
+              Reply on WhatsApp
+            </OutlineButton>
           </div>
         </Card>
       )}
 
-      {enquiryId && !selected && (
+      {enquiryId && selected.length === 0 && (
         <TintButton
           className="self-start"
           onClick={async () => {
