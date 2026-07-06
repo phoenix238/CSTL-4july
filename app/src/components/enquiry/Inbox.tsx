@@ -29,9 +29,11 @@ export function viaChip(via: string) {
 export function Inbox({
   waiting,
   onOpen,
+  onDelete,
 }: {
   waiting: WaitingEnquiry[];
   onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   return (
     <div className="flex w-full flex-none flex-col gap-2 lg:w-[330px]">
@@ -57,9 +59,18 @@ export function Inbox({
                 ) : (
                   <span className="text-[14px] font-semibold">{q.name || "Unknown"}</span>
                 )}
-                <Chip color={chip.color} bg={chip.bg}>
-                  {chip.label}
-                </Chip>
+                <div className="flex flex-none items-center gap-1.5">
+                  <Chip color={chip.color} bg={chip.bg}>
+                    {chip.label}
+                  </Chip>
+                  <button
+                    onClick={() => onDelete(q.id)}
+                    title="Delete this enquiry"
+                    className="cursor-pointer text-[12px] font-semibold text-faint hover:text-[oklch(0.55_0.15_25)]"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               {offered ? (
                 <div className="text-[12.5px] font-medium text-amber-text">

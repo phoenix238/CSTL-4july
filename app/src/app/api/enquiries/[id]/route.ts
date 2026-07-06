@@ -4,6 +4,13 @@ import { prisma } from "@/lib/db";
 import { analyseEnquiry } from "@/lib/claude";
 import { findExistingClient } from "@/lib/clients";
 
+/** Hard-delete an enquiry that never went anywhere (vs. dismiss, which just hides it). */
+export const DELETE = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
+  const { id } = await ctx.params;
+  await prisma.enquiry.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+});
+
 export const GET = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   const enquiry = await prisma.enquiry.findUniqueOrThrow({ where: { id } });
