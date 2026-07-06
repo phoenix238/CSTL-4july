@@ -28,6 +28,8 @@ model Client {
   driveFolderId String        @default("")
   docId         String        @default("")
   intakeToken   String        @default("") // private token for the client's in-app intake link
+  intakeEmailSentAt DateTime? // last time the intake-form email was sent
+  reviewEmailSentAt DateTime? // last time the post-session review email was sent
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
