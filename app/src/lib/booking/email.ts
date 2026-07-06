@@ -12,9 +12,11 @@ export interface EmailSettings {
   emailTemplateWaterloo: string;
   emailTemplateBethnal: string;
   accessNote: string;
-  intakeFormUrl: string;
   paymentDetails: string;
 }
+
+/** Preview placeholder shown before the real per-client intake link is known; swapped server-side. */
+export const INTAKE_SENTINEL = "(your personal intake link — added when you send)";
 
 /**
  * What the confirmation email contains:
@@ -31,6 +33,7 @@ export function composeBookingEmail(
   whenLabel: string,
   sendPayment: boolean,
   settings: EmailSettings,
+  intakeUrl: string = INTAKE_SENTINEL,
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
@@ -49,7 +52,7 @@ export function composeBookingEmail(
     .join(client.name)
     .split("{accessNote}")
     .join(settings.accessNote);
-  body += `\n\nIntake form: ${settings.intakeFormUrl}`;
+  body += `\n\nIntake form: ${intakeUrl}`;
   const includes = [
     "Google Calendar invite attached",
     "Link to the CSTL intake form",

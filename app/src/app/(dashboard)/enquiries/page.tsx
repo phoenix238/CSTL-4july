@@ -4,9 +4,10 @@ import { EnquiryFlow } from "@/components/EnquiryFlow";
 export default async function EnquiriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ open?: string; client?: string }>;
+  searchParams: Promise<{ open?: string; client?: string; text?: string; title?: string; url?: string }>;
 }) {
-  const { open, client: clientId } = await searchParams;
+  const { open, client: clientId, text, title, url } = await searchParams;
+  const initialText = [title, text, url].filter(Boolean).join("\n") || undefined;
 
   const existingClient = clientId
     ? await prisma.client.findUnique({
@@ -16,16 +17,30 @@ export default async function EnquiriesPage({
     : null;
 
   const waiting = await prisma.enquiry.findMany({
-    where: { status: "waiting" },
+    where: { status: { in: ["waiting", "offered"] } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, via: true, name: true, text: true, clientId: true, createdAt: true },
+    select: {
+      id: true,
+      via: true,
+      name: true,
+      text: true,
+      status: true,
+      clientId: true,
+      offeredTimes: true,
+      createdAt: true,
+    },
   });
 
   return (
     <EnquiryFlow
       openEnquiryId={open}
       existingClient={existingClient ?? undefined}
-      initialWaiting={waiting.map((w) => ({ ...w, createdAt: w.createdAt.toISOString() }))}
+      initialText={initialText}
+      initialWaiting={waiting.map((w) => ({
+        ...w,
+        offeredTimes: w.offeredTimes.map((t) => t.toISOString()),
+        createdAt: w.createdAt.toISOString(),
+      }))}
     />
   );
 }

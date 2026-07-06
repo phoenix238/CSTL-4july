@@ -243,6 +243,38 @@ export function ClientProfile({
             </button>
           </div>
 
+          {!editing && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const { url } = await api<{ url: string }>(`/api/clients/${client.id}/intake-link`);
+                    await navigator.clipboard?.writeText(url);
+                    toast("Intake link copied ✓");
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Couldn't get the link");
+                  }
+                }}
+                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
+              >
+                Copy intake link
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await api(`/api/clients/${client.id}/intake-email`, { method: "POST" });
+                    toast(`Intake form sent to ${client.name.split(" ")[0]} ✓`);
+                  } catch (err) {
+                    toast(err instanceof Error ? err.message : "Couldn't send");
+                  }
+                }}
+                className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text"
+              >
+                Send intake form
+              </button>
+            </div>
+          )}
+
           {incomplete && !editing && (
             <div className="rounded-xl border border-[oklch(0.85_0.06_78_/_0.6)] bg-[oklch(0.95_0.035_85_/_0.6)] px-3.5 py-2.5 text-xs leading-normal text-amber-text">
               Some details are still missing — add them when you have them.

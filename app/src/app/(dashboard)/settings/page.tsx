@@ -11,7 +11,7 @@ export default async function SettingsPage() {
         emailTemplateWaterloo: settings.emailTemplateWaterloo,
         emailTemplateBethnal: settings.emailTemplateBethnal,
         paymentDetails: settings.paymentDetails,
-        intakeFormUrl: settings.intakeFormUrl,
+        appUrl: settings.appUrl,
         personalCalendarId: settings.personalCalendarId,
         roomCalendarId: settings.roomCalendarId,
         chalkFarmCalendarId: settings.chalkFarmCalendarId,

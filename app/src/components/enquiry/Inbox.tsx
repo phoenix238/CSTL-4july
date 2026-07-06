@@ -8,7 +8,9 @@ export interface WaitingEnquiry {
   via: string;
   name: string;
   text: string;
+  status?: string;
   clientId: string | null;
+  offeredTimes?: string[];
   createdAt: string;
 }
 
@@ -41,6 +43,7 @@ export function Inbox({
       ) : (
         waiting.map((q) => {
           const chip = viaChip(q.via);
+          const offered = q.status === "offered";
           return (
             <Card key={q.id} className="flex flex-col gap-2 px-4 py-3.5">
               <div className="flex items-center justify-between gap-2">
@@ -58,9 +61,15 @@ export function Inbox({
                   {chip.label}
                 </Chip>
               </div>
-              <div className="line-clamp-1 text-[12.5px] text-muted">&ldquo;{q.text.trim()}&rdquo;</div>
+              {offered ? (
+                <div className="text-[12.5px] font-medium text-amber-text">
+                  Offered {q.offeredTimes?.length ?? 0} time{(q.offeredTimes?.length ?? 0) === 1 ? "" : "s"} · awaiting reply
+                </div>
+              ) : (
+                <div className="line-clamp-1 text-[12.5px] text-muted">&ldquo;{q.text.trim()}&rdquo;</div>
+              )}
               <TintButton className="self-start" onClick={() => onOpen(q.id)}>
-                Open
+                {offered ? "Confirm a time" : "Open"}
               </TintButton>
             </Card>
           );
