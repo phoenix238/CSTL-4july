@@ -15,3 +15,8 @@ export async function getOrCreateIntakeToken(clientId: string): Promise<string> 
 export function intakeUrl(settings: { appUrl?: string | null }, token: string): string {
   return `${appBaseUrl(settings)}/intake/${token}`;
 }
+
+/** One-tap marketing opt-in link (same private token). */
+export function preferencesUrl(settings: { appUrl?: string | null }, token: string): string {
+  return `${appBaseUrl(settings)}/preferences/${token}`;
+}

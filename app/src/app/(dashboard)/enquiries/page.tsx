@@ -4,9 +4,16 @@ import { EnquiryFlow } from "@/components/EnquiryFlow";
 export default async function EnquiriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ open?: string; client?: string; text?: string; title?: string; url?: string }>;
+  searchParams: Promise<{
+    open?: string;
+    client?: string;
+    text?: string;
+    title?: string;
+    url?: string;
+    pick?: string;
+  }>;
 }) {
-  const { open, client: clientId, text, title, url } = await searchParams;
+  const { open, client: clientId, text, title, url, pick } = await searchParams;
   const initialText = [title, text, url].filter(Boolean).join("\n") || undefined;
 
   const existingClient = clientId
@@ -36,6 +43,7 @@ export default async function EnquiriesPage({
       openEnquiryId={open}
       existingClient={existingClient ?? undefined}
       initialText={initialText}
+      initialPick={pick}
       initialWaiting={waiting.map((w) => ({
         ...w,
         offeredTimes: w.offeredTimes.map((t) => t.toISOString()),

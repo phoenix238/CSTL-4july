@@ -56,11 +56,13 @@ export function EnquiryFlow({
   existingClient,
   initialWaiting,
   initialText,
+  initialPick,
 }: {
   openEnquiryId?: string;
   existingClient?: { id: string; name: string; clinic: string; email: string; welcomeSent: boolean };
   initialWaiting: WaitingEnquiry[];
   initialText?: string;
+  initialPick?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -108,7 +110,7 @@ export function EnquiryFlow({
   const { spans, invalidate } = useWeekSpans(weekStart, 7);
 
   useEffect(() => {
-    if (openEnquiryId) void loadEnquiry(openEnquiryId);
+    if (openEnquiryId) void loadEnquiry(openEnquiryId, initialPick);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openEnquiryId]);
 
@@ -207,7 +209,7 @@ export function EnquiryFlow({
     else if (a.clinicSuggestion) setClinic(a.clinicSuggestion);
   }
 
-  async function loadEnquiry(id: string) {
+  async function loadEnquiry(id: string, pick?: string) {
     setReading(true);
     try {
       const d = await api<{
@@ -216,6 +218,13 @@ export function EnquiryFlow({
         match: Match | null;
       }>(`/api/enquiries/${id}`);
       applyLoaded(d.enquiry, d.analysis, d.match);
+      // Came from "they picked this one" — jump straight to confirming that slot.
+      const picked = pick ? new Date(pick) : null;
+      if (picked && !Number.isNaN(picked.getTime())) {
+        setBookMode("confirm");
+        setWeekStart(londonWeekStart(picked));
+        setSelected([picked]);
+      }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't load that enquiry");
     } finally {
@@ -285,6 +294,7 @@ export function EnquiryFlow({
           sendEmail: alsoEmail,
           email: activeClient?.email || analysis?.email || undefined,
           emailBody: emailBody.trim() || undefined,
+          clientId: activeClient?.id,
         }),
       });
       toast(alsoEmail ? "Times offered — email sent" : "Times offered");

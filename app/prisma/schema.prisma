@@ -99,4 +99,8 @@ model AppSettings {
   clientsFolderId       String @default("") // Drive › CSTL › Clients
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
   appUrl                String @default("") // base URL for building intake / share links
+  intakeQuestions       Json? // configurable intake questions; null = built-in defaults
+  mapsReviewUrl         String @default("") // Google Maps "leave a review" link
+  reviewEmailSubject    String @default("How was your session?")
+  reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
 }
