@@ -108,17 +108,16 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     where: { status: "confirmed", startsAt: { gte: new Date(windowStart.getTime() - 2 * 3600_000), lt: windowEnd } },
     include: { client: true },
   });
+  // The booking span is the 1-hour session itself. The paired room / Chalk Farm
+  // event stays visible (see below) so it renders side by side with the session.
   const known: BusySpan[] = bookings.map((b) => {
     const clinic = b.clinic as Clinic;
-    const start = clinic === "bethnal" ? new Date(b.startsAt.getTime() - 30 * 60_000) : b.startsAt;
-    const end = new Date(start.getTime() + (clinic === "bethnal" ? 120 : 60) * 60_000);
+    const start = b.startsAt;
+    const end = new Date(start.getTime() + 60 * 60_000);
     return {
       start,
       end,
-      title:
-        clinic === "waterloo"
-          ? `${b.client.name} — Waterloo`
-          : `Phoenix — Chalk Farm (${b.client.name})`,
+      title: `${b.client.name} — ${clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}`,
       known: true,
       source: "booking" as const,
       clientId: b.clientId,
@@ -126,10 +125,9 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
       clinic,
     };
   });
-  // Google events belonging to our bookings are suppressed by exact event id.
-  const ownEventIds = new Set(
-    bookings.flatMap((b) => [b.personalEventId, b.secondaryEventId]).filter(Boolean),
-  );
+  // Only the personal-calendar event is suppressed — the booking span already
+  // represents it. The room / Chalk Farm event is kept so it shows alongside.
+  const ownEventIds = new Set(bookings.map((b) => b.personalEventId).filter(Boolean));
 
   const calendar = await getCalendarApi();
   const sources: Array<{ id: string; source: SpanSource }> = [

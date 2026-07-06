@@ -1,17 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { londonDayStart, londonWeekStart, londonYMD, fmtDate } from "@/lib/time";
 import { api, useToast } from "../ui";
 import { BookingPopover } from "./BookingPopover";
-import { Legend } from "./Legend";
 import { MonthGrid } from "./MonthGrid";
 import { QuickBook } from "./QuickBook";
 import { TimeGrid } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
-import type { SpanDTO } from "./layout";
+import { SPAN_COLORS, type SpanDTO, type SpanSource } from "./layout";
 
 const TZ = "Europe/London";
+
+const CALENDAR_SOURCES: SpanSource[] = ["booking", "room", "chalkFarm", "personal"];
+const HIDDEN_KEY = "cstl-calendar-hidden";
 
 export function CalendarView() {
   const toast = useToast();
@@ -21,6 +23,31 @@ export function CalendarView() {
   const [quickBookSlot, setQuickBookSlot] = useState<Date | null>(null);
   const [reschedule, setReschedule] = useState<{ bookingId: string; clientName: string } | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [hidden, setHidden] = useState<Set<SpanSource>>(new Set());
+
+  // Remember which calendars are toggled off between visits.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]");
+      if (Array.isArray(saved)) setHidden(new Set(saved as SpanSource[]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function toggleSource(s: SpanSource) {
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      try {
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+  const visible = (spans: SpanDTO[] | null) => spans?.filter((s) => !hidden.has(s.source)) ?? null;
 
   const weekStart = useMemo(() => londonWeekStart(anchor), [anchor]);
   const monthGridStart = useMemo(() => {
@@ -149,35 +176,54 @@ export function CalendarView() {
         </div>
       )}
 
+      {/* calendar toggles — tap to show/hide each shared calendar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {CALENDAR_SOURCES.map((s) => {
+          const c = SPAN_COLORS[s];
+          const off = hidden.has(s);
+          return (
+            <button
+              key={s}
+              onClick={() => toggleSource(s)}
+              className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold select-none ${
+                off ? "border-line bg-transparent text-faint" : "border-transparent text-ink-soft"
+              }`}
+              style={off ? undefined : { background: c.bg, color: c.text }}
+            >
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ background: off ? "oklch(0.8 0.01 80)" : c.border }}
+              />
+              {c.label}
+              {off && <span className="text-[10px]">hidden</span>}
+            </button>
+          );
+        })}
+      </div>
+
       {view === "week" ? (
         !week.spans ? (
           <div className="flex h-[300px] items-center justify-center rounded-2xl border border-line bg-card text-[13.5px] text-muted">
             Loading your calendars…
           </div>
         ) : (
-          <>
-            <TimeGrid
-              weekStart={weekStart}
-              spans={week.spans}
-              mode="display"
-              onEventClick={(span, a) => setOpenSpan({ span, anchor: a })}
-              onSlotClick={handleSlotClick}
-            />
-            <Legend />
-          </>
+          <TimeGrid
+            weekStart={weekStart}
+            spans={visible(week.spans) ?? []}
+            mode="display"
+            onEventClick={(span, a) => setOpenSpan({ span, anchor: a })}
+            onSlotClick={handleSlotClick}
+          />
         )
       ) : (
-        <>
-          <MonthGrid
-            month={anchor}
-            spans={month.spans}
-            onDayClick={(day) => {
-              setAnchor(day);
-              setView("week");
-            }}
-          />
-          <Legend />
-        </>
+        <MonthGrid
+          month={anchor}
+          spans={visible(month.spans)}
+          onDayClick={(day) => {
+            setAnchor(day);
+            setView("week");
+          }}
+        />
       )}
 
       {openSpan && (
