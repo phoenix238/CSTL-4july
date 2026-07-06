@@ -10,12 +10,17 @@ export function IntakeForm({
   clientPhone,
   alreadyDone,
   questions,
+  embedded,
+  onSaved,
 }: {
   token: string;
   clientName: string;
   clientPhone: string;
   alreadyDone: boolean;
   questions: IntakeQuestion[];
+  /** Rendered inline on the client profile (in person) rather than as a standalone page. */
+  embedded?: boolean;
+  onSaved?: () => void;
 }) {
   const toast = useToast();
   const [name, setName] = useState(clientName);
@@ -39,6 +44,7 @@ export function IntakeForm({
         body: JSON.stringify({ name, answers }),
       });
       setDone(true);
+      onSaved?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't send that — please try again");
     } finally {
@@ -48,20 +54,23 @@ export function IntakeForm({
 
   if (done) {
     return (
-      <div className="mx-auto flex min-h-screen max-w-[560px] flex-col items-center justify-center gap-3 px-5 text-center">
+      <div
+        className={`mx-auto flex max-w-[560px] flex-col items-center justify-center gap-3 px-5 text-center ${embedded ? "py-10" : "min-h-screen"}`}
+      >
         <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-sage-tint text-2xl text-sage-text">
           ✓
         </div>
         <div className="font-serif text-2xl font-medium">Thank you</div>
         <p className="text-[14px] leading-relaxed text-muted">
-          Your details are with Phoenix. Looking forward to seeing you.
+          {embedded ? "Saved to their record ✓" : "Your details are with Phoenix. Looking forward to seeing you."}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[600px] px-5 py-10">
+    <div className={`mx-auto max-w-[600px] px-5 ${embedded ? "py-6" : "py-10"}`}>
+      {embedded && <p className="mb-3 text-[11.5px] font-semibold tracking-[0.06em] text-muted uppercase">In-person intake</p>}
       <header className="mb-6 text-center">
         <h1 className="font-serif text-[28px] leading-[1.1]">Your intake form</h1>
         <p className="mt-2 text-[13.5px] leading-relaxed text-muted">

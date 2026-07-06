@@ -4,11 +4,12 @@ import { prisma } from "@/lib/db";
 import { createClientWithDrive } from "@/lib/clients";
 import {
   ensureClientFolderAndDoc,
-  appendTextToDoc,
+  appendFormattedSections,
   uploadOriginalFile,
   copyDriveFileTo,
 } from "@/lib/google/drive";
 import { upsertMarketingRow } from "@/lib/google/sheets";
+import { fmtDate } from "@/lib/time";
 
 export const maxDuration = 60;
 
@@ -71,6 +72,22 @@ export const POST = guarded(async (req: Request) => {
     let clientId = entry.mergeWithId;
     if (clientId) {
       merged++;
+      // Merging into an existing client: fill in anything they're still missing,
+      // but never overwrite details already on file.
+      const existing = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+      const fillBlank = (existingVal: string, imported: string) => existingVal || imported;
+      await prisma.client.update({
+        where: { id: clientId },
+        data: {
+          dob: fillBlank(existing.dob, entry.client.dob),
+          occupation: fillBlank(existing.occupation, entry.client.occupation),
+          doctor: fillBlank(existing.doctor, entry.client.doctor),
+          meds: fillBlank(existing.meds, entry.client.meds),
+          conditions: fillBlank(existing.conditions, entry.client.conditions),
+          emergency: fillBlank(existing.emergency, entry.client.emergency),
+          referred: fillBlank(existing.referred, entry.client.referred),
+        },
+      });
     } else {
       const client = await createClientWithDrive({
         name: entry.client.name,
@@ -98,7 +115,14 @@ export const POST = guarded(async (req: Request) => {
     const { folderId, docId } = await ensureClientFolderAndDoc(clientId);
 
     if (entry.client.notes?.trim()) {
-      await appendTextToDoc(docId, `Imported note (from ${entry.file}):\n${entry.client.notes}`);
+      await appendFormattedSections(docId, null, [
+        {
+          heading: `Imported case history — from ${entry.file}, ${fmtDate(new Date())}`,
+          lines: [{ kind: "paragraph", value: entry.client.notes }],
+        },
+      ]);
+      // A case history came in with this import — treat intake as covered.
+      await prisma.client.update({ where: { id: clientId }, data: { intakeDone: true } });
     }
     await storeOriginal(entry, folderId);
   }

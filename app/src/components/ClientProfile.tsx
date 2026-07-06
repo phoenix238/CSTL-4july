@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
+import { IntakeForm } from "./IntakeForm";
+import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
 
 export interface ProfileClient {
@@ -14,6 +17,7 @@ export interface ProfileClient {
   clinic: string;
   marketing: boolean;
   intakeDone: boolean;
+  intakeToken: string;
   dob: string;
   occupation: string;
   doctor: string;
@@ -51,12 +55,14 @@ export function ClientProfile({
   nextSession,
   nextBookingId,
   activeOffer,
+  intakeQuestions,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
   nextSession: string | null;
   nextBookingId?: string | null;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
+  intakeQuestions: IntakeQuestion[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -67,6 +73,12 @@ export function ClientProfile({
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState<{ raw: string; bullets: string[] }>({ raw: "", bullets: [] });
+  const [savingNote, setSavingNote] = useState(false);
+  const [togglingIntake, setTogglingIntake] = useState(false);
+  const [changingClinic, setChangingClinic] = useState(false);
+  const [inPersonIntake, setInPersonIntake] = useState(false);
 
   async function cancelNextSession() {
     if (!nextBookingId) return;
@@ -101,7 +113,59 @@ export function ClientProfile({
     }
   }
 
-  const chip = clinicChip(client.clinic);
+  async function toggleIntakeDone() {
+    setTogglingIntake(true);
+    try {
+      await api(`/api/clients/${client.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ intakeDone: !client.intakeDone }),
+      });
+      toast(client.intakeDone ? "Marked intake pending" : "Intake marked complete ✓");
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't update intake status");
+    } finally {
+      setTogglingIntake(false);
+    }
+  }
+
+  async function setClinic(clinic: Clinic) {
+    if (clinic === client.clinic) return;
+    setChangingClinic(true);
+    try {
+      await api(`/api/clients/${client.id}`, { method: "PATCH", body: JSON.stringify({ clinic }) });
+      toast(`Moved to ${CLINIC_LABEL[clinic]} ✓`);
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't change clinic");
+    } finally {
+      setChangingClinic(false);
+    }
+  }
+
+  const startEditNote = (note: ProfileNote) => {
+    setNoteDraft({ raw: note.raw, bullets: [...note.bullets] });
+    setEditingNoteId(note.id);
+  };
+
+  const saveNoteEdit = async () => {
+    if (!editingNoteId) return;
+    setSavingNote(true);
+    try {
+      await api(`/api/clients/${client.id}/notes/${editingNoteId}`, {
+        method: "PATCH",
+        body: JSON.stringify(noteDraft),
+      });
+      toast("Note updated ✓");
+      setEditingNoteId(null);
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't save that note");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   const coreFields = ["dob", "occupation", "doctor", "meds", "conditions", "emergency", "referred"] as const;
   const incomplete = coreFields.some((k) => !client[k]);
 
@@ -154,19 +218,33 @@ export function ClientProfile({
           <div className="mt-[3px] text-[13px] text-muted">
             {[client.email, client.phone].filter(Boolean).join(" · ") || "No contact details yet"}
           </div>
-          <div className="mt-2 flex flex-wrap gap-[7px]">
-            <Chip color={chip.color} bg={chip.bg}>
-              {chip.label}
-            </Chip>
-            {client.intakeDone ? (
-              <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
-                Intake ✓
-              </Chip>
-            ) : (
-              <Chip color="oklch(0.5 0.09 75)" bg="oklch(0.95 0.035 85)">
-                Intake pending
-              </Chip>
-            )}
+          <div className="mt-2 flex flex-wrap items-center gap-[7px]">
+            <div className="flex overflow-hidden rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[2px]">
+              {(["waterloo", "bethnal"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setClinic(c)}
+                  disabled={changingClinic}
+                  className={`cursor-pointer rounded-full px-2.5 py-[3px] text-[11.5px] font-medium whitespace-nowrap select-none disabled:cursor-default ${
+                    client.clinic === c ? "" : "text-[oklch(0.5_0.02_58)]"
+                  }`}
+                  style={client.clinic === c ? { color: clinicChip(c).color, background: clinicChip(c).bg } : undefined}
+                >
+                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                </button>
+              ))}
+            </div>
+            <button onClick={toggleIntakeDone} disabled={togglingIntake} className="cursor-pointer disabled:cursor-default">
+              {client.intakeDone ? (
+                <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
+                  Intake ✓
+                </Chip>
+              ) : (
+                <Chip color="oklch(0.5 0.09 75)" bg="oklch(0.95 0.035 85)">
+                  Intake pending — click to mark complete
+                </Chip>
+              )}
+            </button>
             {client.marketing ? (
               <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
                 Email marketing ✓
@@ -249,6 +327,7 @@ export function ClientProfile({
 
           {notes.map((n) => {
             const nChip = clinicChip(n.clinic);
+            const isEditing = editingNoteId === n.id;
             return (
               <Card key={n.id} className="px-[18px] py-[15px]">
                 <div className="flex items-center gap-2.5">
@@ -257,6 +336,14 @@ export function ClientProfile({
                     {n.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}
                   </Chip>
                   <div className="flex-1" />
+                  {!isEditing && (
+                    <button
+                      onClick={() => (editingNoteId ? setEditingNoteId(null) : startEditNote(n))}
+                      className="cursor-pointer text-[11.5px] font-semibold text-muted hover:text-clay-text"
+                    >
+                      Fix a word
+                    </button>
+                  )}
                   <button
                     onClick={() => setExpanded({ ...expanded, [n.id]: !expanded[n.id] })}
                     className="cursor-pointer text-[11.5px] font-semibold text-muted hover:text-clay-text"
@@ -264,15 +351,70 @@ export function ClientProfile({
                     {expanded[n.id] ? "Hide raw note" : "Show raw note"}
                   </button>
                 </div>
-                <div className="mt-2 flex flex-col gap-1">
-                  {n.bullets.map((b, i) => (
-                    <div key={i} className="flex gap-2 text-[13.5px] leading-[1.55]">
-                      <span className="text-clay">•</span>
-                      <span>{b}</span>
+
+                {isEditing ? (
+                  <div className="mt-2.5 flex flex-col gap-2">
+                    {noteDraft.bullets.map((b, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-clay">•</span>
+                        <input
+                          value={b}
+                          onChange={(e) => {
+                            const bullets = [...noteDraft.bullets];
+                            bullets[i] = e.target.value;
+                            setNoteDraft({ ...noteDraft, bullets });
+                          }}
+                          className={inputClass}
+                        />
+                        <button
+                          onClick={() =>
+                            setNoteDraft({ ...noteDraft, bullets: noteDraft.bullets.filter((_, j) => j !== i) })
+                          }
+                          className="cursor-pointer text-[12px] font-semibold text-faint hover:text-[oklch(0.55_0.15_25)]"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setNoteDraft({ ...noteDraft, bullets: [...noteDraft.bullets, ""] })}
+                      className="cursor-pointer self-start text-[11.5px] font-semibold text-clay-text hover:text-clay"
+                    >
+                      + Add bullet
+                    </button>
+                    <label className="mt-1 flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                        RAW NOTE
+                      </span>
+                      <textarea
+                        value={noteDraft.raw}
+                        onChange={(e) => setNoteDraft({ ...noteDraft, raw: e.target.value })}
+                        className={`${inputClass} min-h-[90px] resize-y leading-[1.55]`}
+                      />
+                    </label>
+                    <div className="mt-1 flex gap-2">
+                      <PrimaryButton onClick={saveNoteEdit} disabled={savingNote} className="py-2 text-[12.5px]">
+                        {savingNote ? "Saving…" : "Save fix"}
+                      </PrimaryButton>
+                      <button
+                        onClick={() => setEditingNoteId(null)}
+                        className="cursor-pointer rounded-full px-4 py-2 text-[12.5px] font-semibold text-faint hover:text-ink-soft"
+                      >
+                        Cancel
+                      </button>
                     </div>
-                  ))}
-                </div>
-                {expanded[n.id] && (
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {n.bullets.map((b, i) => (
+                      <div key={i} className="flex gap-2 text-[13.5px] leading-[1.55]">
+                        <span className="text-clay">•</span>
+                        <span>{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!isEditing && expanded[n.id] && (
                   <div className="mt-2.5 rounded-[10px] bg-inputbg px-3.5 py-2.5 text-[12.5px] leading-[1.6] text-[oklch(0.45_0.02_60)]">
                     {n.raw}
                   </div>
@@ -362,6 +504,12 @@ export function ClientProfile({
               >
                 Send review request
               </button>
+              <button
+                onClick={() => setInPersonIntake(!inPersonIntake)}
+                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
+              >
+                {inPersonIntake ? "Close intake form" : "Fill in person"}
+              </button>
             </div>
           )}
 
@@ -403,6 +551,23 @@ export function ClientProfile({
           )}
         </aside>
       </div>
+
+      {inPersonIntake && (
+        <Card className="overflow-hidden px-0 py-0">
+          <IntakeForm
+            token={client.intakeToken}
+            clientName={client.name}
+            clientPhone={client.phone}
+            alreadyDone={client.intakeDone}
+            questions={intakeQuestions}
+            embedded
+            onSaved={() => {
+              toast(`Saved ${client.name.split(" ")[0]}'s intake ✓`);
+              router.refresh();
+            }}
+          />
+        </Card>
+      )}
     </div>
   );
 }

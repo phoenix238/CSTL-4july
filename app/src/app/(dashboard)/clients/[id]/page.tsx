@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { prisma, getSettings } from "@/lib/db";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
 import { ClientProfile, type ProfileNote } from "@/components/ClientProfile";
+import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
+import { getOrCreateIntakeToken } from "@/lib/intake";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -10,6 +12,10 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     include: { notes: { orderBy: { date: "desc" } } },
   });
   if (!client) notFound();
+
+  const intakeToken = await getOrCreateIntakeToken(id);
+  const settings = await getSettings();
+  const intakeQuestions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
 
   const nextBooking = await prisma.booking.findFirst({
     where: { clientId: id, status: "confirmed", startsAt: { gte: new Date() } },
@@ -48,6 +54,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         clinic: client.clinic,
         marketing: client.marketing,
         intakeDone: client.intakeDone,
+        intakeToken,
         dob: client.dob,
         occupation: client.occupation,
         doctor: client.doctor,
@@ -61,6 +68,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
       nextBookingId={nextBooking?.id ?? null}
       activeOffer={activeOffer}
+      intakeQuestions={intakeQuestions}
     />
   );
 }

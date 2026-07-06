@@ -218,19 +218,6 @@ export async function appendNoteToDoc(
   ]);
 }
 
-/** Append arbitrary text (e.g. imported legacy notes) to the client's Doc. */
-export async function appendTextToDoc(docId: string, text: string) {
-  const docs = await getDocsApi();
-  const doc = await docs.documents.get({ documentId: docId });
-  const endIndex = doc.data.body?.content?.at(-1)?.endIndex ?? 1;
-  await docs.documents.batchUpdate({
-    documentId: docId,
-    requestBody: {
-      requests: [{ insertText: { location: { index: endIndex - 1 }, text: `\n${text}\n` } }],
-    },
-  });
-}
-
 /* ---------- structured writes: real headers + bold, not just plain text ---------- */
 
 export type DocLine =
