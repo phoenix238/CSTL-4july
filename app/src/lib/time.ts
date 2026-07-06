@@ -58,6 +58,13 @@ export const fmtDayLong = (d: Date) =>
 export const fmtDate = (d: Date) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric", month: "short", year: "numeric" }).format(d); // "2 Jul 2026"
 
+/** Start of the London week (Monday 00:00) containing `from`. */
+export function londonWeekStart(from = new Date()): Date {
+  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(from);
+  const idx = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(weekday);
+  return londonDayStart(-(idx < 0 ? 0 : idx), from);
+}
+
 /** Minutes past London midnight for an instant. */
 export function londonMinutes(at: Date): number {
   const parts = new Intl.DateTimeFormat("en-GB", {

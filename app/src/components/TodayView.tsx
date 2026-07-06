@@ -79,7 +79,12 @@ export function TodayView({
                 <div className="w-px self-stretch bg-line" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
-                    <span className="font-serif text-[17px] font-medium lg:text-lg">{r.name}</span>
+                    <Link
+                      href={`/clients/${r.clientId}`}
+                      className="font-serif text-[17px] font-medium hover:text-clay lg:text-lg"
+                    >
+                      {r.name}
+                    </Link>
                     {r.isNew && (
                       <span className="text-[10.5px] font-semibold tracking-[0.06em] text-clay">
                         NEW CLIENT

@@ -31,6 +31,7 @@ model Client {
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
   notes         SessionNote[]
+  enquiries     Enquiry[]
 
   @@index([name])
   @@index([email])
@@ -73,7 +74,11 @@ model Enquiry {
   name      String   @default("")
   text      String
   status    String   @default("waiting") // waiting | booked | dismissed
+  clientId  String? // set once the enquiry is saved as / matched to a client
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
+
+  @@index([clientId])
 }
 
 // Single row (id = 1). Holds editable settings and the Google wiring.

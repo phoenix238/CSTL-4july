@@ -9,8 +9,23 @@ export default async function EnquiriesPage({
   const { open, client: clientId } = await searchParams;
 
   const existingClient = clientId
-    ? await prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true, clinic: true } })
+    ? await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, name: true, clinic: true, email: true, welcomeSent: true },
+      })
     : null;
 
-  return <EnquiryFlow openEnquiryId={open} existingClient={existingClient ?? undefined} />;
+  const waiting = await prisma.enquiry.findMany({
+    where: { status: "waiting" },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, via: true, name: true, text: true, clientId: true, createdAt: true },
+  });
+
+  return (
+    <EnquiryFlow
+      openEnquiryId={open}
+      existingClient={existingClient ?? undefined}
+      initialWaiting={waiting.map((w) => ({ ...w, createdAt: w.createdAt.toISOString() }))}
+    />
+  );
 }

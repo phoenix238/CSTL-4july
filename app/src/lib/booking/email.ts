@@ -1,4 +1,3 @@
-import type { AppSettings, Client } from "@prisma/client";
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "./rules";
 
 export interface ComposedEmail {
@@ -8,19 +7,30 @@ export interface ComposedEmail {
   includes: string[];
 }
 
+/** The settings fields the email needs — plain shape so the browser can pass /api/settings JSON. */
+export interface EmailSettings {
+  emailTemplateWaterloo: string;
+  emailTemplateBethnal: string;
+  accessNote: string;
+  intakeFormUrl: string;
+  paymentDetails: string;
+}
+
 /**
  * What the confirmation email contains:
  *  - returning client → just the calendar invite (sent by Google Calendar itself);
  *    the email is a short confirmation.
  *  - new client (first email only) → location template with the access note,
  *    the intake-form link, and optionally payment details.
+ *
+ * Pure — also runs in the browser for the live preview in the booking panel.
  */
 export function composeBookingEmail(
-  client: Pick<Client, "name" | "welcomeSent">,
+  client: { name: string; welcomeSent: boolean },
   clinic: Clinic,
   whenLabel: string,
   sendPayment: boolean,
-  settings: AppSettings,
+  settings: EmailSettings,
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
