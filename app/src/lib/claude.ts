@@ -29,6 +29,7 @@ const enquirySchema = z.object({
   name: z.string(),
   phone: z.string(),
   email: z.string(),
+  via: z.enum(["WHATSAPP", "EMAIL", "PASTED"]).catch("PASTED"),
   clinicSuggestion: z.enum(["waterloo", "bethnal"]).nullable(),
   clinicReason: z.string(),
   requestedWhen: z.string(),
@@ -53,6 +54,7 @@ Extract from the message and reply with ONLY a JSON object, no other text:
   "name": "sender's name, or empty string if not stated",
   "phone": "phone number as written, or empty string",
   "email": "email address, or empty string",
+  "via": "WHATSAPP" when it reads like a WhatsApp/text message (informal, emoji, timestamps), "EMAIL" when it has a subject/signature/quoted thread, otherwise "PASTED",
   "clinicSuggestion": "waterloo" | "bethnal" | null (null when the message gives no location clue),
   "clinicReason": "short human explanation like 'Bethnal Green — the message mentions Victoria Park', or empty string",
   "requestedWhen": "when they asked to come, in their words, e.g. 'Tuesday or Wednesday, after 5' — empty string if not stated"
@@ -107,7 +109,8 @@ Reply with ONLY a JSON array. Each element:
   "marketing": true/false (email-marketing consent; false when unknown),
   "notes": "any session notes / history found, verbatim-ish, or empty string"
 }
-Use empty strings for anything the file doesn't say. Never invent details.`,
+Use empty strings for anything the file doesn't say. Never invent details.
+The filename often contains the client's name (e.g. "Case History — Jane Doe — 2026.docx") — use it when the body doesn't state one.`,
     `File: ${filename}\n\n${content.slice(0, 40_000)}`,
     4000,
   );

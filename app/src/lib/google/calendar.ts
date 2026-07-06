@@ -49,9 +49,12 @@ export async function createBookingEvents(bookingId: string) {
   return { personalEventId, secondaryEventId };
 }
 
-/** Cancel a booking: delete both Google events and mark the row cancelled. */
-export async function cancelBookingEvents(bookingId: string) {
-  const booking = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+/** Delete a booking's Google events (tolerates already-deleted events). */
+export async function deleteBookingGoogleEvents(booking: {
+  clinic: string;
+  personalEventId: string;
+  secondaryEventId: string;
+}) {
   const calendar = await getCalendarApi();
   const clinic = booking.clinic as Clinic;
   const targets: Array<[string, string]> = [];
@@ -68,22 +71,37 @@ export async function cancelBookingEvents(bookingId: string) {
       if (status !== 404 && status !== 410) throw err;
     }
   }
+}
+
+/** Cancel a booking: delete both Google events and mark the row cancelled. */
+export async function cancelBookingEvents(bookingId: string) {
+  const booking = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+  await deleteBookingGoogleEvents(booking);
   await prisma.booking.update({ where: { id: bookingId }, data: { status: "cancelled" } });
 }
+
+export type SpanSource = "booking" | "room" | "chalkFarm" | "personal";
 
 export interface BusySpan {
   start: Date;
   end: Date;
   /** Human explanation of what's blocking the slot. */
   title: string;
-  /** true when this is one of our own known bookings (vs. generic Google busy time) */
+  /** true when this is one of our own known bookings (vs. Google calendar time) */
   known: boolean;
+  /** which calendar (or our own bookings table) the span came from */
+  source: SpanSource;
+  /** set on our own bookings — enables click-through to the client */
+  clientId?: string;
+  /** set on our own bookings — enables cancel/reschedule */
+  bookingId?: string;
+  clinic?: Clinic;
 }
 
 /**
- * Everything blocking time in a window: our own bookings (named) plus
- * free/busy from all connected Google calendars ("Busy — synced from Google
- * Calendar"). Used by the availability grid and the week view.
+ * Everything blocking time in a window: our own bookings (named, with client
+ * and booking ids) plus real events from every connected Google calendar.
+ * Used by the availability grid, the week/month calendar, and the enquiry picker.
  */
 export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<BusySpan[]> {
   const bookings = await prisma.booking.findMany({
@@ -102,37 +120,77 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
           ? `${b.client.name} — Waterloo`
           : `Phoenix — Chalk Farm (${b.client.name})`,
       known: true,
+      source: "booking" as const,
+      clientId: b.clientId,
+      bookingId: b.id,
+      clinic,
     };
   });
+  // Google events belonging to our bookings are suppressed by exact event id.
+  const ownEventIds = new Set(
+    bookings.flatMap((b) => [b.personalEventId, b.secondaryEventId]).filter(Boolean),
+  );
 
   const calendar = await getCalendarApi();
-  const ids = [await calendarId("personal")];
+  const sources: Array<{ id: string; source: SpanSource }> = [
+    { id: await calendarId("personal"), source: "personal" },
+  ];
   // Room/Chalk Farm calendars are optional until configured in Settings.
   for (const key of ["room", "chalkFarm"] as const) {
     try {
-      ids.push(await calendarId(key));
+      sources.push({ id: await calendarId(key), source: key });
     } catch {
       /* not configured yet */
     }
   }
-  const fb = await calendar.freebusy.query({
-    requestBody: {
-      timeMin: windowStart.toISOString(),
-      timeMax: windowEnd.toISOString(),
-      timeZone: TZ,
-      items: ids.map((id) => ({ id })),
-    },
-  });
+
   const google: BusySpan[] = [];
-  for (const cal of Object.values(fb.data.calendars ?? {})) {
-    for (const span of cal.busy ?? []) {
-      if (!span.start || !span.end) continue;
-      const start = new Date(span.start);
-      const end = new Date(span.end);
-      // Skip spans that are (or overlap) our own known bookings — those are already named.
-      const isOwn = known.some((k) => start < k.end && end > k.start);
-      if (!isOwn) {
-        google.push({ start, end, title: "Busy — synced from Google Calendar", known: false });
+  for (const { id, source } of sources) {
+    try {
+      const res = await calendar.events.list({
+        calendarId: id,
+        timeMin: windowStart.toISOString(),
+        timeMax: windowEnd.toISOString(),
+        singleEvents: true,
+        orderBy: "startTime",
+        maxResults: 250,
+      });
+      for (const ev of res.data.items ?? []) {
+        if (!ev.id || ownEventIds.has(ev.id)) continue;
+        if (ev.transparency === "transparent" || ev.status === "cancelled") continue;
+        const startISO = ev.start?.dateTime ?? (ev.start?.date ? `${ev.start.date}T00:00:00Z` : null);
+        const endISO = ev.end?.dateTime ?? (ev.end?.date ? `${ev.end.date}T00:00:00Z` : null);
+        if (!startISO || !endISO || !ev.start?.dateTime) continue; // skip all-day events
+        google.push({
+          start: new Date(startISO),
+          end: new Date(endISO),
+          title: ev.summary || "Busy",
+          known: false,
+          source,
+        });
+      }
+    } catch {
+      // events.list can 403 on freeBusyReader-only calendars — fall back to opaque busy blocks.
+      try {
+        const fb = await calendar.freebusy.query({
+          requestBody: {
+            timeMin: windowStart.toISOString(),
+            timeMax: windowEnd.toISOString(),
+            timeZone: TZ,
+            items: [{ id }],
+          },
+        });
+        for (const cal of Object.values(fb.data.calendars ?? {})) {
+          for (const span of cal.busy ?? []) {
+            if (!span.start || !span.end) continue;
+            const start = new Date(span.start);
+            const end = new Date(span.end);
+            const isOwn = known.some((k) => start < k.end && end > k.start);
+            if (!isOwn) google.push({ start, end, title: "Busy", known: false, source });
+          }
+        }
+      } catch {
+        /* calendar unreachable — skip it rather than failing the whole view */
       }
     }
   }

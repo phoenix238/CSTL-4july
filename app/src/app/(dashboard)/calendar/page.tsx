@@ -1,5 +1,5 @@
-import { CalendarWeek } from "@/components/CalendarWeek";
+import { CalendarView } from "@/components/calendar/CalendarView";
 
 export default function CalendarPage() {
-  return <CalendarWeek />;
+  return <CalendarView />;
 }

@@ -2,13 +2,24 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { createClientWithDrive } from "@/lib/clients";
-import { ensureClientFolderAndDoc, appendTextToDoc, uploadOriginalFile } from "@/lib/google/drive";
+import {
+  ensureClientFolderAndDoc,
+  appendTextToDoc,
+  uploadOriginalFile,
+  copyDriveFileTo,
+} from "@/lib/google/drive";
 import { upsertMarketingRow } from "@/lib/google/sheets";
+
+export const maxDuration = 60;
 
 interface PlanEntry {
   file: string;
   mergeWithId: string | null;
-  client: {
+  /** the file already lives in Drive — copy it instead of uploading (original stays put) */
+  driveFileId?: string;
+  /** unreadable file matched to a client by hand — just store it, change no records */
+  storeOnly?: boolean;
+  client?: {
     name: string;
     email: string;
     phone: string;
@@ -32,8 +43,31 @@ export const POST = guarded(async (req: Request) => {
 
   let created = 0;
   let merged = 0;
+  let stored = 0;
+
+  const storeOriginal = async (entry: PlanEntry, folderId: string) => {
+    if (entry.driveFileId) {
+      await copyDriveFileTo(entry.driveFileId, folderId);
+      return true;
+    }
+    const original = fileByName.get(entry.file);
+    if (original) {
+      const buffer = Buffer.from(await original.arrayBuffer());
+      await uploadOriginalFile(folderId, original.name, original.type || "application/octet-stream", buffer);
+      return true;
+    }
+    return false;
+  };
 
   for (const entry of plan) {
+    if (entry.storeOnly) {
+      if (!entry.mergeWithId) continue; // needs a matched client
+      const { folderId } = await ensureClientFolderAndDoc(entry.mergeWithId);
+      if (await storeOriginal(entry, folderId)) stored++;
+      continue;
+    }
+    if (!entry.client) continue;
+
     let clientId = entry.mergeWithId;
     if (clientId) {
       merged++;
@@ -66,12 +100,8 @@ export const POST = guarded(async (req: Request) => {
     if (entry.client.notes?.trim()) {
       await appendTextToDoc(docId, `Imported note (from ${entry.file}):\n${entry.client.notes}`);
     }
-    const original = fileByName.get(entry.file);
-    if (original) {
-      const buffer = Buffer.from(await original.arrayBuffer());
-      await uploadOriginalFile(folderId, original.name, original.type || "application/octet-stream", buffer);
-    }
+    await storeOriginal(entry, folderId);
   }
 
-  return NextResponse.json({ created, merged });
+  return NextResponse.json({ created, merged, stored });
 });

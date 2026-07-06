@@ -115,6 +115,91 @@ export async function uploadOriginalFile(
   });
 }
 
+/* ---------- browsing & importing the user's existing Drive files ---------- */
+
+export interface DriveEntry {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime: string;
+}
+
+/** List folders under a parent (or search all folders by name when `query` is set). */
+export async function listDriveFolders(parentId = "root", query?: string): Promise<DriveEntry[]> {
+  const drive = await getDriveApi();
+  const clauses = [`mimeType = '${FOLDER_MIME}'`, "trashed = false"];
+  if (query?.trim()) clauses.push(`name contains '${query.trim().replace(/'/g, "\\'")}'`);
+  else clauses.push(parentId === "root" ? "'root' in parents" : `'${parentId}' in parents`);
+  const res = await drive.files.list({
+    q: clauses.join(" and "),
+    fields: "files(id, name, mimeType, modifiedTime)",
+    orderBy: "name",
+    pageSize: 50,
+  });
+  return (res.data.files ?? []).map((f) => ({
+    id: f.id!,
+    name: f.name ?? "",
+    mimeType: f.mimeType ?? "",
+    modifiedTime: f.modifiedTime ?? "",
+  }));
+}
+
+/** List the (non-folder) files inside a folder. */
+export async function listDriveFiles(folderId: string): Promise<DriveEntry[]> {
+  const drive = await getDriveApi();
+  const res = await drive.files.list({
+    q: `'${folderId}' in parents and mimeType != '${FOLDER_MIME}' and trashed = false`,
+    fields: "files(id, name, mimeType, modifiedTime)",
+    orderBy: "name",
+    pageSize: 200,
+  });
+  return (res.data.files ?? []).map((f) => ({
+    id: f.id!,
+    name: f.name ?? "",
+    mimeType: f.mimeType ?? "",
+    modifiedTime: f.modifiedTime ?? "",
+  }));
+}
+
+/**
+ * Read a Drive file as plain text: Google Docs/Sheets via export, everything
+ * else downloaded and run through the same extractors as uploads.
+ * Returns null when the format can't be read.
+ */
+export async function getDriveFileText(
+  fileId: string,
+  name: string,
+  mimeType: string,
+): Promise<string | null> {
+  const drive = await getDriveApi();
+  try {
+    if (mimeType === "application/vnd.google-apps.document") {
+      const res = await drive.files.export({ fileId, mimeType: "text/plain" }, { responseType: "text" });
+      return typeof res.data === "string" && res.data.trim() ? res.data : null;
+    }
+    if (mimeType === "application/vnd.google-apps.spreadsheet") {
+      const res = await drive.files.export({ fileId, mimeType: "text/csv" }, { responseType: "text" });
+      return typeof res.data === "string" && res.data.trim() ? res.data : null;
+    }
+    if (mimeType.startsWith("application/vnd.google-apps.")) return null; // forms, slides…
+    const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+    const { extractTextFromFile } = await import("@/lib/extractText");
+    return extractTextFromFile(name, Buffer.from(res.data as ArrayBuffer));
+  } catch {
+    return null;
+  }
+}
+
+/** COPY a Drive file into a client's folder — the original stays where it is. */
+export async function copyDriveFileTo(fileId: string, targetFolderId: string) {
+  const drive = await getDriveApi();
+  await drive.files.copy({
+    fileId,
+    requestBody: { parents: [targetFolderId] },
+    fields: "id",
+  });
+}
+
 /** Append a session note (summary bullets + raw) to the client's Doc. */
 export async function appendNoteToDoc(
   docId: string,

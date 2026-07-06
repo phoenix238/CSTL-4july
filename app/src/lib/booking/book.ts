@@ -1,6 +1,10 @@
 import { prisma, getSettings } from "@/lib/db";
 import { createClientWithDrive } from "@/lib/clients";
-import { cancelBookingEvents, createBookingEvents } from "@/lib/google/calendar";
+import {
+  cancelBookingEvents,
+  createBookingEvents,
+  deleteBookingGoogleEvents,
+} from "@/lib/google/calendar";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { composeBookingEmail } from "./email";
@@ -111,5 +115,31 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     whenLabel: `${whenLabel} · ${CLINIC_LABEL[req.clinic]}`,
     items,
     emailTextForClipboard,
+  };
+}
+
+/**
+ * Move a booking to a new slot: delete the old Google events, update the row,
+ * recreate the events (Google re-sends the invite to the client).
+ */
+export async function rescheduleBooking(bookingId: string, newStartISO: string) {
+  const booking = await prisma.booking.findUniqueOrThrow({
+    where: { id: bookingId },
+    include: { client: true },
+  });
+  if (booking.status !== "confirmed") throw new Error("Only confirmed bookings can be rescheduled.");
+  const start = new Date(newStartISO);
+  if (Number.isNaN(start.getTime())) throw new Error("Invalid new start time.");
+
+  await deleteBookingGoogleEvents(booking);
+  await prisma.booking.update({
+    where: { id: bookingId },
+    data: { startsAt: start, personalEventId: "", secondaryEventId: "" },
+  });
+  await createBookingEvents(bookingId);
+
+  return {
+    whenLabel: `${fmtDayLong(start)} · ${fmtTime(start)} · ${CLINIC_LABEL[booking.clinic as Clinic]}`,
+    clientName: booking.client.name,
   };
 }

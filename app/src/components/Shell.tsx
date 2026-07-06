@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { FlowerOfLife } from "./FlowerOfLife";
+import { ClientSearch } from "./ClientSearch";
 
 const NAV = [
   { label: "Today", href: "/" },
@@ -124,6 +125,7 @@ export function Shell({
       {/* desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen w-[212px] flex-none flex-col gap-0.5 border-r border-line px-3.5 pt-[22px] pb-[18px] lg:flex">
         <SidebarHeader />
+        <ClientSearch />
         <NavLinks enquiryBadge={enquiryBadge} />
         <div className="mt-auto flex flex-col gap-2.5">
           {settingsLink()}
@@ -153,6 +155,7 @@ export function Shell({
             className="absolute top-[52px] right-3 left-3 flex flex-col gap-0.5 rounded-2xl border border-line bg-card p-3 shadow-pop"
             onClick={(e) => e.stopPropagation()}
           >
+            <ClientSearch onNavigate={() => setOpen(false)} />
             <NavLinks enquiryBadge={enquiryBadge} onNavigate={() => setOpen(false)} />
             {settingsLink(() => setOpen(false))}
             <GoogleStatus connected={googleConnected} />
