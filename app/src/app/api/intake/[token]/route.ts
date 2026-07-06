@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma, getSettings } from "@/lib/db";
 import { updateClientDetails } from "@/lib/clients";
-import { ensureClientFolderAndDoc, appendTextToDoc } from "@/lib/google/drive";
+import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
 import { fmtDate } from "@/lib/time";
-import { COLUMN_KEYS, resolveIntakeQuestions } from "@/lib/intakeQuestions";
+import { COLUMN_KEYS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
+
+// Standard keys that read as short client-detail fields (vs. clinical paragraphs).
+const DETAIL_KEYS = new Set(["dob", "phone", "occupation", "doctor", "emergency", "referred"]);
+const HEALTH_KEYS = new Set(["meds", "conditions"]);
 
 // NOT guarded — the client fills this in without logging in. The token is the auth.
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
@@ -17,27 +21,60 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const { name, answers } = (await req.json()) as { name?: string; answers?: Record<string, string> };
     const a = answers ?? {};
     const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const finalName = str(name) || client.name;
 
     const settings = await getSettings();
     const questions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
 
-    // Standard answers update the record; everything shows in the Doc.
-    const columnUpdate: Record<string, string | boolean> = { name: str(name) || client.name, intakeDone: true };
+    // Standard answers update the record; everything shows in the Doc too.
+    const columnUpdate: Record<string, string | boolean> = { name: finalName, intakeDone: true };
     for (const q of questions) {
       if (COLUMN_KEYS.has(q.key) && a[q.key] !== undefined) columnUpdate[q.key] = str(a[q.key]);
     }
     await updateClientDetails(client.id, columnUpdate);
 
     const { docId } = await ensureClientFolderAndDoc(client.id);
-    const lines = [
-      `\n══════════════════════════`,
-      `INTAKE / CASE HISTORY — submitted ${fmtDate(new Date())}`,
-      `══════════════════════════`,
-      `Name: ${str(name) || client.name}`,
-      ...questions.map((q) => `${q.label}: ${str(a[q.key]) || "—"}`),
-      ``,
+
+    const detailQs = questions.filter((q) => DETAIL_KEYS.has(q.key));
+    const healthQs = questions.filter((q) => HEALTH_KEYS.has(q.key));
+    const caseHistoryQ = questions.find((q) => q.key === "caseHistory");
+    const customQs = questions.filter((q) => q.custom);
+    const line = (q: IntakeQuestion): { kind: "field"; label: string; value: string } => ({
+      kind: "field",
+      label: q.label,
+      value: str(a[q.key]),
+    });
+
+    const sections: DocSection[] = [
+      {
+        heading: "1. Client details",
+        lines: [{ kind: "field", label: "Full name", value: finalName }, ...detailQs.map(line)],
+      },
     ];
-    await appendTextToDoc(docId, lines.join("\n"));
+    if (healthQs.length) {
+      sections.push({
+        heading: "2. Health information",
+        lines: healthQs.map((q) => ({ kind: "paragraph", label: q.label, value: str(a[q.key]) })),
+      });
+    }
+    if (customQs.length) {
+      sections.push({
+        heading: "3. Additional questions",
+        lines: customQs.map((q) =>
+          q.type === "long"
+            ? { kind: "paragraph" as const, label: q.label, value: str(a[q.key]) }
+            : line(q),
+        ),
+      });
+    }
+    if (caseHistoryQ) {
+      sections.push({
+        heading: "4. What brings them to therapy",
+        lines: [{ kind: "paragraph", value: str(a[caseHistoryQ.key]) }],
+      });
+    }
+
+    await appendFormattedSections(docId, `INTAKE / CASE HISTORY — submitted ${fmtDate(new Date())}`, sections);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

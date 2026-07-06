@@ -1,3 +1,4 @@
+import type { docs_v1 } from "googleapis";
 import { prisma, getSettings } from "@/lib/db";
 import { getDriveApi, getDocsApi } from "./client";
 
@@ -200,24 +201,21 @@ export async function copyDriveFileTo(fileId: string, targetFolderId: string) {
   });
 }
 
-/** Append a session note (summary bullets + raw) to the client's Doc. */
+/** Append a session note (summary bullets + raw) to the client's Doc, clearly headed. */
 export async function appendNoteToDoc(
   docId: string,
   note: { date: string; clinic: string; bullets: string[]; raw: string },
 ) {
-  const docs = await getDocsApi();
-  const doc = await docs.documents.get({ documentId: docId });
-  const endIndex = doc.data.body?.content?.at(-1)?.endIndex ?? 1;
-  const text =
-    `\nSession — ${note.date} · ${note.clinic}\n` +
-    note.bullets.map((b) => `• ${b}`).join("\n") +
-    `\n\nRaw note:\n${note.raw}\n`;
-  await docs.documents.batchUpdate({
-    documentId: docId,
-    requestBody: {
-      requests: [{ insertText: { location: { index: endIndex - 1 }, text } }],
+  const clinicLabel = note.clinic === "waterloo" ? "Waterloo" : "Bethnal Green";
+  await appendFormattedSections(docId, null, [
+    {
+      heading: `Session — ${note.date} · ${clinicLabel}`,
+      lines: [
+        { kind: "bullets", label: "Summary", items: note.bullets },
+        { kind: "paragraph", label: "Raw note", value: note.raw },
+      ],
     },
-  });
+  ]);
 }
 
 /** Append arbitrary text (e.g. imported legacy notes) to the client's Doc. */
@@ -231,4 +229,93 @@ export async function appendTextToDoc(docId: string, text: string) {
       requests: [{ insertText: { location: { index: endIndex - 1 }, text: `\n${text}\n` } }],
     },
   });
+}
+
+/* ---------- structured writes: real headers + bold, not just plain text ---------- */
+
+export type DocLine =
+  | { kind: "field"; label: string; value: string }
+  | { kind: "paragraph"; label?: string; value: string }
+  | { kind: "bullets"; label?: string; items: string[] };
+
+export interface DocSection {
+  heading: string;
+  lines: DocLine[];
+}
+
+/**
+ * Append a structured, formatted block to the client's Doc: a bold title,
+ * bold section headings, and bold labels — not a wall of plain text.
+ */
+export async function appendFormattedSections(docId: string, title: string | null, sections: DocSection[]) {
+  const docs = await getDocsApi();
+  const doc = await docs.documents.get({ documentId: docId });
+  const insertAt = (doc.data.body?.content?.at(-1)?.endIndex ?? 1) - 1;
+
+  let text = "\n";
+  const bold: Array<{ start: number; end: number }> = [];
+  const big: Array<{ start: number; end: number; size: number }> = [];
+
+  if (title) {
+    const start = text.length;
+    text += `${title}\n\n`;
+    bold.push({ start, end: start + title.length });
+    big.push({ start, end: start + title.length, size: 13 });
+  }
+
+  for (const section of sections) {
+    const headStart = text.length;
+    text += `${section.heading}\n`;
+    bold.push({ start: headStart, end: headStart + section.heading.length });
+    big.push({ start: headStart, end: headStart + section.heading.length, size: 12 });
+
+    for (const line of section.lines) {
+      if (line.kind === "field") {
+        const labelStart = text.length;
+        const labelText = `${line.label}:`;
+        text += `${labelText} ${line.value || "—"}\n`;
+        bold.push({ start: labelStart, end: labelStart + labelText.length });
+      } else if (line.kind === "paragraph") {
+        if (line.label) {
+          const labelStart = text.length;
+          const labelText = `${line.label}:`;
+          text += `${labelText}\n`;
+          bold.push({ start: labelStart, end: labelStart + labelText.length });
+        }
+        text += `${line.value?.trim() || "—"}\n\n`;
+      } else if (line.kind === "bullets") {
+        if (line.label) {
+          const labelStart = text.length;
+          const labelText = `${line.label}:`;
+          text += `${labelText}\n`;
+          bold.push({ start: labelStart, end: labelStart + labelText.length });
+        }
+        for (const item of line.items) text += `• ${item}\n`;
+        text += "\n";
+      }
+    }
+    text += "\n";
+  }
+
+  const requests: docs_v1.Schema$Request[] = [{ insertText: { location: { index: insertAt }, text } }];
+  for (const b of bold) {
+    requests.push({
+      updateTextStyle: {
+        range: { startIndex: insertAt + b.start, endIndex: insertAt + b.end },
+        textStyle: { bold: true },
+        fields: "bold",
+      },
+    });
+  }
+  for (const s of big) {
+    requests.push({
+      updateTextStyle: {
+        range: { startIndex: insertAt + s.start, endIndex: insertAt + s.end },
+        textStyle: { fontSize: { magnitude: s.size, unit: "PT" } },
+        fields: "fontSize",
+      },
+    });
+  }
+
+  await docs.documents.batchUpdate({ documentId: docId, requestBody: { requests } });
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { londonDayStart, londonWeekStart, londonYMD, fmtDate } from "@/lib/time";
 import { api, useToast } from "../ui";
 import { BookingPopover } from "./BookingPopover";
+import { BookingsList } from "./BookingsList";
 import { MonthGrid } from "./MonthGrid";
 import { QuickBook } from "./QuickBook";
 import { TimeGrid } from "./TimeGrid";
@@ -225,6 +226,14 @@ export function CalendarView() {
           }}
         />
       )}
+
+      <BookingsList
+        spans={view === "week" ? week.spans : month.spans}
+        onChanged={() => {
+          week.invalidate();
+          month.invalidate();
+        }}
+      />
 
       {openSpan && (
         <BookingPopover
