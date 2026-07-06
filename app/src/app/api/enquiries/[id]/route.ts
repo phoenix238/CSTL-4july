@@ -14,14 +14,31 @@ export const DELETE = guarded(async (_req: Request, ctx: { params: Promise<{ id:
 export const GET = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   const enquiry = await prisma.enquiry.findUniqueOrThrow({ where: { id } });
-  const analysis = await analyseEnquiry(enquiry.text);
+
+  // MANUAL enquiries (offers started from a client's profile) have synthetic
+  // text — the client record is the source of truth, no Claude call needed.
+  const savedClient = enquiry.clientId
+    ? await prisma.client.findUnique({ where: { id: enquiry.clientId } })
+    : null;
+  const analysis =
+    enquiry.via === "MANUAL" && savedClient
+      ? {
+          name: savedClient.name,
+          phone: savedClient.phone,
+          email: savedClient.email,
+          via: "MANUAL",
+          clinicSuggestion: null,
+          clinicReason: "",
+          requestedWhen: "",
+        }
+      : await analyseEnquiry(enquiry.text);
 
   // Prefer the client this enquiry was already saved as; otherwise dedupe-match.
-  const existing = enquiry.clientId
-    ? await prisma.client.findUnique({ where: { id: enquiry.clientId } })
-    : analysis.name
+  const existing =
+    savedClient ??
+    (analysis.name
       ? await findExistingClient(analysis.name, analysis.email || undefined, analysis.phone || undefined)
-      : null;
+      : null);
 
   return NextResponse.json({
     enquiry,
@@ -32,6 +49,7 @@ export const GET = guarded(async (_req: Request, ctx: { params: Promise<{ id: st
           name: existing.name,
           clinic: existing.clinic,
           email: existing.email,
+          phone: existing.phone,
           welcomeSent: existing.welcomeSent,
           saved: existing.id === enquiry.clientId,
         }

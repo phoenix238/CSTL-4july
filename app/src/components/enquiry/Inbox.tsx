@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Card, Chip, SectionLabel, TintButton } from "../ui";
+import { fmtDayShort, fmtTime } from "@/lib/time";
 
 export interface WaitingEnquiry {
   id: string;
@@ -20,6 +21,8 @@ export function viaChip(via: string) {
       return { label: "WhatsApp", color: "oklch(0.42 0.08 148)", bg: "oklch(0.94 0.03 148)" };
     case "EMAIL":
       return { label: "Email", color: "oklch(0.5 0.09 75)", bg: "oklch(0.95 0.035 85)" };
+    case "MANUAL":
+      return { label: "From profile", color: "oklch(0.42 0.1 42)", bg: "oklch(0.94 0.03 48)" };
     default:
       return { label: "Pasted", color: "oklch(0.5 0.02 58)", bg: "oklch(0.94 0.01 80)" };
   }
@@ -73,8 +76,21 @@ export function Inbox({
                 </div>
               </div>
               {offered ? (
-                <div className="text-[12.5px] font-medium text-amber-text">
-                  Offered {q.offeredTimes?.length ?? 0} time{(q.offeredTimes?.length ?? 0) === 1 ? "" : "s"} · awaiting reply
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-[12.5px] font-medium text-amber-text">
+                    Offered {q.offeredTimes?.length ?? 0} time{(q.offeredTimes?.length ?? 0) === 1 ? "" : "s"} · awaiting reply
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {(q.offeredTimes ?? []).map((iso) => {
+                      const t = new Date(iso);
+                      if (Number.isNaN(t.getTime())) return null;
+                      return (
+                        <span key={iso} className="rounded-full bg-inputbg px-2 py-0.5 text-[11px] font-medium text-ink-soft">
+                          {fmtDayShort(t)} · {fmtTime(t)}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
                 <div className="line-clamp-1 text-[12.5px] text-muted">&ldquo;{q.text.trim()}&rdquo;</div>

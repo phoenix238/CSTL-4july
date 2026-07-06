@@ -23,6 +23,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
       name: client.name,
       clinic: client.clinic,
       email: client.email,
+      phone: client.phone,
       welcomeSent: client.welcomeSent,
     },
     existed: !!existing,

@@ -39,6 +39,7 @@ interface Match {
   name: string;
   clinic: string;
   email: string;
+  phone?: string;
   welcomeSent: boolean;
   saved?: boolean;
 }
@@ -59,7 +60,7 @@ export function EnquiryFlow({
   initialPick,
 }: {
   openEnquiryId?: string;
-  existingClient?: { id: string; name: string; clinic: string; email: string; welcomeSent: boolean };
+  existingClient?: { id: string; name: string; clinic: string; email: string; phone?: string; welcomeSent: boolean };
   initialWaiting: WaitingEnquiry[];
   initialText?: string;
   initialPick?: string;
@@ -99,14 +100,16 @@ export function EnquiryFlow({
 
   // one session-start for confirm mode
   const confirmSlot = bookMode === "confirm" && selected.length ? selected[0] : null;
-  const phone = analysis?.phone?.trim() || "";
 
   // done step name edit
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [showMessage, setShowMessage] = useState(false);
 
   const stage: "paste" | "book" | "done" = result ? "done" : analysis || existingClient ? "book" : "paste";
   const activeClient = saved ?? (ignoreMatch ? null : match);
+  // WhatsApp needs a number from the message OR from the client's record (returning clients).
+  const phone = analysis?.phone?.trim() || activeClient?.phone?.trim() || "";
   const { spans, invalidate } = useWeekSpans(weekStart, 7);
 
   useEffect(() => {
@@ -193,6 +196,10 @@ export function EnquiryFlow({
       await api(`/api/enquiries/${id}`, { method: "DELETE" });
       toast("Enquiry deleted");
       if (enquiryId === id) {
+        if (existingClient) {
+          router.push("/enquiries");
+          return;
+        }
         setAnalysis(null);
         setEnquiryId(null);
         setSaved(null);
@@ -219,10 +226,14 @@ export function EnquiryFlow({
     setIgnoreMatch(false);
     setSelected([]);
     setEmailDirty(false);
+    setSendPayment(false);
+    setShowMessage(false);
     // Reopening an offered enquiry → confirm mode with the offered times as quick picks.
     const offered = (enq.offeredTimes ?? []).map((t) => new Date(t)).filter((d) => !Number.isNaN(d.getTime()));
     setOfferedTimes(offered);
     setBookMode("confirm");
+    // Land on a useful week: the first offered time's week, or this week.
+    setWeekStart(offered.length ? londonWeekStart(offered[0]) : londonWeekStart());
     if (m?.saved && m.clinic) setClinic(m.clinic as Clinic);
     else if (a.clinicSuggestion) setClinic(a.clinicSuggestion);
   }
@@ -296,32 +307,54 @@ export function EnquiryFlow({
     }
   }
 
-  async function sendOffer(alsoEmail: boolean) {
-    if (!enquiryId || !selected.length) {
+  async function sendOffer(channel: "email" | "whatsapp" | "none") {
+    if (!selected.length) {
       toast("Pick some times to offer first");
       return;
     }
+    // Booking a returning client from their profile has no enquiry yet — the
+    // server creates one ("new") so the offer is tracked and shows on their profile.
+    if (!enquiryId && !activeClient) {
+      toast("Save the client first so the offer can be tracked");
+      return;
+    }
+    // Open WhatsApp before the first await — popup blockers only allow it
+    // synchronously inside the click.
+    if (channel === "whatsapp") openWhatsApp(emailBody);
     setOffering(true);
     try {
-      await api(`/api/enquiries/${enquiryId}/offer`, {
+      await api(`/api/enquiries/${enquiryId ?? "new"}/offer`, {
         method: "POST",
         body: JSON.stringify({
           clientName: activeClient?.name || name,
           clinic,
           times: selected.map((d) => d.toISOString()),
-          sendEmail: alsoEmail,
+          sendEmail: channel === "email",
           email: activeClient?.email || analysis?.email || undefined,
           emailBody: emailBody.trim() || undefined,
           clientId: activeClient?.id,
         }),
       });
-      toast(alsoEmail ? "Times offered — email sent" : "Times offered");
+      toast(
+        channel === "email"
+          ? "Times offered — email sent"
+          : channel === "whatsapp"
+            ? "Times offered — send the WhatsApp message"
+            : "Times offered",
+      );
       void refreshWaiting();
+      if (existingClient) {
+        // Started from the client's profile — go back there (the offer shows as
+        // "which time did they pick?"). If a different enquiry was opened from
+        // the waiting dropdown, the inbox is the right place instead.
+        router.push(enquiryId ? "/enquiries" : `/clients/${existingClient.id}`);
+        return;
+      }
       // back to the inbox so it's clear it's now awaiting a reply
       setAnalysis(null);
       setEnquiryId(null);
       setSelected([]);
-      setSaved(existingClient ? { ...existingClient, saved: true } : null);
+      setSaved(null);
       setMatch(null);
       setText("");
     } catch (err) {
@@ -437,11 +470,20 @@ export function EnquiryFlow({
               </div>
             ))}
           </div>
-          <div className="mt-4 flex justify-center gap-2">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {result.emailTextForClipboard && phone && (
+              <PrimaryButton onClick={() => openWhatsApp(result.emailTextForClipboard!)}>
+                Send it on WhatsApp
+              </PrimaryButton>
+            )}
             <Link href={`/clients/${result.clientId}`}>
               <OutlineButton>Open client</OutlineButton>
             </Link>
-            <PrimaryButton onClick={() => router.push("/")}>Back to Today</PrimaryButton>
+            {result.emailTextForClipboard && phone ? (
+              <OutlineButton onClick={() => router.push("/")}>Back to Today</OutlineButton>
+            ) : (
+              <PrimaryButton onClick={() => router.push("/")}>Back to Today</PrimaryButton>
+            )}
           </div>
         </Card>
       </div>
@@ -466,12 +508,18 @@ export function EnquiryFlow({
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void readMessage();
+              }}
               placeholder="Paste the WhatsApp or email message here…"
               className="min-h-[140px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-3 text-sm leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
             />
-            <PrimaryButton onClick={readMessage} disabled={reading} className="self-start">
-              {reading ? "Reading…" : "Read message →"}
-            </PrimaryButton>
+            <div className="flex items-center gap-3">
+              <PrimaryButton onClick={readMessage} disabled={reading}>
+                {reading ? "Reading…" : "Read message →"}
+              </PrimaryButton>
+              <span className="text-[12px] text-faint">or press ⌘↵</span>
+            </div>
           </Card>
         </div>
       </div>
@@ -491,10 +539,16 @@ export function EnquiryFlow({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <button
           onClick={() => {
+            if (existingClient) {
+              // Came here from the client's profile — the URL pins us to the
+              // book step, so actually navigate to reach the inbox.
+              router.push("/enquiries");
+              return;
+            }
             setAnalysis(null);
             setEnquiryId(null);
             setSelected([]);
-            setSaved(existingClient ? { ...existingClient, saved: true } : null);
+            setSaved(null);
             setMatch(null);
             setText("");
           }}
@@ -614,6 +668,22 @@ export function EnquiryFlow({
         {analysis?.requestedWhen && (
           <div className="text-xs text-muted">
             They asked for: <span className="font-semibold text-ink-soft">{analysis.requestedWhen}</span>
+          </div>
+        )}
+        {text.trim() && analysis?.via !== "MANUAL" && (
+          <div className="border-t border-line pt-2.5 text-[12.5px]">
+            <button
+              onClick={() => setShowMessage((v) => !v)}
+              className="flex w-full cursor-pointer items-baseline gap-2 text-left"
+            >
+              <span className="flex-none font-semibold text-muted">Their message {showMessage ? "▴" : "▾"}</span>
+              {!showMessage && <span className="line-clamp-1 min-w-0 text-muted italic">&ldquo;{text.trim()}&rdquo;</span>}
+            </button>
+            {showMessage && (
+              <div className="mt-1.5 rounded-xl bg-inputbg px-3.5 py-2.5 whitespace-pre-wrap text-ink-soft">
+                {text.trim()}
+              </div>
+            )}
           </div>
         )}
       </Card>
@@ -740,14 +810,17 @@ export function EnquiryFlow({
             className={`${inputClass} min-h-[150px] resize-y leading-[1.55]`}
           />
           <div className="flex flex-wrap gap-2">
-            <PrimaryButton onClick={() => sendOffer(true)} disabled={offering}>
+            <PrimaryButton onClick={() => sendOffer("email")} disabled={offering}>
               {offering ? "Sending…" : "Send by email"}
             </PrimaryButton>
-            <OutlineButton onClick={() => openWhatsApp(emailBody)} disabled={!phone}>
-              Send on WhatsApp
-            </OutlineButton>
-            {!phone && <span className="self-center text-[12px] text-muted">No number found for WhatsApp</span>}
-            <OutlineButton onClick={() => sendOffer(false)} disabled={offering}>
+            {phone ? (
+              <OutlineButton onClick={() => sendOffer("whatsapp")} disabled={offering}>
+                Send on WhatsApp
+              </OutlineButton>
+            ) : (
+              <span className="self-center text-[12px] text-muted">No number for WhatsApp</span>
+            )}
+            <OutlineButton onClick={() => sendOffer("none")} disabled={offering}>
               Just mark as offered
             </OutlineButton>
           </div>
@@ -811,12 +884,15 @@ export function EnquiryFlow({
               {booking ? "Booking…" : "Create events & send email"}
             </PrimaryButton>
             <OutlineButton onClick={() => confirmBooking(false)} disabled={booking}>
-              Copy text & register — no email
-            </OutlineButton>
-            <OutlineButton onClick={() => openWhatsApp(emailBody)} disabled={!phone}>
-              Reply on WhatsApp
+              Book without email — copy the text
             </OutlineButton>
           </div>
+          {phone && (
+            <div className="text-[12px] text-muted">
+              Prefer WhatsApp? Book without email — the finished message (with the real intake link) is ready to
+              send on WhatsApp from the next screen.
+            </div>
+          )}
         </Card>
       )}
 
@@ -827,6 +903,10 @@ export function EnquiryFlow({
             await api(`/api/enquiries/${enquiryId}/dismiss`, { method: "POST" });
             toast("Enquiry dismissed");
             void refreshWaiting();
+            if (existingClient) {
+              router.push("/enquiries");
+              return;
+            }
             setAnalysis(null);
             setEnquiryId(null);
             setSaved(null);
