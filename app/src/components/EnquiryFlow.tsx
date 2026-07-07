@@ -91,7 +91,7 @@ export function EnquiryFlow({
 
   // booking panel
   const [settings, setSettings] = useState<EmailSettings | null>(null);
-  const [sendPayment, setSendPayment] = useState(false);
+  const [sendPayment, setSendPayment] = useState(true);
   const [emailBody, setEmailBody] = useState("");
   const [emailDirty, setEmailDirty] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -510,8 +510,9 @@ export function EnquiryFlow({
 
   /* ---------------- grid / book ---------------- */
 
+  const clinicAddress = settings ? (clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress) : undefined;
   const plan = confirmSlot
-    ? planBookingEvents(clinic, (activeClient?.name || name || "New client").trim(), confirmSlot)
+    ? planBookingEvents(clinic, (activeClient?.name || name || "New client").trim(), confirmSlot, clinicAddress)
     : [];
   const isReturning = !!activeClient?.welcomeSent;
   const canStartOver = !!(saved || match || name.trim() || enquiryId);

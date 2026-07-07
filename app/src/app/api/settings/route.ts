@@ -10,6 +10,8 @@ export const GET = guarded(async () => {
     emailTemplateWaterloo: s.emailTemplateWaterloo,
     emailTemplateBethnal: s.emailTemplateBethnal,
     paymentDetails: s.paymentDetails,
+    waterlooAddress: s.waterlooAddress,
+    bethnalAddress: s.bethnalAddress,
   });
 });
 

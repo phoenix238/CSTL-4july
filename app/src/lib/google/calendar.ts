@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { prisma, getSettings } from "@/lib/db";
 import {
   EVENT_REMINDERS,
   planBookingEvents,
@@ -19,7 +19,10 @@ export async function createBookingEvents(bookingId: string) {
     include: { client: true },
   });
   const calendar = await getCalendarApi();
-  const plan = planBookingEvents(booking.clinic as Clinic, booking.client.name, booking.startsAt);
+  const settings = await getSettings();
+  const clinic = booking.clinic as Clinic;
+  const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
+  const plan = planBookingEvents(clinic, booking.client.name, booking.startsAt, address);
 
   let personalEventId = "";
   let secondaryEventId = "";
@@ -30,6 +33,7 @@ export async function createBookingEvents(bookingId: string) {
       sendUpdates: ev.inviteClient && booking.client.email ? "all" : "none",
       requestBody: {
         summary: ev.summary,
+        location: ev.location || undefined,
         start: { dateTime: ev.start.toISOString(), timeZone: TZ },
         end: { dateTime: ev.end.toISOString(), timeZone: TZ },
         reminders: EVENT_REMINDERS,
