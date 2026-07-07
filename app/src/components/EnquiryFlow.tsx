@@ -83,10 +83,10 @@ export function EnquiryFlow({
     existingClient ? { ...existingClient, saved: true } : null,
   );
   const [saving, setSaving] = useState(false);
-  const [clinic, setClinic] = useState<Clinic>((existingClient?.clinic as Clinic) || "waterloo");
+  const [clinic, setClinic] = useState<Clinic>((existingClient?.clinic as Clinic) || "bethnal");
   const [weekStart, setWeekStart] = useState(() => londonWeekStart());
   const [selected, setSelected] = useState<Date[]>([]);
-  const [bookMode, setBookMode] = useState<"confirm" | "offer">("confirm");
+  const [bookMode, setBookMode] = useState<"confirm" | "offer">("offer");
   const [offeredTimes, setOfferedTimes] = useState<Date[]>([]);
 
   // booking panel
@@ -212,7 +212,7 @@ export function EnquiryFlow({
     setName(existingClient?.name ?? "");
     setText("");
     setOfferedTimes([]);
-    setBookMode("confirm");
+    setBookMode("offer");
     setEmailDirty(false);
     setResult(null);
   }
@@ -231,10 +231,10 @@ export function EnquiryFlow({
     setIgnoreMatch(false);
     setSelected([]);
     setEmailDirty(false);
-    // Reopening an offered enquiry → confirm mode with the offered times as quick picks.
+    // Already offered times → confirm mode with them as quick picks; otherwise assume offering first.
     const offered = (enq.offeredTimes ?? []).map((t) => new Date(t)).filter((d) => !Number.isNaN(d.getTime()));
     setOfferedTimes(offered);
-    setBookMode("confirm");
+    setBookMode(offered.length ? "confirm" : "offer");
     if (m?.saved && m.clinic) setClinic(m.clinic as Clinic);
     else if (a.clinicSuggestion) setClinic(a.clinicSuggestion);
   }
@@ -313,7 +313,7 @@ export function EnquiryFlow({
     setMatch(null);
     setIgnoreMatch(false);
     setSelected([]);
-    setBookMode("confirm");
+    setBookMode("offer");
     setOfferedTimes([]);
     setEmailDirty(false);
     if (client.clinic) setClinic(client.clinic as Clinic);
@@ -522,10 +522,11 @@ export function EnquiryFlow({
         <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Enquiries</h1>
         <div className="flex items-center gap-2">
           <OutlineButton onClick={openPasteModal}>Paste a message</OutlineButton>
-          <div className="relative">
-            <TintButton onClick={() => setShowWaiting((v) => !v)}>Waiting ({waiting.length})</TintButton>
-            {showWaiting && (
-              <div className="absolute right-0 z-30 mt-1 w-[330px]">
+          <TintButton onClick={() => setShowWaiting((v) => !v)}>Waiting ({waiting.length})</TintButton>
+          {showWaiting && (
+            <>
+              <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={() => setShowWaiting(false)} />
+              <div className="fixed top-20 left-1/2 z-50 w-[min(330px,calc(100vw-32px))] -translate-x-1/2 lg:top-24 lg:left-auto lg:right-[30px] lg:translate-x-0">
                 <Inbox
                   waiting={waiting}
                   onOpen={(id) => {
@@ -535,8 +536,8 @@ export function EnquiryFlow({
                   onDelete={(id) => void deleteWaitingEnquiry(id)}
                 />
               </div>
-            )}
-          </div>
+            </>
+          )}
           {canStartOver && (
             <button
               onClick={resetToEmpty}
@@ -644,7 +645,7 @@ export function EnquiryFlow({
             </div>
           </div>
           <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-            {(["waterloo", "bethnal"] as const).map((c) => (
+            {(["bethnal", "waterloo"] as const).map((c) => (
               <button
                 key={c}
                 onClick={() => {
@@ -675,8 +676,8 @@ export function EnquiryFlow({
         <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
           {(
             [
-              ["confirm", "Confirm & book one"],
               ["offer", "Offer a few times"],
+              ["confirm", "Confirm & book one"],
             ] as const
           ).map(([m, label]) => (
             <button

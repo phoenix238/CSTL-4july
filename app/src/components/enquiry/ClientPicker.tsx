@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, inputClass } from "../ui";
 
 export interface ClientHit {
@@ -11,29 +11,32 @@ export interface ClientHit {
   welcomeSent: boolean;
 }
 
-/** Pick an existing client without leaving the enquiry page — unlike ClientSearch, selecting doesn't navigate. */
+/**
+ * Pick an existing client without leaving the enquiry page — click to open
+ * the full list (no typing needed), or type to filter it down.
+ */
 export function ClientPicker({ onSelect }: { onSelect: (client: ClientHit) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<ClientHit[]>([]);
-  const [focused, setFocused] = useState(false);
+  const [all, setAll] = useState<ClientHit[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setHits([]);
-      return;
-    }
-    const t = setTimeout(() => {
-      api<{ clients: ClientHit[] }>(`/api/clients?query=${encodeURIComponent(query.trim())}`)
-        .then((d) => setHits(d.clients))
-        .catch(() => setHits([]));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [query]);
+  function ensureLoaded() {
+    if (all || loading) return;
+    setLoading(true);
+    api<{ clients: ClientHit[] }>("/api/clients?query=")
+      .then((d) => setAll(d.clients))
+      .catch(() => setAll([]))
+      .finally(() => setLoading(false));
+  }
+
+  const q = query.trim().toLowerCase();
+  const hits = (all ?? []).filter((c) => !q || c.name.toLowerCase().includes(q));
 
   function pick(client: ClientHit) {
     setQuery("");
-    setHits([]);
+    setOpen(false);
     inputRef.current?.blur();
     onSelect(client);
   }
@@ -44,14 +47,23 @@ export function ClientPicker({ onSelect }: { onSelect: (client: ClientHit) => vo
         ref={inputRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        onFocus={() => {
+          setOpen(true);
+          ensureLoaded();
+        }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => e.key === "Enter" && hits[0] && pick(hits[0])}
         placeholder="…or pick an existing client"
         className={`${inputClass} text-[13px]`}
       />
-      {focused && hits.length > 0 && (
-        <div className="absolute right-0 left-0 z-40 mt-1 overflow-hidden rounded-xl border border-line bg-card shadow-pop">
+      {open && (
+        <div className="absolute right-0 left-0 z-40 mt-1 max-h-[280px] overflow-y-auto rounded-xl border border-line bg-card shadow-pop">
+          {loading && <div className="px-3 py-2.5 text-[12.5px] text-muted">Loading…</div>}
+          {!loading && hits.length === 0 && (
+            <div className="px-3 py-2.5 text-[12.5px] text-muted">
+              {all && all.length === 0 ? "No clients yet" : "No matches"}
+            </div>
+          )}
           {hits.map((h) => (
             <button
               key={h.id}

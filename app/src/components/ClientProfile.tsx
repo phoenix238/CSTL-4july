@@ -214,58 +214,60 @@ export function ClientProfile({
         ‹ All clients
       </Link>
 
-      <Card className="flex flex-wrap items-center gap-4 px-5 py-5 lg:gap-[18px]">
-        <div className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-clay font-serif text-[22px] font-medium text-cream">
-          {client.name
-            .split(" ")
-            .map((w) => w[0])
-            .join("")
-            .slice(0, 3)}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-serif text-[22px] font-medium lg:text-2xl">{client.name}</div>
-          <div className="mt-[3px] text-[13px] text-muted">
-            {[client.email, client.phone].filter(Boolean).join(" · ") || "No contact details yet"}
+      <Card className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center lg:gap-[18px]">
+        <div className="flex min-w-0 flex-1 items-center gap-4 lg:gap-[18px]">
+          <div className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-clay font-serif text-[22px] font-medium text-cream">
+            {client.name
+              .split(" ")
+              .map((w) => w[0])
+              .join("")
+              .slice(0, 3)}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-[7px]">
-            <div className="flex overflow-hidden rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[2px]">
-              {(["waterloo", "bethnal"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setClinic(c)}
-                  disabled={changingClinic}
-                  className={`cursor-pointer rounded-full px-2.5 py-[3px] text-[11.5px] font-medium whitespace-nowrap select-none disabled:cursor-default ${
-                    client.clinic === c ? "" : "text-[oklch(0.5_0.02_58)]"
-                  }`}
-                  style={client.clinic === c ? { color: clinicChip(c).color, background: clinicChip(c).bg } : undefined}
-                >
-                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
-                </button>
-              ))}
+          <div className="min-w-0 flex-1">
+            <div className="font-serif text-[22px] font-medium lg:text-2xl">{client.name}</div>
+            <div className="mt-[3px] text-[13px] text-muted">
+              {[client.email, client.phone].filter(Boolean).join(" · ") || "No contact details yet"}
             </div>
-            <button onClick={toggleIntakeDone} disabled={togglingIntake} className="cursor-pointer disabled:cursor-default">
-              {client.intakeDone ? (
+            <div className="mt-2 flex flex-wrap items-center gap-[7px]">
+              <div className="flex overflow-hidden rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[2px]">
+                {(["bethnal", "waterloo"] as const).map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setClinic(c)}
+                    disabled={changingClinic}
+                    className={`cursor-pointer rounded-full px-2.5 py-[3px] text-[11.5px] font-medium whitespace-nowrap select-none disabled:cursor-default ${
+                      client.clinic === c ? "" : "text-[oklch(0.5_0.02_58)]"
+                    }`}
+                    style={client.clinic === c ? { color: clinicChip(c).color, background: clinicChip(c).bg } : undefined}
+                  >
+                    {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                  </button>
+                ))}
+              </div>
+              <button onClick={toggleIntakeDone} disabled={togglingIntake} className="cursor-pointer disabled:cursor-default">
+                {client.intakeDone ? (
+                  <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
+                    Intake ✓
+                  </Chip>
+                ) : (
+                  <Chip color="oklch(0.5 0.09 75)" bg="oklch(0.95 0.035 85)">
+                    Intake pending — click to mark complete
+                  </Chip>
+                )}
+              </button>
+              {client.marketing ? (
                 <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
-                  Intake ✓
+                  Email marketing ✓
                 </Chip>
               ) : (
-                <Chip color="oklch(0.5 0.09 75)" bg="oklch(0.95 0.035 85)">
-                  Intake pending — click to mark complete
+                <Chip color="oklch(0.5 0.02 58)" bg="oklch(0.94 0.01 80)">
+                  No marketing
                 </Chip>
               )}
-            </button>
-            {client.marketing ? (
-              <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
-                Email marketing ✓
-              </Chip>
-            ) : (
-              <Chip color="oklch(0.5 0.02 58)" bg="oklch(0.94 0.01 80)">
-                No marketing
-              </Chip>
-            )}
+            </div>
           </div>
         </div>
-        <div className="flex flex-col items-stretch gap-2">
+        <div className="flex flex-none flex-col items-stretch gap-2 sm:w-[170px]">
           <PrimaryButton onClick={() => router.push(`/enquiries?client=${client.id}`)} className="px-[18px] py-[9px] text-[13px]">
             Book next session
           </PrimaryButton>

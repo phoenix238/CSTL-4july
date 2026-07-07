@@ -30,7 +30,7 @@ export function QuickBook({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [client, setClient] = useState<ClientHit | null>(null);
-  const [clinic, setClinic] = useState<Clinic>("waterloo");
+  const [clinic, setClinic] = useState<Clinic>("bethnal");
   const [sendEmail, setSendEmail] = useState(true);
   const [booking, setBooking] = useState(false);
 
@@ -103,7 +103,7 @@ export function QuickBook({
                       key={h.id}
                       onClick={() => {
                         setClient(h);
-                        setClinic((h.clinic as Clinic) || "waterloo");
+                        setClinic((h.clinic as Clinic) || "bethnal");
                       }}
                       className="flex w-full cursor-pointer items-center justify-between px-3.5 py-2.5 text-left text-[13px] hover:bg-hoverbg"
                     >
@@ -132,7 +132,7 @@ export function QuickBook({
                 </button>
               </div>
               <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px] self-start">
-                {(["waterloo", "bethnal"] as const).map((c) => (
+                {(["bethnal", "waterloo"] as const).map((c) => (
                   <button
                     key={c}
                     onClick={() => setClinic(c)}

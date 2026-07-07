@@ -24,7 +24,7 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
     name: "",
     email: "",
     phone: "",
-    clinic: "waterloo",
+    clinic: "bethnal",
   });
   const [saving, setSaving] = useState(false);
   const q = search.toLowerCase();
@@ -57,7 +57,7 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
           <div className="hidden text-[12.5px] text-muted sm:block">One record each · synced to Drive</div>
           <PrimaryButton
             onClick={() => {
-              setDraft({ name: "", email: "", phone: "", clinic: "waterloo" });
+              setDraft({ name: "", email: "", phone: "", clinic: "bethnal" });
               setAdding(!adding);
             }}
             className="px-4 py-2 text-[13px]"
@@ -101,7 +101,7 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
           <div className="flex items-center gap-2.5">
             <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">CLINIC</span>
             <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["waterloo", "bethnal"] as const).map((c) => (
+              {(["bethnal", "waterloo"] as const).map((c) => (
                 <button
                   key={c}
                   onClick={() => setDraft({ ...draft, clinic: c })}

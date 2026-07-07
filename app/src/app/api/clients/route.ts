@@ -13,20 +13,24 @@ export const POST = guarded(async (req: Request) => {
   return NextResponse.json(client);
 });
 
-/** Quick client search — powers the global search, quick-book and Drive matching. */
+/**
+ * Client search — powers the global search, quick-book and Drive matching.
+ * No `query` → the full client list (for pick-from-a-list dropdowns), capped generously.
+ */
 export const GET = guarded(async (req: Request) => {
   const query = (new URL(req.url).searchParams.get("query") ?? "").trim();
-  if (!query) return NextResponse.json({ clients: [] });
   const clients = await prisma.client.findMany({
-    where: {
-      OR: [
-        { name: { contains: query, mode: "insensitive" } },
-        { email: { contains: query, mode: "insensitive" } },
-      ],
-    },
+    where: query
+      ? {
+          OR: [
+            { name: { contains: query, mode: "insensitive" } },
+            { email: { contains: query, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
     select: { id: true, name: true, clinic: true, email: true, welcomeSent: true },
     orderBy: { name: "asc" },
-    take: 8,
+    take: query ? 8 : 500,
   });
   return NextResponse.json({ clients });
 });

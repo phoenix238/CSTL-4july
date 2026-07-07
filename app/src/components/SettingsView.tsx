@@ -60,10 +60,10 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
 
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
-  const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("waterloo");
+  const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("bethnal");
   const [editingTemplate, setEditingTemplate] = useState(false);
   const [templateDraft, setTemplateDraft] = useState("");
-  const [reviewClinic, setReviewClinic] = useState<"waterloo" | "bethnal">("waterloo");
+  const [reviewClinic, setReviewClinic] = useState<"waterloo" | "bethnal">("bethnal");
   const [editingReview, setEditingReview] = useState(false);
   const [reviewDraft, setReviewDraft] = useState({
     mapsReviewUrl: settings.mapsReviewUrlWaterloo,
@@ -115,22 +115,22 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
       <Card className="px-5 py-1.5">
         <div className="border-b border-hairline py-[15px]">
           <div className="flex items-baseline gap-2.5">
-            <span className="font-serif text-base font-medium">Waterloo</span>
-            <span className="text-xs font-semibold text-clay-text">£80 · 60 min</span>
-          </div>
-          <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
-            Creates two 1-hour events: &quot;(Client) — Waterloo&quot; on your personal calendar + &quot;R5 -
-            Phoenix&quot; on the room calendar.
-          </div>
-        </div>
-        <div className="py-[15px]">
-          <div className="flex items-baseline gap-2.5">
             <span className="font-serif text-base font-medium">Bethnal Green</span>
             <span className="text-xs font-semibold text-sage-text">£30–60 sliding · 60 min</span>
           </div>
           <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
             Creates a 2-hour &quot;Phoenix&quot; block on the Chalk Farm calendar with the 1-hour &quot;(Client) —
             Bethnal Green&quot; personal event in the middle.
+          </div>
+        </div>
+        <div className="py-[15px]">
+          <div className="flex items-baseline gap-2.5">
+            <span className="font-serif text-base font-medium">Waterloo</span>
+            <span className="text-xs font-semibold text-clay-text">£80 · 60 min</span>
+          </div>
+          <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
+            Creates two 1-hour events: &quot;(Client) — Waterloo&quot; on your personal calendar + &quot;R5 -
+            Phoenix&quot; on the room calendar.
           </div>
         </div>
       </Card>
@@ -172,7 +172,7 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
         <Card className="flex flex-col gap-3 px-[18px] py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["waterloo", "bethnal"] as const).map((c) => (
+              {(["bethnal", "waterloo"] as const).map((c) => (
                 <button
                   key={c}
                   onClick={() => {
@@ -299,7 +299,7 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
         <Card className="flex flex-col gap-3 px-[18px] py-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["waterloo", "bethnal"] as const).map((c) => (
+              {(["bethnal", "waterloo"] as const).map((c) => (
                 <button
                   key={c}
                   onClick={() => {

@@ -52,7 +52,7 @@ export async function createClientWithDrive(data: {
       name: data.name.trim(),
       email: data.email?.trim() ?? "",
       phone: data.phone?.trim() ?? "",
-      clinic: data.clinic ?? "waterloo",
+      clinic: data.clinic ?? "bethnal",
       marketing: data.marketing ?? false,
     },
   });
