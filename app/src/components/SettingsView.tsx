@@ -397,22 +397,13 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
       <SectionLabel className="pt-2">ADD TO YOUR IPHONE</SectionLabel>
       <Card className="flex flex-col gap-3 px-5 py-4 text-[13px] leading-[1.6] text-[oklch(0.4_0.02_60)]">
         <div>
-          <div className="font-semibold text-ink">1 · Install the app</div>
+          <div className="font-semibold text-ink">Install the app</div>
           In Safari, open <span className="font-mono text-[12px]">{baseUrl}</span>, tap the Share icon, then{" "}
           <b>Add to Home Screen</b>. It now opens like a normal app.
         </div>
-        <div>
-          <div className="font-semibold text-ink">2 · Share WhatsApp enquiries straight in</div>
-          In the Shortcuts app, make a new Shortcut → <b>Receive Text from Share Sheet</b> → add{" "}
-          <b>Open URLs</b> with:
-          <div className="mt-1.5 rounded-[10px] bg-inputbg px-3 py-2 font-mono text-[11.5px] break-all">
-            {baseUrl}/enquiries?text=[Shortcut Input]
-          </div>
-          <div className="mt-1 text-[12px] text-muted">
-            (Insert the &quot;Shortcut Input&quot; variable where <span className="font-mono">[Shortcut Input]</span>{" "}
-            is.) Name it &quot;New CSTL enquiry&quot;. Now in WhatsApp: select a message → Share → your shortcut →
-            the app opens with it pasted in.
-          </div>
+        <div className="text-[12px] text-muted">
+          To bring in a WhatsApp or email enquiry, open <b>Enquiries</b> and use the &quot;Paste a message&quot;
+          button — it picks up whatever you last copied.
         </div>
       </Card>
     </div>

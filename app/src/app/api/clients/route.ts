@@ -24,7 +24,7 @@ export const GET = guarded(async (req: Request) => {
         { email: { contains: query, mode: "insensitive" } },
       ],
     },
-    select: { id: true, name: true, clinic: true, email: true },
+    select: { id: true, name: true, clinic: true, email: true, welcomeSent: true },
     orderBy: { name: "asc" },
     take: 8,
   });

@@ -17,12 +17,12 @@ import {
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
 import { composeOfferMessage } from "@/lib/booking/offer";
-import { waLink } from "@/lib/whatsapp";
 import { fmtDayLong, fmtTime, londonDayStart, londonWeekStart } from "@/lib/time";
 import { Legend } from "./calendar/Legend";
 import { TimeGrid } from "./calendar/TimeGrid";
 import { useWeekSpans } from "./calendar/useWeekSpans";
 import { Inbox, type WaitingEnquiry } from "./enquiry/Inbox";
+import { ClientPicker, type ClientHit } from "./enquiry/ClientPicker";
 
 interface Analysis {
   name: string;
@@ -55,26 +55,28 @@ export function EnquiryFlow({
   openEnquiryId,
   existingClient,
   initialWaiting,
-  initialText,
   initialPick,
 }: {
   openEnquiryId?: string;
   existingClient?: { id: string; name: string; clinic: string; email: string; welcomeSent: boolean };
   initialWaiting: WaitingEnquiry[];
-  initialText?: string;
   initialPick?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
 
   const [waiting, setWaiting] = useState<WaitingEnquiry[]>(initialWaiting);
-  const [text, setText] = useState(initialText ?? "");
+  const [showWaiting, setShowWaiting] = useState(false);
+
+  // paste-a-message popup
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [text, setText] = useState("");
   const [enquiryId, setEnquiryId] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [reading, setReading] = useState(false);
 
-  // book step
-  const [name, setName] = useState("");
+  // client
+  const [name, setName] = useState(existingClient?.name ?? "");
   const [match, setMatch] = useState<Match | null>(null);
   const [ignoreMatch, setIgnoreMatch] = useState(false);
   const [saved, setSaved] = useState<Match | null>(
@@ -86,7 +88,6 @@ export function EnquiryFlow({
   const [selected, setSelected] = useState<Date[]>([]);
   const [bookMode, setBookMode] = useState<"confirm" | "offer">("confirm");
   const [offeredTimes, setOfferedTimes] = useState<Date[]>([]);
-  const [showWaitingList, setShowWaitingList] = useState(false);
 
   // booking panel
   const [settings, setSettings] = useState<EmailSettings | null>(null);
@@ -99,18 +100,20 @@ export function EnquiryFlow({
 
   // one session-start for confirm mode
   const confirmSlot = bookMode === "confirm" && selected.length ? selected[0] : null;
-  const phone = analysis?.phone?.trim() || "";
 
   // done step name edit
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
 
-  const stage: "paste" | "book" | "done" = result ? "done" : analysis || existingClient ? "book" : "paste";
   const activeClient = saved ?? (ignoreMatch ? null : match);
   const { spans, invalidate } = useWeekSpans(weekStart, 7);
 
   useEffect(() => {
-    if (openEnquiryId) void loadEnquiry(openEnquiryId, initialPick);
+    if (openEnquiryId) {
+      void loadEnquiry(openEnquiryId, initialPick);
+    } else if (existingClient) {
+      void checkActiveOffer(existingClient.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openEnquiryId]);
 
@@ -118,10 +121,10 @@ export function EnquiryFlow({
     api<EmailSettings>("/api/settings").then(setSettings).catch(() => {});
   }, []);
 
-  // Debounced dedupe check while the name is edited (only when nothing is saved yet).
+  // Debounced dedupe check while the name is typed (only when nothing is saved yet).
   const matchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
-    if (saved || stage !== "book") return;
+    if (saved) return;
     clearTimeout(matchTimer.current);
     if (!name.trim()) {
       setMatch(null);
@@ -137,9 +140,9 @@ export function EnquiryFlow({
     }, 350);
     return () => clearTimeout(matchTimer.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, saved, stage]);
+  }, [name, saved]);
 
-  // Live email preview — recomposed until the therapist edits it by hand.
+  // Live message preview — recomposed until the therapist edits it by hand.
   const composed = useMemo(() => {
     const displayName = (activeClient?.name || name || "there").trim();
     if (!settings) return null;
@@ -192,17 +195,26 @@ export function EnquiryFlow({
     try {
       await api(`/api/enquiries/${id}`, { method: "DELETE" });
       toast("Enquiry deleted");
-      if (enquiryId === id) {
-        setAnalysis(null);
-        setEnquiryId(null);
-        setSaved(null);
-        setMatch(null);
-        setText("");
-      }
+      if (enquiryId === id) resetToEmpty();
       void refreshWaiting();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't delete that enquiry");
     }
+  }
+
+  function resetToEmpty() {
+    setAnalysis(null);
+    setEnquiryId(null);
+    setSelected([]);
+    setSaved(existingClient ? { ...existingClient, saved: true } : null);
+    setMatch(null);
+    setIgnoreMatch(false);
+    setName(existingClient?.name ?? "");
+    setText("");
+    setOfferedTimes([]);
+    setBookMode("confirm");
+    setEmailDirty(false);
+    setResult(null);
   }
 
   function applyLoaded(
@@ -212,7 +224,7 @@ export function EnquiryFlow({
   ) {
     setText(enq.text);
     setEnquiryId(enq.id);
-    setAnalysis(a);
+    setAnalysis(enq.text.trim() ? a : null); // shadow enquiries carry no real message
     setName(m?.saved ? m.name : a.name);
     setMatch(m && !m.saved ? m : null);
     setSaved(m?.saved ? m : null);
@@ -236,6 +248,7 @@ export function EnquiryFlow({
         match: Match | null;
       }>(`/api/enquiries/${id}`);
       applyLoaded(d.enquiry, d.analysis, d.match);
+      setPasteOpen(false);
       // Came from "they picked this one" — jump straight to confirming that slot.
       const picked = pick ? new Date(pick) : null;
       if (picked && !Number.isNaN(picked.getTime())) {
@@ -247,6 +260,28 @@ export function EnquiryFlow({
       toast(err instanceof Error ? err.message : "Couldn't load that enquiry");
     } finally {
       setReading(false);
+    }
+  }
+
+  /** Does this client already have times offered, awaiting their reply? */
+  async function checkActiveOffer(clientId: string) {
+    try {
+      const d = await api<{ enquiry: { id: string; offeredTimes: string[] } | null }>(
+        `/api/clients/${clientId}/active-offer`,
+      );
+      if (d.enquiry) void loadEnquiry(d.enquiry.id);
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  async function openPasteModal() {
+    setPasteOpen(true);
+    try {
+      const clip = await navigator.clipboard?.readText();
+      if (clip && clip.trim()) setText(clip);
+    } catch {
+      /* clipboard read denied/unsupported — leave the box as-is */
     }
   }
 
@@ -262,6 +297,7 @@ export function EnquiryFlow({
         { method: "POST", body: JSON.stringify({ text }) },
       );
       applyLoaded(d.enquiry, d.analysis, d.match);
+      setPasteOpen(false);
       void refreshWaiting();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't read that message");
@@ -270,25 +306,49 @@ export function EnquiryFlow({
     }
   }
 
-  async function saveAsClient() {
-    if (!enquiryId || !name.trim()) {
-      toast("A name is needed first");
+  /** Make the picked/saved client the active one for this session, wherever it came from. */
+  function activateClient(client: Match, message?: string) {
+    setSaved(client);
+    setName(client.name);
+    setMatch(null);
+    setIgnoreMatch(false);
+    setSelected([]);
+    setBookMode("confirm");
+    setOfferedTimes([]);
+    setEmailDirty(false);
+    if (client.clinic) setClinic(client.clinic as Clinic);
+    if (message) toast(message);
+    void refreshWaiting();
+    void checkActiveOffer(client.id);
+  }
+
+  async function saveNewClient() {
+    if (!name.trim()) {
+      toast("Add a name first");
       return;
     }
     setSaving(true);
     try {
-      const d = await api<{ client: Match; existed: boolean }>(`/api/enquiries/${enquiryId}/client`, {
-        method: "POST",
-        body: JSON.stringify({ name: name.trim(), email: analysis?.email, phone: analysis?.phone, clinic }),
-      });
-      setSaved({ ...d.client, saved: true });
-      setName(d.client.name);
-      toast(
-        d.existed
-          ? `Linked to ${d.client.name}'s existing record — one record kept`
-          : `${d.client.name} saved — Drive folder + Doc ready`,
-      );
-      void refreshWaiting();
+      if (enquiryId) {
+        const d = await api<{ client: Match; existed: boolean }>(`/api/enquiries/${enquiryId}/client`, {
+          method: "POST",
+          body: JSON.stringify({ name: name.trim(), email: analysis?.email, phone: analysis?.phone, clinic }),
+        });
+        activateClient(
+          { ...d.client, saved: true },
+          d.existed
+            ? `Linked to ${d.client.name}'s existing record — one record kept`
+            : `${d.client.name} saved — Drive folder + Doc ready`,
+        );
+      } else if (match && !ignoreMatch) {
+        activateClient({ ...match, saved: true }, `Linked to ${match.name}'s existing record — one record kept`);
+      } else {
+        const client = await api<Match>("/api/clients", {
+          method: "POST",
+          body: JSON.stringify({ name: name.trim(), clinic }),
+        });
+        activateClient({ ...client, saved: true }, `${client.name} saved — Drive folder + Doc ready`);
+      }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save the client");
     } finally {
@@ -296,58 +356,58 @@ export function EnquiryFlow({
     }
   }
 
-  async function sendOffer(alsoEmail: boolean) {
-    if (!enquiryId || !selected.length) {
+  /** Create the Enquiry row an offer/confirm hangs its status off, if one doesn't exist yet. */
+  async function ensureEnquiry(): Promise<string> {
+    if (enquiryId) return enquiryId;
+    if (!saved) throw new Error("Pick or save a client first");
+    const d = await api<{ enquiry: { id: string } }>("/api/enquiries", {
+      method: "POST",
+      body: JSON.stringify({ clientId: saved.id }),
+    });
+    setEnquiryId(d.enquiry.id);
+    return d.enquiry.id;
+  }
+
+  async function copyAndMarkOffered() {
+    if (!selected.length) {
       toast("Pick some times to offer first");
       return;
     }
     setOffering(true);
     try {
-      await api(`/api/enquiries/${enquiryId}/offer`, {
+      const id = await ensureEnquiry();
+      const displayName = (activeClient?.name || name || "there").trim();
+      const body = emailBody.trim() || composeOfferMessage(displayName, clinic, selected);
+      await navigator.clipboard?.writeText(body).catch(() => {});
+      await api(`/api/enquiries/${id}/offer`, {
         method: "POST",
         body: JSON.stringify({
-          clientName: activeClient?.name || name,
+          clientName: displayName,
           clinic,
           times: selected.map((d) => d.toISOString()),
-          sendEmail: alsoEmail,
-          email: activeClient?.email || analysis?.email || undefined,
-          emailBody: emailBody.trim() || undefined,
+          sendEmail: false,
           clientId: activeClient?.id,
+          emailBody: body,
         }),
       });
-      toast(alsoEmail ? "Times offered — email sent" : "Times offered");
+      toast("Times copied to your clipboard — marked as offered");
       void refreshWaiting();
-      // back to the inbox so it's clear it's now awaiting a reply
-      setAnalysis(null);
-      setEnquiryId(null);
-      setSelected([]);
-      setSaved(existingClient ? { ...existingClient, saved: true } : null);
-      setMatch(null);
-      setText("");
+      resetToEmpty();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Couldn't send those times");
+      toast(err instanceof Error ? err.message : "Couldn't mark those times as offered");
     } finally {
       setOffering(false);
     }
   }
 
-  function openWhatsApp(body: string) {
-    const link = waLink(phone, body);
-    if (!link) {
-      toast("No phone number on this enquiry to WhatsApp");
-      return;
-    }
-    window.open(link, "_blank");
-  }
-
-  async function confirmBooking(send: boolean) {
+  async function confirmBooking() {
     if (!confirmSlot) return;
     setBooking(true);
     try {
       const req: Record<string, unknown> = {
         clinic,
         startISO: confirmSlot.toISOString(),
-        sendEmail: send,
+        sendEmail: false,
         sendPayment,
         emailBody: emailBody.trim() || undefined,
         enquiryId,
@@ -391,7 +451,7 @@ export function EnquiryFlow({
 
   /* ---------------- done ---------------- */
 
-  if (stage === "done" && result) {
+  if (result) {
     return (
       <div className="flex max-w-[640px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
         <Card className="flex flex-col gap-2 px-6 py-6 text-center">
@@ -448,89 +508,74 @@ export function EnquiryFlow({
     );
   }
 
-  /* ---------------- paste / inbox ---------------- */
+  /* ---------------- grid / book ---------------- */
 
-  if (stage === "paste") {
-    return (
-      <div className="flex max-w-[1080px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
-        <header>
-          <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Enquiries</h1>
-          <div className="mt-[5px] text-[13.5px] text-muted">
-            Paste a message — details get picked out for you, nothing is sent without your say-so.
-          </div>
-        </header>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-          <Inbox waiting={waiting} onOpen={(id) => void loadEnquiry(id)} onDelete={(id) => void deleteWaitingEnquiry(id)} />
-          <Card className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-5">
-            <SectionLabel>NEW ENQUIRY</SectionLabel>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Paste the WhatsApp or email message here…"
-              className="min-h-[140px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-3 text-sm leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-            />
-            <PrimaryButton onClick={readMessage} disabled={reading} className="self-start">
-              {reading ? "Reading…" : "Read message →"}
-            </PrimaryButton>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------------- book ---------------- */
-
-  const otherWaiting = waiting.filter((q) => q.id !== enquiryId);
   const plan = confirmSlot
     ? planBookingEvents(clinic, (activeClient?.name || name || "New client").trim(), confirmSlot)
     : [];
   const isReturning = !!activeClient?.welcomeSent;
+  const canStartOver = !!(saved || match || name.trim() || enquiryId);
 
   return (
     <div className="flex max-w-[1200px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          onClick={() => {
-            setAnalysis(null);
-            setEnquiryId(null);
-            setSelected([]);
-            setSaved(existingClient ? { ...existingClient, saved: true } : null);
-            setMatch(null);
-            setText("");
-          }}
-          className="cursor-pointer text-[13.5px] font-semibold text-muted hover:text-clay-text"
-        >
-          ‹ Enquiries
-        </button>
-        {otherWaiting.length > 0 && (
+        <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Enquiries</h1>
+        <div className="flex items-center gap-2">
+          <OutlineButton onClick={openPasteModal}>Paste a message</OutlineButton>
           <div className="relative">
-            <TintButton onClick={() => setShowWaitingList((v) => !v)}>
-              {otherWaiting.length} more waiting ▾
-            </TintButton>
-            {showWaitingList && (
-              <div className="absolute right-0 z-30 mt-1 w-[280px] overflow-hidden rounded-xl border border-line bg-card shadow-pop">
-                {otherWaiting.map((q) => (
-                  <button
-                    key={q.id}
-                    onClick={() => {
-                      setShowWaitingList(false);
-                      void loadEnquiry(q.id);
-                    }}
-                    className="flex w-full cursor-pointer flex-col gap-0.5 px-3.5 py-2.5 text-left hover:bg-hoverbg"
-                  >
-                    <span className="text-[13px] font-semibold">{q.name || "Unknown"}</span>
-                    <span className="line-clamp-1 text-[11.5px] text-muted">{q.text.trim()}</span>
-                  </button>
-                ))}
+            <TintButton onClick={() => setShowWaiting((v) => !v)}>Waiting ({waiting.length})</TintButton>
+            {showWaiting && (
+              <div className="absolute right-0 z-30 mt-1 w-[330px]">
+                <Inbox
+                  waiting={waiting}
+                  onOpen={(id) => {
+                    setShowWaiting(false);
+                    void loadEnquiry(id);
+                  }}
+                  onDelete={(id) => void deleteWaitingEnquiry(id)}
+                />
               </div>
             )}
           </div>
-        )}
+          {canStartOver && (
+            <button
+              onClick={resetToEmpty}
+              className="cursor-pointer text-[13.5px] font-semibold text-muted hover:text-clay-text"
+            >
+              + New
+            </button>
+          )}
+        </div>
       </header>
 
+      {/* paste-a-message popup */}
+      {pasteOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={() => setPasteOpen(false)} />
+          <div className="fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2">
+            <Card className="flex flex-col gap-3 px-5 py-5">
+              <SectionLabel>PASTE A MESSAGE</SectionLabel>
+              <textarea
+                autoFocus
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Paste the WhatsApp or email message here…"
+                className="min-h-[160px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-3 text-sm leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+              />
+              <div className="flex gap-2">
+                <PrimaryButton onClick={readMessage} disabled={reading}>
+                  {reading ? "Reading…" : "Read message →"}
+                </PrimaryButton>
+                <OutlineButton onClick={() => setPasteOpen(false)}>Cancel</OutlineButton>
+              </div>
+            </Card>
+          </div>
+        </>
+      )}
+
       <Card className="flex flex-col gap-3 px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2.5">
               <input
                 value={name}
@@ -539,13 +584,13 @@ export function EnquiryFlow({
                   setIgnoreMatch(false);
                 }}
                 disabled={!!saved}
-                placeholder="Client name"
+                placeholder="New client name"
                 className={`${inputClass} w-[220px] font-serif text-[16px] font-medium disabled:opacity-80`}
               />
               {saved ? (
                 <span className="flex items-center gap-1.5">
                   <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
-                    CLIENT SAVED ✓
+                    CLIENT ✓
                   </Chip>
                   <Link
                     href={`/clients/${saved.id}`}
@@ -553,38 +598,45 @@ export function EnquiryFlow({
                   >
                     open ›
                   </Link>
-                </span>
-              ) : activeClient ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
-                    EXISTING — ONE RECORD KEPT
-                  </Chip>
-                  <Link
-                    href={`/clients/${activeClient.id}`}
-                    className="text-[12.5px] font-semibold text-sage-text hover:text-sage"
-                  >
-                    = {activeClient.name} ›
-                  </Link>
                   <button
-                    onClick={() => setIgnoreMatch(true)}
+                    onClick={resetToEmpty}
                     className="cursor-pointer text-[12px] text-muted underline hover:text-ink"
                   >
-                    book as new instead
+                    change client
                   </button>
                 </span>
               ) : (
-                <span className="flex items-center gap-2">
-                  <Chip color="oklch(0.42 0.1 42)" bg="oklch(0.94 0.03 48)">
-                    NEW CLIENT
-                  </Chip>
-                  {enquiryId && (
-                    <OutlineButton className="px-3 py-1 text-[12px]" onClick={saveAsClient} disabled={saving}>
-                      {saving ? "Saving…" : "Save as client"}
-                    </OutlineButton>
+                <>
+                  <PrimaryButton
+                    onClick={saveNewClient}
+                    disabled={saving || !name.trim()}
+                    className="px-4 py-1.5 text-[12.5px]"
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </PrimaryButton>
+                  {activeClient && (
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
+                        EXISTING — ONE RECORD KEPT
+                      </Chip>
+                      <Link
+                        href={`/clients/${activeClient.id}`}
+                        className="text-[12.5px] font-semibold text-sage-text hover:text-sage"
+                      >
+                        = {activeClient.name} ›
+                      </Link>
+                      <button
+                        onClick={() => setIgnoreMatch(true)}
+                        className="cursor-pointer text-[12px] text-muted underline hover:text-ink"
+                      >
+                        book as new instead
+                      </button>
+                    </span>
                   )}
-                </span>
+                </>
               )}
             </div>
+            {!saved && <ClientPicker onSelect={(c: ClientHit) => activateClient({ ...c, saved: true })} />}
             <div className="text-[12.5px] text-muted">
               {[analysis?.phone, analysis?.email].filter(Boolean).join(" · ") ||
                 (existingClient ? "Booking a returning client" : "No contact details found")}{" "}
@@ -692,6 +744,7 @@ export function EnquiryFlow({
               {fmtDayLong(t)} {fmtTime(t)}
             </button>
           ))}
+          <span className="text-muted">— tap one to confirm, or switch to &quot;Offer a few times&quot; for different ones.</span>
         </div>
       )}
 
@@ -728,29 +781,24 @@ export function EnquiryFlow({
               ))}
           </div>
           <div className="text-[12px] text-muted">
-            Nothing is booked yet — these are just offered. When they reply, reopen this enquiry and confirm one.
+            Nothing is booked yet — these are just offered. When they reply, reopen this client and confirm one.
           </div>
-          <SectionLabel>MESSAGE</SectionLabel>
-          <textarea
-            value={emailBody}
-            onChange={(e) => {
-              setEmailBody(e.target.value);
-              setEmailDirty(true);
-            }}
-            className={`${inputClass} min-h-[150px] resize-y leading-[1.55]`}
-          />
-          <div className="flex flex-wrap gap-2">
-            <PrimaryButton onClick={() => sendOffer(true)} disabled={offering}>
-              {offering ? "Sending…" : "Send by email"}
-            </PrimaryButton>
-            <OutlineButton onClick={() => openWhatsApp(emailBody)} disabled={!phone}>
-              Send on WhatsApp
-            </OutlineButton>
-            {!phone && <span className="self-center text-[12px] text-muted">No number found for WhatsApp</span>}
-            <OutlineButton onClick={() => sendOffer(false)} disabled={offering}>
-              Just mark as offered
-            </OutlineButton>
-          </div>
+          {analysis && (
+            <>
+              <SectionLabel>MESSAGE</SectionLabel>
+              <textarea
+                value={emailBody}
+                onChange={(e) => {
+                  setEmailBody(e.target.value);
+                  setEmailDirty(true);
+                }}
+                className={`${inputClass} min-h-[150px] resize-y leading-[1.55]`}
+              />
+            </>
+          )}
+          <PrimaryButton onClick={copyAndMarkOffered} disabled={offering} className="self-start">
+            {offering ? "Copying…" : "Copy times & mark as offered"}
+          </PrimaryButton>
         </Card>
       )}
 
@@ -772,7 +820,7 @@ export function EnquiryFlow({
             ))}
           </div>
 
-          <SectionLabel>CONFIRMATION EMAIL</SectionLabel>
+          <SectionLabel>CONFIRMATION MESSAGE</SectionLabel>
           {isReturning && (
             <div className="text-[12.5px] text-muted">Returning client — just a short confirmation + the invite.</div>
           )}
@@ -786,7 +834,7 @@ export function EnquiryFlow({
                   setEmailDirty(false);
                 }}
               />
-              New client — send payment details ({CLINIC_PRICE[clinic]})
+              New client — include payment details ({CLINIC_PRICE[clinic]})
             </label>
           )}
           <textarea
@@ -807,15 +855,9 @@ export function EnquiryFlow({
           )}
           <div className="flex flex-wrap gap-2">
             <OutlineButton onClick={() => setSelected([])}>Change slot</OutlineButton>
-            <PrimaryButton onClick={() => confirmBooking(true)} disabled={booking}>
-              {booking ? "Booking…" : "Create events & send email"}
+            <PrimaryButton onClick={confirmBooking} disabled={booking}>
+              {booking ? "Booking…" : "Copy confirmation & book"}
             </PrimaryButton>
-            <OutlineButton onClick={() => confirmBooking(false)} disabled={booking}>
-              Copy text & register — no email
-            </OutlineButton>
-            <OutlineButton onClick={() => openWhatsApp(emailBody)} disabled={!phone}>
-              Reply on WhatsApp
-            </OutlineButton>
           </div>
         </Card>
       )}
@@ -827,11 +869,7 @@ export function EnquiryFlow({
             await api(`/api/enquiries/${enquiryId}/dismiss`, { method: "POST" });
             toast("Enquiry dismissed");
             void refreshWaiting();
-            setAnalysis(null);
-            setEnquiryId(null);
-            setSaved(null);
-            setMatch(null);
-            setText("");
+            resetToEmpty();
           }}
         >
           Dismiss enquiry

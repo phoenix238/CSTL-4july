@@ -7,14 +7,10 @@ export default async function EnquiriesPage({
   searchParams: Promise<{
     open?: string;
     client?: string;
-    text?: string;
-    title?: string;
-    url?: string;
     pick?: string;
   }>;
 }) {
-  const { open, client: clientId, text, title, url, pick } = await searchParams;
-  const initialText = [title, text, url].filter(Boolean).join("\n") || undefined;
+  const { open, client: clientId, pick } = await searchParams;
 
   const existingClient = clientId
     ? await prisma.client.findUnique({
@@ -42,7 +38,6 @@ export default async function EnquiriesPage({
     <EnquiryFlow
       openEnquiryId={open}
       existingClient={existingClient ?? undefined}
-      initialText={initialText}
       initialPick={pick}
       initialWaiting={waiting.map((w) => ({
         ...w,

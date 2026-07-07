@@ -53,7 +53,12 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     clientId = created.id;
     isNew = true;
   }
-  const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+  let client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+
+  // Remember the location they actually booked, so it's the default next time.
+  if (!isNew && client.clinic !== req.clinic) {
+    client = await prisma.client.update({ where: { id: clientId }, data: { clinic: req.clinic } });
+  }
 
   // Reschedule rule: an existing client's upcoming booking is replaced —
   // the old events are deleted so the old slot is genuinely free again.

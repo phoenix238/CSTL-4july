@@ -14,9 +14,32 @@ export const GET = guarded(async () => {
   return NextResponse.json({ enquiries });
 });
 
+/**
+ * Two ways in: a pasted message (analysed by Claude), or a bare `clientId` —
+ * a "shadow" enquiry with no text, created so offer/confirm state has
+ * somewhere to live for a client picked directly on the grid.
+ */
 export const POST = guarded(async (req: Request) => {
-  const { text } = await req.json();
-  if (!text?.trim()) return NextResponse.json({ error: "Paste a message first" }, { status: 400 });
+  const { text, clientId } = await req.json();
+
+  if (!text?.trim()) {
+    if (!clientId) return NextResponse.json({ error: "Paste a message first" }, { status: 400 });
+    const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+    const enquiry = await prisma.enquiry.create({
+      data: { text: "", name: client.name, via: "PASTED", status: "waiting", clientId },
+    });
+    return NextResponse.json({
+      enquiry,
+      analysis: null,
+      match: {
+        id: client.id,
+        name: client.name,
+        clinic: client.clinic,
+        email: client.email,
+        welcomeSent: client.welcomeSent,
+      },
+    });
+  }
 
   const analysis = await analyseEnquiry(text);
   const enquiry = await prisma.enquiry.create({
