@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "CSTL Control Tower",
+    name: "CSTL",
     short_name: "CSTL",
-    description: "Phoenix Tanner — CSTL booking & documentation control tower",
+    description: "Phoenix Tanner — CSTL booking & documentation",
     start_url: "/",
     display: "standalone",
     background_color: "#f6f0e6",
