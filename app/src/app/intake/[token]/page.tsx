@@ -10,7 +10,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
   const client = token
     ? await prisma.client.findFirst({
         where: { intakeToken: token },
-        select: { id: true, name: true, phone: true, intakeDone: true },
+        select: { id: true, name: true, email: true, phone: true, intakeDone: true },
       })
     : null;
 
@@ -33,6 +33,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
       <IntakeForm
         token={token}
         clientName={client.name}
+        clientEmail={client.email}
         clientPhone={client.phone}
         alreadyDone={client.intakeDone}
         questions={questions}

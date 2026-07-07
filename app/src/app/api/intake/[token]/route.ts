@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma, getSettings } from "@/lib/db";
 import { updateClientDetails } from "@/lib/clients";
 import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
+import { shareCalendarInvite } from "@/lib/google/calendar";
 import { fmtDate } from "@/lib/time";
 import { COLUMN_KEYS, CONSENT_PARAGRAPHS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
 
@@ -18,25 +19,42 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const client = await prisma.client.findFirst({ where: { intakeToken: token } });
     if (!client) return NextResponse.json({ error: "This link has expired." }, { status: 404 });
 
-    const { name, answers, consent } = (await req.json()) as {
+    const { name, email, answers, consent } = (await req.json()) as {
       name?: string;
+      email?: string;
       answers?: Record<string, string>;
       consent?: boolean;
     };
     const a = answers ?? {};
     const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
     const finalName = str(name) || client.name;
+    const finalEmail = str(email) || client.email;
+    if (!finalEmail || !/\S+@\S+\.\S+/.test(finalEmail)) {
+      return NextResponse.json({ error: "Please add a valid email address" }, { status: 400 });
+    }
+    const emailChanged = finalEmail.toLowerCase() !== client.email.toLowerCase();
 
     const settings = await getSettings();
     const questions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
 
     // Standard answers update the record; everything shows in the Doc too.
-    const columnUpdate: Record<string, string | boolean> = { name: finalName, intakeDone: true };
+    const columnUpdate: Record<string, string | boolean> = { name: finalName, email: finalEmail, intakeDone: true };
     if (typeof consent === "boolean") columnUpdate.consentGiven = consent;
     for (const q of questions) {
       if (COLUMN_KEYS.has(q.key) && a[q.key] !== undefined) columnUpdate[q.key] = str(a[q.key]);
     }
     await updateClientDetails(client.id, columnUpdate);
+
+    // A newly-added/changed email may unlock sharing the calendar invite for an
+    // upcoming booking that was made before the client's email was known. Best
+    // effort — a Google API hiccup here shouldn't fail the intake submission.
+    if (emailChanged) {
+      try {
+        await shareCalendarInvite(client.id);
+      } catch (err) {
+        console.error("shareCalendarInvite failed during intake submit", err);
+      }
+    }
 
     const { docId } = await ensureClientFolderAndDoc(client.id);
 

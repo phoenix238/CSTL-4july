@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./ui";
 import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
+import { composeBookingEmail } from "@/lib/booking/email";
 
 export interface SettingsData {
   accessNote: string;
@@ -13,6 +14,8 @@ export interface SettingsData {
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
+  waterlooArrivalNote: string;
+  bethnalArrivalNote: string;
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
@@ -68,6 +71,8 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
   const [addressesDraft, setAddressesDraft] = useState({
     waterlooAddress: settings.waterlooAddress,
     bethnalAddress: settings.bethnalAddress,
+    waterlooArrivalNote: settings.waterlooArrivalNote,
+    bethnalArrivalNote: settings.bethnalArrivalNote,
   });
   const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("bethnal");
   const [editingTemplate, setEditingTemplate] = useState(false);
@@ -101,6 +106,40 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
   };
 
   const template = emailClinic === "waterloo" ? settings.emailTemplateWaterloo : settings.emailTemplateBethnal;
+
+  // What the client actually receives, recomposed live from whichever fields are
+  // mid-edit (drafts) plus whatever's already saved — so mistakes (e.g. a whole
+  // paragraph pasted into the address field) are visible before anything is sent.
+  const previewBody = useMemo(() => {
+    const previewSettings = {
+      accessNote: editingNote ? noteDraft : settings.accessNote,
+      emailTemplateWaterloo: editingTemplate && emailClinic === "waterloo" ? templateDraft : settings.emailTemplateWaterloo,
+      emailTemplateBethnal: editingTemplate && emailClinic === "bethnal" ? templateDraft : settings.emailTemplateBethnal,
+      paymentDetails: editingPayment ? paymentDraft : settings.paymentDetails,
+      waterlooAddress: editingAddresses ? addressesDraft.waterlooAddress : settings.waterlooAddress,
+      bethnalAddress: editingAddresses ? addressesDraft.bethnalAddress : settings.bethnalAddress,
+      waterlooArrivalNote: editingAddresses ? addressesDraft.waterlooArrivalNote : settings.waterlooArrivalNote,
+      bethnalArrivalNote: editingAddresses ? addressesDraft.bethnalArrivalNote : settings.bethnalArrivalNote,
+    };
+    return composeBookingEmail(
+      { name: "Alex", welcomeSent: false },
+      emailClinic === "waterloo" ? "waterloo" : "bethnal",
+      "Thu 10 Jul · 2:00pm",
+      true,
+      previewSettings,
+    ).body;
+  }, [
+    settings,
+    emailClinic,
+    editingNote,
+    noteDraft,
+    editingTemplate,
+    templateDraft,
+    editingPayment,
+    paymentDraft,
+    editingAddresses,
+    addressesDraft,
+  ]);
 
   const reviewFields =
     reviewClinic === "waterloo"
@@ -140,6 +179,30 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
             Creates two 1-hour events: &quot;(Client) — Waterloo&quot; on your personal calendar + &quot;R5 -
             Phoenix&quot; on the room calendar.
           </div>
+        </div>
+      </Card>
+
+      <SectionLabel>MESSAGE PREVIEW — WHAT A NEW CLIENT ACTUALLY RECEIVES</SectionLabel>
+      <Card className="flex flex-col gap-3 px-[18px] py-4">
+        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+          {(["bethnal", "waterloo"] as const).map((c) => (
+            <button
+              key={c}
+              onClick={() => setEmailClinic(c)}
+              className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+                emailClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+              }`}
+            >
+              {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+            </button>
+          ))}
+        </div>
+        <div className="rounded-[10px] bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.35_0.02_60)]">
+          {previewBody}
+        </div>
+        <div className="text-[11.5px] text-muted">
+          Updates live as you edit the template, access note, payment details, or addresses below — including
+          unsaved changes — so you can catch mistakes (like a garbled map link) before a client ever sees them.
         </div>
       </Card>
 
@@ -282,7 +345,12 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
           <button
             onClick={() => {
               if (!editingAddresses) {
-                setAddressesDraft({ waterlooAddress: settings.waterlooAddress, bethnalAddress: settings.bethnalAddress });
+                setAddressesDraft({
+                  waterlooAddress: settings.waterlooAddress,
+                  bethnalAddress: settings.bethnalAddress,
+                  waterlooArrivalNote: settings.waterlooArrivalNote,
+                  bethnalArrivalNote: settings.bethnalArrivalNote,
+                });
               }
               setEditingAddresses(!editingAddresses);
             }}
@@ -294,8 +362,10 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
         {!editingAddresses ? (
           <Card className="px-5 py-1.5">
             <Row label="Waterloo">{settings.waterlooAddress || "not set yet"}</Row>
-            <Row label="Bethnal Green" last>
-              {settings.bethnalAddress || "not set yet"}
+            <Row label="Waterloo arrival note">{settings.waterlooArrivalNote || "not set yet"}</Row>
+            <Row label="Bethnal Green">{settings.bethnalAddress || "not set yet"}</Row>
+            <Row label="Bethnal Green arrival note" last>
+              {settings.bethnalArrivalNote || "not set yet"}
             </Row>
           </Card>
         ) : (
@@ -312,6 +382,23 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
                   value={addressesDraft[key]}
                   onChange={(e) => setAddressesDraft({ ...addressesDraft, [key]: e.target.value })}
                   className={inputClass}
+                  placeholder="e.g. 12 Some Street, London E2 0AB"
+                />
+              </label>
+            ))}
+            {(
+              [
+                ["waterlooArrivalNote", "WATERLOO ARRIVAL NOTE"],
+                ["bethnalArrivalNote", "BETHNAL GREEN ARRIVAL NOTE"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
+                <textarea
+                  value={addressesDraft[key]}
+                  onChange={(e) => setAddressesDraft({ ...addressesDraft, [key]: e.target.value })}
+                  className={`${inputClass} min-h-[80px] resize-y leading-[1.55]`}
+                  placeholder="e.g. Entrance is to the left of the art gallery. I'll come down to let you in a few minutes before — message me if you're early."
                 />
               </label>
             ))}
@@ -324,8 +411,10 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
           </Card>
         )}
         <div className="text-[11.5px] text-muted">
-          Used as the location on the calendar invite (Google adds a map link automatically) and for the Google Maps
-          link in a new client's first email.
+          The address is used as the location on the calendar invite (Google adds a map link automatically) and for
+          the Google Maps link in a new client&apos;s first email — keep it short, just the address. Put arrival
+          instructions (entrance, doorman, waiting downstairs) in the arrival note instead — it&apos;s sent as plain
+          text and never turned into a link.
         </div>
       </Dropdown>
 

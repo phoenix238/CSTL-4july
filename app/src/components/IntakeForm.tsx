@@ -8,18 +8,21 @@ import { CONSENT_PARAGRAPHS, type IntakeQuestion } from "@/lib/intakeQuestions";
 export function IntakeForm({
   token,
   clientName,
+  clientEmail,
   clientPhone,
   alreadyDone,
   questions,
 }: {
   token: string;
   clientName: string;
+  clientEmail: string;
   clientPhone: string;
   alreadyDone: boolean;
   questions: IntakeQuestion[];
 }) {
   const toast = useToast();
   const [name, setName] = useState(clientName);
+  const [email, setEmail] = useState(clientEmail);
   const [answers, setAnswers] = useState<Record<string, string>>(
     questions.some((q) => q.key === "phone") ? { phone: clientPhone } : {},
   );
@@ -34,6 +37,10 @@ export function IntakeForm({
       toast("Please add your name");
       return;
     }
+    if (!/\S+@\S+\.\S+/.test(email.trim())) {
+      toast("Please add a valid email address");
+      return;
+    }
     if (consent === null) {
       toast("Please answer the consent question");
       return;
@@ -42,7 +49,7 @@ export function IntakeForm({
     try {
       await api(`/api/intake/${token}`, {
         method: "POST",
-        body: JSON.stringify({ name, answers, consent }),
+        body: JSON.stringify({ name, email, answers, consent }),
       });
       setDone(true);
     } catch (err) {
@@ -85,6 +92,19 @@ export function IntakeForm({
         <label className="flex flex-col gap-1.5">
           <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[12.5px] font-semibold text-ink-soft">Email address</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={inputClass}
+          />
+          <span className="text-[11.5px] leading-relaxed text-muted">
+            So Phoenix can share your Google Calendar invite for the session.
+          </span>
         </label>
 
         {questions.map((q) => (

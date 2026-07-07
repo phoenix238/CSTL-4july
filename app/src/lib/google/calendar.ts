@@ -53,6 +53,53 @@ export async function createBookingEvents(bookingId: string) {
   return { personalEventId, secondaryEventId };
 }
 
+/**
+ * Add a client as an attendee on their upcoming confirmed booking(s), so Google
+ * emails them the calendar invite retroactively — used when an email address is
+ * captured after the booking was made (e.g. via the intake form). Idempotent:
+ * skips a booking if the client is already an attendee on its personal event.
+ * Per-booking Google API errors are caught and logged so one bad event doesn't
+ * block the rest; callers should still wrap this in try/catch (e.g. Google not
+ * connected yet) since setup failures before the loop are not swallowed here.
+ */
+export async function shareCalendarInvite(clientId: string) {
+  const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+  if (!client.email) return;
+
+  const bookings = await prisma.booking.findMany({
+    where: { clientId, status: "confirmed", startsAt: { gte: new Date() }, personalEventId: { not: "" } },
+    orderBy: { startsAt: "asc" },
+  });
+  if (!bookings.length) return;
+
+  const calendar = await getCalendarApi();
+  const calId = await calendarId("personal");
+  let shared = false;
+  for (const booking of bookings) {
+    try {
+      const ev = await calendar.events.get({ calendarId: calId, eventId: booking.personalEventId });
+      const alreadyInvited = (ev.data.attendees ?? []).some(
+        (a) => a.email?.toLowerCase() === client.email.toLowerCase(),
+      );
+      if (alreadyInvited) continue;
+      await calendar.events.patch({
+        calendarId: calId,
+        eventId: booking.personalEventId,
+        sendUpdates: "all",
+        requestBody: {
+          attendees: [...(ev.data.attendees ?? []), { email: client.email, displayName: client.name }],
+        },
+      });
+      shared = true;
+    } catch (err) {
+      console.error("shareCalendarInvite failed for booking", booking.id, err);
+    }
+  }
+  if (shared) {
+    await prisma.client.update({ where: { id: clientId }, data: { calendarInviteSharedAt: new Date() } });
+  }
+}
+
 /** Delete a booking's Google events (tolerates already-deleted events). */
 export async function deleteBookingGoogleEvents(booking: {
   clinic: string;

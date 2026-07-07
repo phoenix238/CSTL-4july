@@ -18,6 +18,7 @@ export interface ProfileClient {
   intakeDone: boolean;
   intakeEmailSentAt: string | null;
   reviewEmailSentAt: string | null;
+  calendarInviteSharedAt: string | null;
   consentGiven: boolean | null;
   dob: string;
   occupation: string;
@@ -262,6 +263,11 @@ export function ClientProfile({
               ) : (
                 <Chip color="oklch(0.5 0.02 58)" bg="oklch(0.94 0.01 80)">
                   No marketing
+                </Chip>
+              )}
+              {client.calendarInviteSharedAt && (
+                <Chip color="oklch(0.42 0.08 148)" bg="oklch(0.94 0.03 148)">
+                  Calendar invite shared ✓ {client.calendarInviteSharedAt}
                 </Chip>
               )}
             </div>

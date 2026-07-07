@@ -15,6 +15,8 @@ export interface EmailSettings {
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
+  waterlooArrivalNote: string;
+  bethnalArrivalNote: string;
 }
 
 /** Preview placeholder shown before the real per-client intake link is known; swapped server-side. */
@@ -65,6 +67,11 @@ export function composeBookingEmail(
     const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
     body += `\n\nLocation: ${address}\nMap: ${mapsLink}`;
     includes.push("Location & map link");
+  }
+  const arrivalNote = clinic === "waterloo" ? settings.waterlooArrivalNote : settings.bethnalArrivalNote;
+  if (arrivalNote) {
+    body += `\n\n${arrivalNote}`;
+    includes.push("Arrival instructions");
   }
   if (sendPayment) {
     body += `\n\nPayment (${CLINIC_PRICE[clinic]}):\n${settings.paymentDetails}`;

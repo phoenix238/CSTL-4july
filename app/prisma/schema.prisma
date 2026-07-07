@@ -30,6 +30,7 @@ model Client {
   intakeToken   String        @default("") // private token for the client's in-app intake link
   intakeEmailSentAt DateTime? // last time the intake-form email was sent
   reviewEmailSentAt DateTime? // last time the post-session review email was sent
+  calendarInviteSharedAt DateTime? // last time an upcoming booking's calendar invite was auto-shared (e.g. after intake submit)
   consentGiven  Boolean? // null = not yet answered; set from the intake form's Yes/No consent question
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -91,11 +92,13 @@ model Enquiry {
 model AppSettings {
   id                    Int    @id @default(1)
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
-  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
-  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
+  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below. Once you've completed it, I'll be able to share a Google Calendar invite for our session with you.\n\nSee you soon,\nPhoenix")
+  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below. Once you've completed it, I'll be able to share a Google Calendar invite for our session with you.\n\nSee you soon,\nPhoenix")
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
-  waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
-  bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
+  waterlooAddress       String @default("") // short clean address — calendar invite location + Maps link in the first email
+  bethnalAddress        String @default("") // short clean address — calendar invite location + Maps link in the first email
+  waterlooArrivalNote   String @default("") // free text: entrance/doorman/arrival instructions — plain text in the first email, never URL-encoded
+  bethnalArrivalNote    String @default("") // free text: entrance/doorman/arrival instructions — plain text in the first email, never URL-encoded
   intakeFormUrl         String @default("https://forms.gle/2nPTLzHcffgzmydo8")
   googleRefreshToken    String @default("")
   personalCalendarId    String @default("primary")
