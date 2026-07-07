@@ -21,6 +21,8 @@ export interface PlannedEvent {
   end: Date;
   /** the client is invited (receives the Google Calendar invite) */
   inviteClient: boolean;
+  /** clinic address — shown on the invite and turned into a Google Maps link */
+  location?: string;
 }
 
 export const SESSION_MINUTES = 60;
@@ -43,6 +45,7 @@ export function planBookingEvents(
   clinic: Clinic,
   clientName: string,
   sessionStart: Date,
+  address?: string,
 ): PlannedEvent[] {
   const sessionEnd = addMinutes(sessionStart, SESSION_MINUTES);
   if (clinic === "waterloo") {
@@ -53,6 +56,7 @@ export function planBookingEvents(
         start: sessionStart,
         end: sessionEnd,
         inviteClient: true,
+        location: address || undefined,
       },
       {
         calendar: "room",
@@ -73,6 +77,7 @@ export function planBookingEvents(
       start: sessionStart,
       end: sessionEnd,
       inviteClient: true,
+      location: address || undefined,
     },
     {
       calendar: "chalkFarm",

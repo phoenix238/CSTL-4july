@@ -11,6 +11,8 @@ export interface SettingsData {
   emailTemplateWaterloo: string;
   emailTemplateBethnal: string;
   paymentDetails: string;
+  waterlooAddress: string;
+  bethnalAddress: string;
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
@@ -60,6 +62,13 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
 
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [editingPayment, setEditingPayment] = useState(false);
+  const [paymentDraft, setPaymentDraft] = useState("");
+  const [editingAddresses, setEditingAddresses] = useState(false);
+  const [addressesDraft, setAddressesDraft] = useState({
+    waterlooAddress: settings.waterlooAddress,
+    bethnalAddress: settings.bethnalAddress,
+  });
   const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("bethnal");
   const [editingTemplate, setEditingTemplate] = useState(false);
   const [templateDraft, setTemplateDraft] = useState("");
@@ -76,7 +85,6 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
     roomCalendarId: settings.roomCalendarId,
     chalkFarmCalendarId: settings.chalkFarmCalendarId,
     appUrl: settings.appUrl,
-    paymentDetails: settings.paymentDetails,
   });
 
   const baseUrl = (settings.appUrl?.trim() || "https://cstl-4july.vercel.app").replace(/\/+$/, "");
@@ -232,6 +240,95 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
         </Card>
       </Dropdown>
 
+      <Dropdown label="PAYMENT / BANK DETAILS — GOES IN A NEW CLIENT'S FIRST EMAIL" open={!!open.payment} onToggle={() => toggle("payment")}>
+        <div className="flex items-center justify-end px-0.5">
+          <button
+            onClick={() => {
+              if (!editingPayment) setPaymentDraft(settings.paymentDetails);
+              setEditingPayment(!editingPayment);
+            }}
+            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+          >
+            {editingPayment ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {!editingPayment ? (
+          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.4_0.06_48)]">
+            {settings.paymentDetails}
+          </div>
+        ) : (
+          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
+            <textarea
+              value={paymentDraft}
+              onChange={(e) => setPaymentDraft(e.target.value)}
+              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+            />
+            <PrimaryButton
+              onClick={() => save({ paymentDetails: paymentDraft }, () => setEditingPayment(false), "Payment details updated ✓")}
+              className="self-start px-[18px] py-[9px] text-[13px]"
+            >
+              Save
+            </PrimaryButton>
+          </Card>
+        )}
+        <div className="text-[11.5px] text-muted">
+          Your real bank details — inserted when you tick &quot;include payment details&quot; while confirming a new
+          client's session.
+        </div>
+      </Dropdown>
+
+      <Dropdown label="CLINIC ADDRESSES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
+        <div className="flex items-center justify-end px-0.5">
+          <button
+            onClick={() => {
+              if (!editingAddresses) {
+                setAddressesDraft({ waterlooAddress: settings.waterlooAddress, bethnalAddress: settings.bethnalAddress });
+              }
+              setEditingAddresses(!editingAddresses);
+            }}
+            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+          >
+            {editingAddresses ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {!editingAddresses ? (
+          <Card className="px-5 py-1.5">
+            <Row label="Waterloo">{settings.waterlooAddress || "not set yet"}</Row>
+            <Row label="Bethnal Green" last>
+              {settings.bethnalAddress || "not set yet"}
+            </Row>
+          </Card>
+        ) : (
+          <Card className="flex flex-col gap-[11px] border-[1.5px] border-clay/35 px-4 py-3.5">
+            {(
+              [
+                ["waterlooAddress", "WATERLOO ADDRESS"],
+                ["bethnalAddress", "BETHNAL GREEN ADDRESS"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
+                <input
+                  value={addressesDraft[key]}
+                  onChange={(e) => setAddressesDraft({ ...addressesDraft, [key]: e.target.value })}
+                  className={inputClass}
+                />
+              </label>
+            ))}
+            <PrimaryButton
+              onClick={() => save({ ...addressesDraft }, () => setEditingAddresses(false), "Clinic addresses updated ✓")}
+              className="self-start px-[18px] py-[9px] text-[13px]"
+            >
+              Save
+            </PrimaryButton>
+          </Card>
+        )}
+        <div className="text-[11.5px] text-muted">
+          Used as the location on the calendar invite (Google adds a map link automatically) and for the Google Maps
+          link in a new client's first email.
+        </div>
+      </Dropdown>
+
       <Dropdown label="GOOGLE" open={!!open.google} onToggle={() => toggle("google")}>
         <div className="flex items-center justify-end px-0.5">
           <button
@@ -268,7 +365,6 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
                 ["roomCalendarId", "R5 ROOM CALENDAR ID", "the room calendar's ID (Waterloo bookings)"],
                 ["chalkFarmCalendarId", "CHALK FARM CALENDAR ID", "the Chalk Farm calendar's ID (Bethnal Green blocks)"],
                 ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-4july.vercel.app"],
-                ["paymentDetails", "PAYMENT DETAILS", "bank details / payment text for new-client emails"],
               ] as const
             ).map(([key, label, hint]) => (
               <label key={key} className="flex flex-col gap-1">

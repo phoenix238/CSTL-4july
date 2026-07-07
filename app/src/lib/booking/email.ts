@@ -13,6 +13,8 @@ export interface EmailSettings {
   emailTemplateBethnal: string;
   accessNote: string;
   paymentDetails: string;
+  waterlooAddress: string;
+  bethnalAddress: string;
 }
 
 /** Preview placeholder shown before the real per-client intake link is known; swapped server-side. */
@@ -58,6 +60,12 @@ export function composeBookingEmail(
     "Link to the CSTL intake form",
     "Access note — stairs, no step-free access",
   ];
+  const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
+  if (address) {
+    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    body += `\n\nLocation: ${address}\nMap: ${mapsLink}`;
+    includes.push("Location & map link");
+  }
   if (sendPayment) {
     body += `\n\nPayment (${CLINIC_PRICE[clinic]}):\n${settings.paymentDetails}`;
     includes.push(`Payment details — ${CLINIC_PRICE[clinic]}`);

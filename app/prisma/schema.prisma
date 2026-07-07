@@ -94,6 +94,8 @@ model AppSettings {
   emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
   emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
+  waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
+  bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
   intakeFormUrl         String @default("https://forms.gle/2nPTLzHcffgzmydo8")
   googleRefreshToken    String @default("")
   personalCalendarId    String @default("primary")
