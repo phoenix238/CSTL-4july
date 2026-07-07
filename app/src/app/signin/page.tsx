@@ -14,7 +14,7 @@ export default async function SignInPage() {
         </div>
         <h1 className="mt-4 font-serif text-2xl font-medium">Phoenix Tanner</h1>
         <div className="mt-1 text-[10px] font-semibold tracking-[0.1em] text-muted">
-          CSTL · CRANIOSACRAL — CONTROL TOWER
+          CSTL · CRANIOSACRAL
         </div>
         <p className="mt-4 text-[13px] leading-relaxed text-muted">
           Sign in with your Google account to connect Calendar, Drive and Gmail.

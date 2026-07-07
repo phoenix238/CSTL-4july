@@ -6,8 +6,8 @@ const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader
 const workSans = Work_Sans({ subsets: ["latin"], variable: "--font-worksans" });
 
 export const metadata: Metadata = {
-  title: "CSTL Control Tower",
-  description: "Phoenix Tanner — CSTL booking & documentation control tower",
+  title: "CSTL",
+  description: "Phoenix Tanner — CSTL booking & documentation",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "CSTL", statusBarStyle: "default" },
 };
