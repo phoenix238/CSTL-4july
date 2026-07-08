@@ -102,6 +102,7 @@ model AppSettings {
   roomCalendarId        String @default("") // R5 room calendar
   chalkFarmCalendarId   String @default("") // Bethnal Green 2h blocks
   clientsFolderId       String @default("") // Drive › CSTL › Clients
+  reflectionsDocId      String @default("") // Drive › CSTL › "Phoenix session reflections" — one Doc, all clients
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
   appUrl                String @default("") // base URL for building intake / share links
   intakeQuestions       Json? // configurable intake questions; null = built-in defaults

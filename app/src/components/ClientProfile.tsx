@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
+import { ReflectionComposer } from "./ReflectionComposer";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
@@ -56,12 +57,14 @@ export function ClientProfile({
   nextSession,
   nextBookingId,
   activeOffer,
+  reflectionsDocId,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
   nextSession: string | null;
   nextBookingId?: string | null;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
+  reflectionsDocId?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -70,6 +73,7 @@ export function ClientProfile({
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [noteOpen, setNoteOpen] = useState(false);
+  const [reflectionOpen, setReflectionOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -332,6 +336,36 @@ export function ClientProfile({
                 setNoteOpen(false);
                 router.refresh();
                 toast(`Saved to ${client.name}'s Doc in Drive ✓`);
+              }}
+            />
+          )}
+
+          <div className="flex items-center justify-between px-0.5">
+            <button
+              onClick={() => setReflectionOpen(!reflectionOpen)}
+              className="cursor-pointer text-[11.5px] font-semibold text-muted hover:text-clay-text"
+            >
+              {reflectionOpen ? "Close" : "+ Add a personal reflection"}
+            </button>
+            {reflectionsDocId && (
+              <a
+                href={`https://docs.google.com/document/d/${reflectionsDocId}/edit`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11.5px] font-semibold text-muted hover:text-clay-text"
+              >
+                Open reflections doc ›
+              </a>
+            )}
+          </div>
+
+          {reflectionOpen && (
+            <ReflectionComposer
+              clientId={client.id}
+              onSaved={() => {
+                setReflectionOpen(false);
+                router.refresh();
+                toast("Saved to your Phoenix session reflections doc ✓");
               }}
             />
           )}

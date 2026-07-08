@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { getSettings, prisma } from "@/lib/db";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
 import { ClientProfile, type ProfileNote } from "@/components/ClientProfile";
 
@@ -10,6 +10,8 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     include: { notes: { orderBy: { date: "desc" } } },
   });
   if (!client) notFound();
+
+  const { reflectionsDocId } = await getSettings();
 
   const nextBooking = await prisma.booking.findFirst({
     where: { clientId: id, status: "confirmed", startsAt: { gte: new Date() } },
@@ -64,6 +66,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
       nextBookingId={nextBooking?.id ?? null}
       activeOffer={activeOffer}
+      reflectionsDocId={reflectionsDocId || null}
     />
   );
 }

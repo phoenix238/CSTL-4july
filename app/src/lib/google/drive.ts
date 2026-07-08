@@ -88,6 +88,56 @@ export async function ensureClientFolderAndDoc(clientId: string) {
   return { folderId, docId };
 }
 
+/**
+ * Drive › CSTL › "Phoenix session reflections" — one Doc, shared across every
+ * client, for Phoenix's own private reflections on a session (separate from
+ * the client's own Doc). Created once, cached in settings.
+ */
+export async function ensureReflectionsDoc(): Promise<string> {
+  const settings = await getSettings();
+  if (settings.reflectionsDocId) return settings.reflectionsDocId;
+  const cstl = await ensureFolder("root", "CSTL");
+  const name = "Phoenix session reflections";
+  let docId = await findChild(cstl, name, "application/vnd.google-apps.document");
+  if (!docId) {
+    const drive = await getDriveApi();
+    const res = await drive.files.create({
+      requestBody: { name, mimeType: "application/vnd.google-apps.document", parents: [cstl] },
+      fields: "id",
+    });
+    docId = res.data.id!;
+    const docs = await getDocsApi();
+    await docs.documents.batchUpdate({
+      documentId: docId,
+      requestBody: {
+        requests: [
+          {
+            insertText: {
+              location: { index: 1 },
+              text: "Phoenix session reflections\nPrivate notes on sessions, across every client.\n\n",
+            },
+          },
+        ],
+      },
+    });
+  }
+  await prisma.appSettings.update({ where: { id: 1 }, data: { reflectionsDocId: docId } });
+  return docId;
+}
+
+/** Append a personal reflection (date + client) to the shared reflections Doc. */
+export async function appendReflectionToDoc(
+  docId: string,
+  reflection: { date: string; client: string; text: string },
+) {
+  await appendFormattedSections(docId, null, [
+    {
+      heading: `${reflection.date} — ${reflection.client}`,
+      lines: [{ kind: "paragraph", value: reflection.text }],
+    },
+  ]);
+}
+
 /** Rename the client's folder + Doc when the client's name changes. */
 export async function renameClientDrive(clientId: string, newName: string) {
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
