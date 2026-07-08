@@ -16,7 +16,7 @@ import {
 } from "./ui";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
-import { composeOfferMessage } from "@/lib/booking/offer";
+import { composeOfferMessage, composeOfferTimesOnly } from "@/lib/booking/offer";
 import { fmtDayLong, fmtTime, londonDayStart, londonWeekStart } from "@/lib/time";
 import { Legend } from "./calendar/Legend";
 import { TimeGrid } from "./calendar/TimeGrid";
@@ -368,7 +368,7 @@ export function EnquiryFlow({
     return d.enquiry.id;
   }
 
-  async function copyAndMarkOffered() {
+  async function copyAndMarkOffered(timesOnly = false) {
     if (!selected.length) {
       toast("Pick some times to offer first");
       return;
@@ -377,8 +377,11 @@ export function EnquiryFlow({
     try {
       const id = await ensureEnquiry();
       const displayName = (activeClient?.name || name || "there").trim();
-      const body = emailBody.trim() || composeOfferMessage(displayName, clinic, selected);
-      await navigator.clipboard?.writeText(body).catch(() => {});
+      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected);
+      // The clipboard gets either the full message or just the bare times/days;
+      // the offer itself (times + status) is recorded the same way regardless.
+      const clip = timesOnly ? composeOfferTimesOnly(selected) : message;
+      await navigator.clipboard?.writeText(clip).catch(() => {});
       await api(`/api/enquiries/${id}/offer`, {
         method: "POST",
         body: JSON.stringify({
@@ -387,10 +390,14 @@ export function EnquiryFlow({
           times: selected.map((d) => d.toISOString()),
           sendEmail: false,
           clientId: activeClient?.id,
-          emailBody: body,
+          emailBody: message,
         }),
       });
-      toast("Times copied to your clipboard — marked as offered");
+      toast(
+        timesOnly
+          ? "Times copied to your clipboard — marked as offered"
+          : "Message copied to your clipboard — marked as offered",
+      );
       void refreshWaiting();
       resetToEmpty();
     } catch (err) {
@@ -798,9 +805,14 @@ export function EnquiryFlow({
               />
             </>
           )}
-          <PrimaryButton onClick={copyAndMarkOffered} disabled={offering} className="self-start">
-            {offering ? "Copying…" : "Copy times & mark as offered"}
-          </PrimaryButton>
+          <div className="flex flex-wrap gap-2">
+            <PrimaryButton onClick={() => copyAndMarkOffered(true)} disabled={offering}>
+              {offering ? "Copying…" : "Copy times only & mark as offered"}
+            </PrimaryButton>
+            <OutlineButton onClick={() => copyAndMarkOffered(false)} disabled={offering}>
+              Copy full message instead
+            </OutlineButton>
+          </div>
         </Card>
       )}
 
