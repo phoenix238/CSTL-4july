@@ -17,3 +17,14 @@ export function composeOfferMessage(clientName: string, clinic: Clinic, times: D
     `Warm wishes,\nPhoenix`
   );
 }
+
+/**
+ * Just the offered times as bare lines — no greeting, sign-off or clinic blurb.
+ * One "<day> at <time>" per line, earliest first, for pasting the raw times alone.
+ */
+export function composeOfferTimesOnly(times: Date[]): string {
+  return [...times]
+    .sort((a, b) => a.getTime() - b.getTime())
+    .map((t) => `${fmtDayLong(t)} at ${fmtTime(t)}`)
+    .join("\n");
+}
