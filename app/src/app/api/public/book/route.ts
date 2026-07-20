@@ -7,6 +7,7 @@ import type { Clinic } from "@/lib/booking/rules";
 import { findExistingClient } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
+import { sendEmail } from "@/lib/google/gmail";
 
 // NOT guarded — public self-booking. Authorization model: we never trust the
 // posted startISO; we independently recompute the currently-available slot
@@ -81,10 +82,28 @@ export async function POST(req: Request) {
       sendPayment: true,
     });
 
+    // Let Phoenix know a booking came in — non-fatal: the booking itself has
+    // already succeeded, so a notification hiccup shouldn't fail the visitor's
+    // confirmation. Email lands in Gmail, which already pushes to her phone.
+    if (process.env.ALLOWED_EMAIL) {
+      try {
+        await sendEmail(
+          process.env.ALLOWED_EMAIL,
+          `New booking — ${result.clientName}`,
+          `${result.clientName} just booked online.\n\n${result.whenLabel}\nContact: ${cleanEmail}${cleanPhone ? ` · ${cleanPhone}` : ""}\n\nBooked via your public booking page.`,
+        );
+      } catch (err) {
+        console.error("Couldn't send booking notification email", err);
+      }
+    }
+
     return NextResponse.json({ whenLabel: result.whenLabel, clientName: result.clientName, emailSent: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Something went wrong";
+    // Never surface raw internal/Google API error text to a public visitor.
     console.error(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Something went wrong on our end — please try again, or get in touch with Phoenix directly." },
+      { status: 500 },
+    );
   }
 }
