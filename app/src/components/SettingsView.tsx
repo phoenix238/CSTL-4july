@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./ui";
 import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
+import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./AvailabilitySettings";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
+import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
   accessNote: string;
@@ -25,6 +27,11 @@ export interface SettingsData {
   reviewEmailSubjectBethnal: string;
   reviewEmailBodyWaterloo: string;
   reviewEmailBodyBethnal: string;
+  weeklyHours: WeeklyHours;
+  bookingSlotMinutes: number;
+  bookingMinNoticeMins: number;
+  bookingHorizonDays: number;
+  bookingBufferMinutes: number;
 }
 
 /** A collapsed-by-default section — click the header to reveal its contents. */
@@ -53,7 +60,7 @@ function Dropdown({
   );
 }
 
-export function SettingsView({ settings }: { settings: SettingsData }) {
+export function SettingsView({ settings, overrides }: { settings: SettingsData; overrides: AvailabilityOverrideDTO[] }) {
   const router = useRouter();
   const toast = useToast();
 
@@ -142,6 +149,18 @@ export function SettingsView({ settings }: { settings: SettingsData }) {
           </div>
         </div>
       </Card>
+
+      <Dropdown label="AVAILABILITY — YOUR PUBLIC BOOKING PAGE" open={!!open.availability} onToggle={() => toggle("availability")}>
+        <AvailabilitySettings
+          weeklyHours={settings.weeklyHours}
+          overrides={overrides}
+          bookingSlotMinutes={settings.bookingSlotMinutes}
+          bookingMinNoticeMins={settings.bookingMinNoticeMins}
+          bookingHorizonDays={settings.bookingHorizonDays}
+          bookingBufferMinutes={settings.bookingBufferMinutes}
+          baseUrl={baseUrl}
+        />
+      </Dropdown>
 
       <Dropdown label="ACCESS NOTE — GOES IN A NEW CLIENT'S FIRST EMAIL" open={!!open.accessNote} onToggle={() => toggle("accessNote")}>
         <div className="flex items-center justify-end px-0.5">
