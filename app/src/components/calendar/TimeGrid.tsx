@@ -4,12 +4,14 @@
 // enquiry/booking slot picker (picker mode). Hours down the side, days across,
 // events drawn as positioned blocks — a normal calendar.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
 import { fmtDayShort, fmtTime, londonMinutes, londonYMD } from "@/lib/time";
 import { layoutDayEvents, SPAN_COLORS, type SpanDTO } from "./layout";
 
 const HOUR_PX = 48;
+// Choosing a time snaps to this (Google-Calendar-style 15-min steps).
+const SNAP_MIN = 15;
 
 export interface TimeGridProps {
   weekStart: Date;
@@ -64,7 +66,16 @@ export function TimeGrid({
   const now = new Date();
   const slotMinutes = picker?.slotMinutes ?? 30;
 
+  // Live "where you're about to book" indicator (display mode) — the day column
+  // under the cursor and the 15-min-snapped minute, so choosing a time feels
+  // precise, like dragging on Google Calendar.
+  const [hover, setHover] = useState<{ di: number; min: number } | null>(null);
+
   const toY = (min: number) => ((min - startHour * 60) / 60) * HOUR_PX;
+
+  // Snap a cursor Y (px from the column top) to a minute-of-day, 15-min steps.
+  const snapMinFromY = (offsetY: number) =>
+    startHour * 60 + Math.floor((offsetY / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
 
   // Split spans into per-day events, clamped to the visible hour window.
   const dayEvents: DayEvent[][] = useMemo(
@@ -111,8 +122,19 @@ export function TimeGrid({
     if (mode !== "display" || !onSlotClick) return;
     if (e.target !== e.currentTarget) return; // ignore clicks on event blocks
     const rect = e.currentTarget.getBoundingClientRect();
-    const min = startHour * 60 + Math.floor((e.clientY - rect.top) / HOUR_PX * 60 / 30) * 30;
-    onSlotClick(new Date(day.getTime() + min * 60_000));
+    onSlotClick(new Date(day.getTime() + snapMinFromY(e.clientY - rect.top) * 60_000));
+  };
+
+  const slotSelectable = mode === "display" && !!onSlotClick;
+
+  const handleColumnHover = (di: number) => (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!slotSelectable) return;
+    if (e.target !== e.currentTarget) {
+      setHover(null); // over an event block — don't show the "book here" line
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHover({ di, min: snapMinFromY(e.clientY - rect.top) });
   };
 
   return (
@@ -158,9 +180,11 @@ export function TimeGrid({
               <div
                 key={day.toISOString()}
                 onClick={handleColumnClick(day)}
+                onMouseMove={handleColumnHover(di)}
+                onMouseLeave={() => setHover((h) => (h?.di === di ? null : h))}
                 className={`relative flex-1 border-l border-hairline ${
                   isToday ? "bg-[oklch(0.975_0.015_60)]" : ""
-                } ${mode === "display" && onSlotClick ? "cursor-pointer" : ""}`}
+                } ${slotSelectable ? "cursor-pointer" : ""}`}
                 style={{ height: gridHeight }}
               >
                 {/* hour hairlines */}
@@ -171,6 +195,25 @@ export function TimeGrid({
                     style={{ top: (i + 1) * HOUR_PX }}
                   />
                 ))}
+
+                {/* "book here" indicator — a clay line + time that follows the
+                    cursor (15-min snap) with a ghost 1-hour session below it */}
+                {slotSelectable && hover?.di === di && hover.min + 60 <= endHour * 60 && (
+                  <div
+                    className="pointer-events-none absolute right-[3px] left-[3px] z-30"
+                    style={{ top: toY(hover.min) }}
+                  >
+                    <div
+                      className="rounded-md border border-dashed border-clay/60 bg-clay-tint/50"
+                      style={{ height: HOUR_PX }}
+                    />
+                    <div className="absolute -top-[1px] left-0 flex items-center gap-1">
+                      <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
+                        {fmtTime(new Date(day.getTime() + hover.min * 60_000))}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* picker: free slot pills */}
                 {mode === "picker" &&
