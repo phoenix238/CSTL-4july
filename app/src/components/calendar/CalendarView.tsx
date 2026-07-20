@@ -116,6 +116,37 @@ export function CalendarView() {
     }
   }
 
+  async function handleEventMove(span: SpanDTO, newStart: Date) {
+    try {
+      if (span.source === "booking" && span.bookingId) {
+        await api(`/api/bookings/${span.bookingId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ startISO: newStart.toISOString() }),
+        });
+      } else if (span.source === "personal" && span.googleEventId) {
+        const durMs = new Date(span.end).getTime() - new Date(span.start).getTime();
+        await api("/api/events", {
+          method: "PATCH",
+          body: JSON.stringify({
+            calendar: "personal",
+            eventId: span.googleEventId,
+            title: span.title,
+            startISO: newStart.toISOString(),
+            endISO: new Date(newStart.getTime() + durMs).toISOString(),
+          }),
+        });
+      } else {
+        return;
+      }
+      toast("Moved ✓");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't move that");
+    } finally {
+      week.invalidate();
+      month.invalidate();
+    }
+  }
+
   async function handleSlotClick(slot: Date) {
     if (reschedule) {
       try {
@@ -258,6 +289,7 @@ export function CalendarView() {
                 ? undefined
                 : (start, end) => setComposer({ mode: "create", start, end })
             }
+            onEventMove={reschedule ? undefined : handleEventMove}
           />
         )
       ) : (

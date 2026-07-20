@@ -9,8 +9,8 @@ export function Legend({ variant = "display" }: { variant?: "display" | "picker"
   const items =
     variant === "picker"
       ? [
-          { label: "Free — tap to choose", swatch: "oklch(0.93 0.035 148)" },
-          { label: "Busy", swatch: "oklch(0.94 0.01 80)" },
+          { label: "Hover a free time to choose", swatch: "oklch(0.62 0.13 148)" },
+          { label: "Busy", swatch: "oklch(0.72 0.12 25)" },
           { label: "Chosen", swatch: "oklch(0.58 0.115 42)" },
         ]
       : DISPLAY_ORDER.map((s) => ({ label: SPAN_COLORS[s].label, swatch: SPAN_COLORS[s].border }));

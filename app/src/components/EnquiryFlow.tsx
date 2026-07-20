@@ -734,8 +734,8 @@ export function EnquiryFlow({
 
       <SectionLabel>
         {bookMode === "offer"
-          ? `PICK A FEW TIMES TO OFFER — ${CLINIC_LABEL[clinic]}`
-          : `PICK A SLOT — ${CLINIC_LABEL[clinic]} · tap a green time`}
+          ? `PICK A FEW TIMES TO OFFER — ${CLINIC_LABEL[clinic]} · tap free times on the grid`
+          : `PICK A SLOT — ${CLINIC_LABEL[clinic]} · tap a free time on the grid`}
       </SectionLabel>
 
       {bookMode === "confirm" && offeredTimes.length > 0 && (
