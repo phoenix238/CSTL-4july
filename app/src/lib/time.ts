@@ -58,11 +58,22 @@ export const fmtDayLong = (d: Date) =>
 export const fmtDate = (d: Date) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric", month: "short", year: "numeric" }).format(d); // "2 Jul 2026"
 
+/** Mon-first weekday index (0=Mon..6=Sun) of an instant, as seen in London. */
+export function londonWeekdayIndex(at: Date): number {
+  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "short" }).format(at);
+  const idx = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(weekday);
+  return idx < 0 ? 0 : idx;
+}
+
 /** Start of the London week (Monday 00:00) containing `from`. */
 export function londonWeekStart(from = new Date()): Date {
-  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(from);
-  const idx = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(weekday);
-  return londonDayStart(-(idx < 0 ? 0 : idx), from);
+  return londonDayStart(-londonWeekdayIndex(from), from);
+}
+
+/** "YYYY-MM-DD" London calendar-date key for an instant. */
+export function londonDateKey(at: Date): string {
+  const { y, m, d } = londonYMD(at);
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 /** Auto-insert the "/" separators as digits are typed: "14031990" → "14/03/1990". */

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma, getSettings } from "@/lib/db";
+import { resolveWeeklyHours } from "@/lib/booking/availability";
 
 /** The editable settings the UI needs (email preview etc.) — no Google secrets. */
 export const GET = guarded(async () => {
@@ -12,6 +13,11 @@ export const GET = guarded(async () => {
     paymentDetails: s.paymentDetails,
     waterlooAddress: s.waterlooAddress,
     bethnalAddress: s.bethnalAddress,
+    weeklyHours: resolveWeeklyHours(s.weeklyHours),
+    bookingSlotMinutes: s.bookingSlotMinutes,
+    bookingMinNoticeMins: s.bookingMinNoticeMins,
+    bookingHorizonDays: s.bookingHorizonDays,
+    bookingBufferMinutes: s.bookingBufferMinutes,
   });
 });
 

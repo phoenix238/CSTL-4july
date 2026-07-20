@@ -122,4 +122,29 @@ model AppSettings {
   reviewEmailSubjectBethnal  String @default("How was your session?")
   reviewEmailBodyWaterloo  String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
   reviewEmailBodyBethnal   String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
+
+  // Public self-booking (/book) — recurring weekly hours per clinic; null/empty = nothing
+  // bookable yet, until configured in Settings › Availability. Shape: WeeklyHours in
+  // src/lib/booking/availability.ts.
+  weeklyHours          Json?
+  // Tunable booking parameters — the Settings "switchboard" sliders.
+  bookingSlotMinutes   Int @default(30)  // candidate slot spacing
+  bookingMinNoticeMins Int @default(120) // can't book within this many minutes of now
+  bookingHorizonDays   Int @default(21)  // how many days ahead the public page shows/allows
+  bookingBufferMinutes Int @default(0)   // extra padding either side of every session's footprint
+}
+
+// One-off availability exceptions — either opens an extra date/window beyond the
+// recurring weekly hours, or blocks/closes a normally-open one (holidays etc.).
+model AvailabilityOverride {
+  id        String   @id @default(cuid())
+  clinic    String   // waterloo | bethnal
+  date      String   // "YYYY-MM-DD", London calendar date — plain string avoids DST/UTC edge cases
+  kind      String   // "open" | "block"
+  startMin  Int      // minutes after London midnight
+  endMin    Int      // minutes after London midnight
+  note      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([clinic, date])
 }
