@@ -14,6 +14,8 @@ export interface SpanDTO {
   clientId?: string;
   bookingId?: string;
   clinic?: Clinic;
+  /** Google's event id — present on real Google events, enables edit/delete. */
+  googleEventId?: string;
 }
 
 export const SPAN_COLORS: Record<

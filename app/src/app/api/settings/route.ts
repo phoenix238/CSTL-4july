@@ -19,6 +19,8 @@ export const GET = guarded(async () => {
     bookingHorizonDays: s.bookingHorizonDays,
     bookingBufferMinutes: s.bookingBufferMinutes,
     bookingNotifyEmail: s.bookingNotifyEmail,
+    // Which calendars are wired up — for the calendar page's event composer.
+    calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },
   });
 });
 

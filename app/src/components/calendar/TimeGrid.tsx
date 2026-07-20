@@ -4,7 +4,7 @@
 // enquiry/booking slot picker (picker mode). Hours down the side, days across,
 // events drawn as positioned blocks — a normal calendar.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
 import { fmtDayShort, fmtTime, londonMinutes, londonYMD } from "@/lib/time";
 import { layoutDayEvents, SPAN_COLORS, type SpanDTO } from "./layout";
@@ -21,8 +21,10 @@ export interface TimeGridProps {
   mode: "display" | "picker";
   /** display mode: click an event block */
   onEventClick?: (span: SpanDTO, anchor: { x: number; y: number }) => void;
-  /** display mode: click empty column space (snapped to 30 min) */
+  /** display mode: click empty column space (snapped to 15 min) */
   onSlotClick?: (slot: Date) => void;
+  /** display mode: drag empty column space to select a time range (15-min snap) */
+  onRangeSelect?: (start: Date, end: Date) => void;
   /** picker mode config */
   picker?: {
     clinic: Clinic;
@@ -55,6 +57,7 @@ export function TimeGrid({
   mode,
   onEventClick,
   onSlotClick,
+  onRangeSelect,
   picker,
 }: TimeGridProps) {
   const days = useMemo(
@@ -118,17 +121,60 @@ export function TimeGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, picker?.clinic, days, spans, startHour, endHour, slotMinutes]);
 
-  const handleColumnClick = (day: Date) => (e: React.MouseEvent<HTMLDivElement>) => {
-    if (mode !== "display" || !onSlotClick) return;
-    if (e.target !== e.currentTarget) return; // ignore clicks on event blocks
+  const slotSelectable = mode === "display" && (!!onSlotClick || !!onRangeSelect);
+
+  // Latest props/config for the stable window drag handlers (avoids stale closures).
+  const cfgRef = useRef({ startHour, endHour, onSlotClick, onRangeSelect });
+  cfgRef.current = { startHour, endHour, onSlotClick, onRangeSelect };
+
+  // Drag-to-create: press on empty space and drag to sweep out a time range,
+  // snapping to 15 min — the Google-Calendar way of choosing a slot.
+  const dragRef = useRef<{ di: number; dayStart: number; rectTop: number; startMin: number } | null>(null);
+  const [dragSel, setDragSel] = useState<{ di: number; a: number; b: number } | null>(null);
+
+  const onDragMove = useCallback((e: MouseEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const { startHour: sh, endHour: eh } = cfgRef.current;
+    let cur = sh * 60 + Math.floor(((e.clientY - d.rectTop) / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
+    cur = Math.max(sh * 60, Math.min(eh * 60, cur));
+    setDragSel({ di: d.di, a: Math.min(d.startMin, cur), b: Math.max(d.startMin, cur) });
+  }, []);
+
+  const onDragUp = useCallback(
+    (e: MouseEvent) => {
+      window.removeEventListener("mousemove", onDragMove);
+      window.removeEventListener("mouseup", onDragUp);
+      const d = dragRef.current;
+      dragRef.current = null;
+      setDragSel(null);
+      if (!d) return;
+      const { startHour: sh, endHour: eh, onSlotClick: click, onRangeSelect: range } = cfgRef.current;
+      let cur = sh * 60 + Math.floor(((e.clientY - d.rectTop) / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
+      cur = Math.max(sh * 60, Math.min(eh * 60, cur));
+      const a = Math.min(d.startMin, cur);
+      const b = Math.max(d.startMin, cur);
+      if (b - a >= SNAP_MIN && range) {
+        range(new Date(d.dayStart + a * 60_000), new Date(d.dayStart + b * 60_000));
+      } else if (click) {
+        click(new Date(d.dayStart + d.startMin * 60_000));
+      }
+    },
+    [onDragMove],
+  );
+
+  const handleColumnDown = (day: Date, di: number) => (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!slotSelectable || e.button !== 0) return;
+    if (e.target !== e.currentTarget) return; // started on an event block — ignore
     const rect = e.currentTarget.getBoundingClientRect();
-    onSlotClick(new Date(day.getTime() + snapMinFromY(e.clientY - rect.top) * 60_000));
+    dragRef.current = { di, dayStart: day.getTime(), rectTop: rect.top, startMin: snapMinFromY(e.clientY - rect.top) };
+    setHover(null);
+    window.addEventListener("mousemove", onDragMove);
+    window.addEventListener("mouseup", onDragUp);
   };
 
-  const slotSelectable = mode === "display" && !!onSlotClick;
-
   const handleColumnHover = (di: number) => (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!slotSelectable) return;
+    if (!slotSelectable || dragRef.current) return;
     if (e.target !== e.currentTarget) {
       setHover(null); // over an event block — don't show the "book here" line
       return;
@@ -179,12 +225,12 @@ export function TimeGrid({
             return (
               <div
                 key={day.toISOString()}
-                onClick={handleColumnClick(day)}
+                onMouseDown={handleColumnDown(day, di)}
                 onMouseMove={handleColumnHover(di)}
                 onMouseLeave={() => setHover((h) => (h?.di === di ? null : h))}
                 className={`relative flex-1 border-l border-hairline ${
                   isToday ? "bg-[oklch(0.975_0.015_60)]" : ""
-                } ${slotSelectable ? "cursor-pointer" : ""}`}
+                } ${slotSelectable ? "cursor-pointer select-none" : ""}`}
                 style={{ height: gridHeight }}
               >
                 {/* hour hairlines */}
@@ -196,9 +242,21 @@ export function TimeGrid({
                   />
                 ))}
 
+                {/* drag-to-create selection — the clay range you're sweeping out */}
+                {dragSel?.di === di && dragSel.b > dragSel.a && (
+                  <div
+                    className="pointer-events-none absolute right-[3px] left-[3px] z-30 flex items-start justify-start rounded-md border border-clay/70 bg-clay-tint/70 px-1 pt-0.5"
+                    style={{ top: toY(dragSel.a), height: ((dragSel.b - dragSel.a) / 60) * HOUR_PX }}
+                  >
+                    <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
+                      {fmtTime(new Date(day.getTime() + dragSel.a * 60_000))}–{fmtTime(new Date(day.getTime() + dragSel.b * 60_000))}
+                    </span>
+                  </div>
+                )}
+
                 {/* "book here" indicator — a clay line + time that follows the
                     cursor (15-min snap) with a ghost 1-hour session below it */}
-                {slotSelectable && hover?.di === di && hover.min + 60 <= endHour * 60 && (
+                {slotSelectable && !dragSel && hover?.di === di && hover.min + 60 <= endHour * 60 && (
                   <div
                     className="pointer-events-none absolute right-[3px] left-[3px] z-30"
                     style={{ top: toY(hover.min) }}

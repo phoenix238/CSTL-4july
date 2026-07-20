@@ -5,11 +5,21 @@ import { londonDayStart, londonWeekStart, londonYMD, fmtDate } from "@/lib/time"
 import { api, useToast } from "../ui";
 import { BookingPopover } from "./BookingPopover";
 import { BookingsList } from "./BookingsList";
+import { EventComposer, type EventCalendar } from "./EventComposer";
 import { MonthGrid } from "./MonthGrid";
 import { QuickBook } from "./QuickBook";
 import { TimeGrid } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
 import { SPAN_COLORS, type SpanDTO, type SpanSource } from "./layout";
+
+interface ComposerState {
+  mode: "create" | "edit";
+  start: Date;
+  end: Date;
+  title?: string;
+  eventId?: string;
+  source?: SpanSource;
+}
 
 const TZ = "Europe/London";
 
@@ -22,9 +32,22 @@ export function CalendarView() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [openSpan, setOpenSpan] = useState<{ span: SpanDTO; anchor: { x: number; y: number } } | null>(null);
   const [quickBookSlot, setQuickBookSlot] = useState<Date | null>(null);
+  const [composer, setComposer] = useState<ComposerState | null>(null);
+  const [calendars, setCalendars] = useState<Record<EventCalendar, boolean>>({
+    personal: true,
+    room: false,
+    chalkFarm: false,
+  });
   const [reschedule, setReschedule] = useState<{ bookingId: string; clientName: string } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [hidden, setHidden] = useState<Set<SpanSource>>(new Set());
+
+  // Which calendars are wired up — governs the event composer's calendar picker.
+  useEffect(() => {
+    api<{ calendars: Record<EventCalendar, boolean> }>("/api/settings")
+      .then((s) => s.calendars && setCalendars(s.calendars))
+      .catch(() => {});
+  }, []);
 
   // Remember which calendars are toggled off between visits.
   useEffect(() => {
@@ -122,7 +145,8 @@ export function CalendarView() {
         <div>
           <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Calendar</h1>
           <div className="mt-[5px] text-[13.5px] text-muted">
-            All three calendars — tap a booking to manage it, tap a free space to book.
+            Tap a booking to manage it, tap a free space to book a client, or drag across the
+            grid to add any event to your calendar.
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -212,8 +236,28 @@ export function CalendarView() {
             weekStart={weekStart}
             spans={visible(week.spans) ?? []}
             mode="display"
-            onEventClick={(span, a) => setOpenSpan({ span, anchor: a })}
+            onEventClick={(span, a) => {
+              // Editable Google events (on your personal calendar) open the
+              // composer; bookings + synced blocks open the read/manage popover.
+              if (span.source === "personal" && span.googleEventId) {
+                setComposer({
+                  mode: "edit",
+                  start: new Date(span.start),
+                  end: new Date(span.end),
+                  title: span.title,
+                  eventId: span.googleEventId,
+                  source: "personal",
+                });
+              } else {
+                setOpenSpan({ span, anchor: a });
+              }
+            }}
             onSlotClick={handleSlotClick}
+            onRangeSelect={
+              reschedule
+                ? undefined
+                : (start, end) => setComposer({ mode: "create", start, end })
+            }
           />
         )
       ) : (
@@ -261,6 +305,24 @@ export function CalendarView() {
           onClose={() => setQuickBookSlot(null)}
           onBooked={() => {
             setQuickBookSlot(null);
+            week.invalidate();
+            month.invalidate();
+          }}
+        />
+      )}
+
+      {composer && (
+        <EventComposer
+          mode={composer.mode}
+          start={composer.start}
+          end={composer.end}
+          title={composer.title}
+          eventId={composer.eventId}
+          source={composer.source}
+          calendars={calendars}
+          onClose={() => setComposer(null)}
+          onSaved={() => {
+            setComposer(null);
             week.invalidate();
             month.invalidate();
           }}

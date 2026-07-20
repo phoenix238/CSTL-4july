@@ -100,6 +100,9 @@ export interface BusySpan {
   /** set on our own bookings — enables cancel/reschedule */
   bookingId?: string;
   clinic?: Clinic;
+  /** Google's event id — set on real Google events (not our bookings / opaque
+   * free-busy blocks); enables editing/deleting the event in place. */
+  googleEventId?: string;
 }
 
 /**
@@ -169,6 +172,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
           title: ev.summary || "Busy",
           known: false,
           source,
+          googleEventId: ev.id,
         });
       }
     } catch {
