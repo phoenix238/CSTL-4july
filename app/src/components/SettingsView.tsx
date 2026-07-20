@@ -32,6 +32,7 @@ export interface SettingsData {
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
+  bookingNotifyEmail: boolean;
 }
 
 /** A collapsed-by-default section — click the header to reveal its contents. */
@@ -158,6 +159,7 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
           bookingMinNoticeMins={settings.bookingMinNoticeMins}
           bookingHorizonDays={settings.bookingHorizonDays}
           bookingBufferMinutes={settings.bookingBufferMinutes}
+          bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
         />
       </Dropdown>

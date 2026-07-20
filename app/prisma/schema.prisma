@@ -132,6 +132,7 @@ model AppSettings {
   bookingMinNoticeMins Int @default(120) // can't book within this many minutes of now
   bookingHorizonDays   Int @default(21)  // how many days ahead the public page shows/allows
   bookingBufferMinutes Int @default(0)   // extra padding either side of every session's footprint
+  bookingNotifyEmail   Boolean @default(true) // email Phoenix when someone books via /book
 }
 
 // One-off availability exceptions — either opens an extra date/window beyond the

@@ -18,6 +18,7 @@ export const GET = guarded(async () => {
     bookingMinNoticeMins: s.bookingMinNoticeMins,
     bookingHorizonDays: s.bookingHorizonDays,
     bookingBufferMinutes: s.bookingBufferMinutes,
+    bookingNotifyEmail: s.bookingNotifyEmail,
   });
 });
 

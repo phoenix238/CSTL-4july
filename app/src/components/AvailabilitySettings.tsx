@@ -46,6 +46,7 @@ export function AvailabilitySettings({
   bookingMinNoticeMins,
   bookingHorizonDays,
   bookingBufferMinutes,
+  bookingNotifyEmail,
   baseUrl,
 }: {
   weeklyHours: WeeklyHours;
@@ -54,6 +55,7 @@ export function AvailabilitySettings({
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
+  bookingNotifyEmail: boolean;
   baseUrl: string;
 }) {
   const toast = useToast();
@@ -150,6 +152,7 @@ export function AvailabilitySettings({
     minNoticeHours: Math.round(bookingMinNoticeMins / 60),
     horizonDays: bookingHorizonDays,
     bufferMinutes: bookingBufferMinutes,
+    notifyEmail: bookingNotifyEmail,
   });
   const [tuningDirty, setTuningDirty] = useState(false);
   const [savingTuning, setSavingTuning] = useState(false);
@@ -164,6 +167,7 @@ export function AvailabilitySettings({
           bookingMinNoticeMins: tuning.minNoticeHours * 60,
           bookingHorizonDays: tuning.horizonDays,
           bookingBufferMinutes: tuning.bufferMinutes,
+          bookingNotifyEmail: tuning.notifyEmail,
         }),
       });
       toast("Booking tuning saved ✓");
@@ -390,6 +394,18 @@ export function AvailabilitySettings({
             setTuningDirty(true);
           }}
         />
+
+        <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-ink">
+          <input
+            type="checkbox"
+            checked={tuning.notifyEmail}
+            onChange={(e) => {
+              setTuning((p) => ({ ...p, notifyEmail: e.target.checked }));
+              setTuningDirty(true);
+            }}
+          />
+          Email me when someone books online
+        </label>
 
         <PrimaryButton onClick={saveTuning} disabled={!tuningDirty || savingTuning} className="self-start px-4 py-1.5 text-[12.5px]">
           {savingTuning ? "Saving…" : "Save tuning"}
