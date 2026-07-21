@@ -17,15 +17,16 @@ export interface EmailSettings {
   bethnalAddress: string;
 }
 
-/** Preview placeholder shown before the real per-client intake link is known; swapped server-side. */
-export const INTAKE_SENTINEL = "(your personal intake link — added when you send)";
-
 /**
  * What the confirmation email contains:
  *  - returning client → just the calendar invite (sent by Google Calendar itself);
  *    the email is a short confirmation.
  *  - new client (first email only) → location template with the access note,
- *    the intake-form link, and optionally payment details.
+ *    the address/map, and optionally payment details.
+ *
+ * The intake form is deliberately NOT included here — it's sent as its own
+ * separate step (the "Send intake form" button) so the first email stays a warm,
+ * uncluttered welcome. See app/src/app/api/clients/[id]/intake-email/route.ts.
  *
  * Pure — also runs in the browser for the live preview in the booking panel.
  */
@@ -35,7 +36,6 @@ export function composeBookingEmail(
   whenLabel: string,
   sendPayment: boolean,
   settings: EmailSettings,
-  intakeUrl: string = INTAKE_SENTINEL,
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
@@ -54,10 +54,8 @@ export function composeBookingEmail(
     .join(client.name)
     .split("{accessNote}")
     .join(settings.accessNote);
-  body += `\n\nIntake form: ${intakeUrl}`;
   const includes = [
     "Google Calendar invite attached",
-    "Link to the CSTL intake form",
     "Access note — stairs, no step-free access",
   ];
   const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;

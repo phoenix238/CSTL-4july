@@ -8,7 +8,7 @@ import {
 import { syncChalkFarmDayBlock } from "@/lib/google/chalkFarm";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime, londonDateKey } from "@/lib/time";
-import { composeBookingEmail, INTAKE_SENTINEL } from "./email";
+import { composeBookingEmail } from "./email";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
 
@@ -91,12 +91,19 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     );
   }
 
+  // The intake link is still returned (offered as its own button / follow-up),
+  // but it is no longer stitched into the welcome email — see composeBookingEmail.
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, intakeLink);
-  // Use her edited text if any, but always resolve the sentinel to the real link.
-  const body = (req.emailBody?.trim() || email.body).split(INTAKE_SENTINEL).join(intakeLink);
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings);
+  const body = req.emailBody?.trim() || email.body;
+  // Whether this is the client's very first welcome message — captured before we
+  // flip welcomeSent, so the confirmation copy and the flip agree.
+  const wasFirstEmail = !client.welcomeSent;
   let emailTextForClipboard: string | undefined;
   let emailSent = false;
+  // Did the welcome message actually reach the client (emailed by us, or handed
+  // to Phoenix on the clipboard to send herself)? A failed send doesn't count.
+  let firstContactMade = false;
   if (req.sendEmail && client.email) {
     // The session is already booked (calendar event exists) by this point — a
     // hiccup sending the confirmation shouldn't fail the whole booking and
@@ -105,14 +112,12 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     try {
       await sendEmail(client.email, email.subject, body);
       emailSent = true;
+      firstContactMade = true;
       await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
-      if (!client.welcomeSent) {
-        await prisma.client.update({ where: { id: clientId }, data: { welcomeSent: true } });
-      }
       items.push(
-        client.welcomeSent && !isNew
-          ? "Email sent — calendar invite"
-          : "Email sent — invite, intake form link, access note" + (req.sendPayment ? ", payment details" : ""),
+        wasFirstEmail
+          ? "Welcome email sent — invite, access note" + (req.sendPayment ? ", payment details" : "")
+          : "Email sent — calendar invite",
       );
     } catch (err) {
       console.error("Booking confirmed but the confirmation email failed to send", err);
@@ -121,10 +126,20 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     }
   } else if (req.sendEmail && !client.email) {
     emailTextForClipboard = body;
+    firstContactMade = true;
     items.push("No email address on record yet — email text copied to your clipboard instead");
   } else {
     emailTextForClipboard = body;
+    firstContactMade = true;
     items.push("Email text copied to your clipboard — no email was sent");
+  }
+
+  // Mark them welcomed once their first welcome message has genuinely gone out —
+  // whether we emailed it or Phoenix copied it to send. Without this, a client
+  // booked by hand (always sendEmail:false in the enquiry flow) would stay "new"
+  // forever and keep being handed the first-timer welcome on every future booking.
+  if (wasFirstEmail && firstContactMade) {
+    await prisma.client.update({ where: { id: clientId }, data: { welcomeSent: true } });
   }
 
   items.push(

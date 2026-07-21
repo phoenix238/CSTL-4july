@@ -38,6 +38,24 @@ export interface SettingsData {
   bookingNotifyEmail: boolean;
 }
 
+/**
+ * A stage of the client's journey — groups the sections below it so Settings reads
+ * as a story (clinics → booking page → the emails they get → the wiring behind it).
+ */
+function Stage({ n, title, blurb }: { n: number; title: string; blurb: string }) {
+  return (
+    <div className="mt-4 flex flex-col gap-1 border-t border-line pt-5 first:mt-0 first:border-0 first:pt-0">
+      <div className="flex items-baseline gap-2.5">
+        <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-clay text-[11px] font-semibold text-cream">
+          {n}
+        </span>
+        <h2 className="font-serif text-[18px] leading-tight font-medium">{title}</h2>
+      </div>
+      <p className="pl-[32px] text-[12.5px] leading-[1.6] text-muted">{blurb}</p>
+    </div>
+  );
+}
+
 /** A collapsed-by-default section — click the header to reveal its contents. */
 function Dropdown({
   label,
@@ -131,8 +149,20 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
   return (
     <div className="flex max-w-[760px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
       <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Settings</h1>
+      <p className="max-w-[64ch] text-[13.5px] leading-[1.65] text-muted">
+        This is where you shape what a client experiences with you — from the first hello to after their
+        session. It&apos;s laid out in the order they&apos;ll meet it, so you can read top to bottom and
+        picture their whole journey. Everything is tucked into sections — tap one to open it.
+      </p>
 
-      <SectionLabel>CLINICS &amp; BOOKING RULES</SectionLabel>
+      {/* ───────────────── 1 · Your two clinics ───────────────── */}
+      <Stage
+        n={1}
+        title="Your two clinics"
+        blurb="The basics of each space — where it is, and what a booking there puts on your calendar."
+      />
+
+      <SectionLabel>WHAT EACH BOOKING CREATES</SectionLabel>
       <Card className="px-5 py-1.5">
         <div className="border-b border-hairline py-[15px]">
           <div className="flex items-baseline gap-2.5">
@@ -157,155 +187,7 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
         </div>
       </Card>
 
-      <Dropdown label="AVAILABILITY — YOUR PUBLIC BOOKING PAGE" open={!!open.availability} onToggle={() => toggle("availability")}>
-        <AvailabilitySettings
-          weeklyHours={settings.weeklyHours}
-          overrides={overrides}
-          bookingSlotMinutes={settings.bookingSlotMinutes}
-          bookingMinNoticeMins={settings.bookingMinNoticeMins}
-          bookingHorizonDays={settings.bookingHorizonDays}
-          bookingBufferMinutes={settings.bookingBufferMinutes}
-          chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
-          bookingNotifyEmail={settings.bookingNotifyEmail}
-          baseUrl={baseUrl}
-        />
-      </Dropdown>
-
-      <Dropdown label="ACCESS NOTE — GOES IN A NEW CLIENT'S FIRST EMAIL" open={!!open.accessNote} onToggle={() => toggle("accessNote")}>
-        <div className="flex items-center justify-end px-0.5">
-          <button
-            onClick={() => {
-              if (!editingNote) setNoteDraft(settings.accessNote);
-              setEditingNote(!editingNote);
-            }}
-            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-          >
-            {editingNote ? "Cancel" : "Edit"}
-          </button>
-        </div>
-        {!editingNote ? (
-          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] text-[oklch(0.4_0.06_48)]">
-            &quot;{settings.accessNote}&quot;
-          </div>
-        ) : (
-          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
-            <textarea
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-            />
-            <PrimaryButton
-              onClick={() => save({ accessNote: noteDraft }, () => setEditingNote(false), "Access note updated ✓")}
-              className="self-start px-[18px] py-[9px] text-[13px]"
-            >
-              Save
-            </PrimaryButton>
-          </Card>
-        )}
-      </Dropdown>
-
-      <Dropdown label="NEW CLIENT EMAIL — BY LOCATION" open={!!open.emailTemplate} onToggle={() => toggle("emailTemplate")}>
-        <Card className="flex flex-col gap-3 px-[18px] py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["bethnal", "waterloo"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setEmailClinic(c);
-                    setEditingTemplate(false);
-                  }}
-                  className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                    emailClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-                  }`}
-                >
-                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                if (!editingTemplate) setTemplateDraft(template);
-                setEditingTemplate(!editingTemplate);
-              }}
-              className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-            >
-              {editingTemplate ? "Cancel" : "Edit"}
-            </button>
-          </div>
-          {!editingTemplate ? (
-            <div className="rounded-[10px] bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.35_0.02_60)]">
-              {template}
-            </div>
-          ) : (
-            <>
-              <textarea
-                value={templateDraft}
-                onChange={(e) => setTemplateDraft(e.target.value)}
-                className="min-h-[170px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-              />
-              <PrimaryButton
-                onClick={() =>
-                  save(
-                    emailClinic === "waterloo"
-                      ? { emailTemplateWaterloo: templateDraft }
-                      : { emailTemplateBethnal: templateDraft },
-                    () => setEditingTemplate(false),
-                    "Email template updated ✓",
-                  )
-                }
-                className="self-start px-[18px] py-[9px] text-[13px]"
-              >
-                Save
-              </PrimaryButton>
-            </>
-          )}
-          <div className="text-[11.5px] text-muted">
-            This is the first email a new client gets — use {"{name}"} for their name and {"{accessNote}"} for the
-            access note above. It shows up when you confirm a booking for that location. Returning clients just get
-            the calendar invite.
-          </div>
-        </Card>
-      </Dropdown>
-
-      <Dropdown label="PAYMENT / BANK DETAILS — GOES IN A NEW CLIENT'S FIRST EMAIL" open={!!open.payment} onToggle={() => toggle("payment")}>
-        <div className="flex items-center justify-end px-0.5">
-          <button
-            onClick={() => {
-              if (!editingPayment) setPaymentDraft(settings.paymentDetails);
-              setEditingPayment(!editingPayment);
-            }}
-            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-          >
-            {editingPayment ? "Cancel" : "Edit"}
-          </button>
-        </div>
-        {!editingPayment ? (
-          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.4_0.06_48)]">
-            {settings.paymentDetails}
-          </div>
-        ) : (
-          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
-            <textarea
-              value={paymentDraft}
-              onChange={(e) => setPaymentDraft(e.target.value)}
-              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-            />
-            <PrimaryButton
-              onClick={() => save({ paymentDetails: paymentDraft }, () => setEditingPayment(false), "Payment details updated ✓")}
-              className="self-start px-[18px] py-[9px] text-[13px]"
-            >
-              Save
-            </PrimaryButton>
-          </Card>
-        )}
-        <div className="text-[11.5px] text-muted">
-          Your real bank details — inserted when you tick &quot;include payment details&quot; while confirming a new
-          client's session.
-        </div>
-      </Dropdown>
-
-      <Dropdown label="CLINIC ADDRESSES & NOTES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
+      <Dropdown label="CLINIC ADDRESSES & ARRIVAL NOTES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
         <div className="flex items-center justify-end px-0.5">
           <button
             onClick={() => {
@@ -375,70 +257,203 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
         )}
         <div className="text-[11.5px] text-muted">
           Addresses are used as the location on the calendar invite (Google adds a map link automatically) and for
-          the Google Maps link in a new client's first email and on the booking page. The note for each clinic shows
-          under its address on the public booking page — useful for parking, buzzer codes, or what to expect.
+          the Google Maps link in a new client&apos;s welcome email and on the booking page. The note for each clinic
+          shows under its address on the public booking page — useful for parking, buzzer codes, or what to expect.
         </div>
       </Dropdown>
 
-      <Dropdown label="GOOGLE" open={!!open.google} onToggle={() => toggle("google")}>
+      {/* ───────────────── 2 · Your booking page ───────────────── */}
+      <Stage
+        n={2}
+        title="Your booking page"
+        blurb="The public page a client can use to book themselves in — your weekly hours, day-by-day exceptions, and how far ahead they can book."
+      />
+
+      <Dropdown
+        label="AVAILABILITY — YOUR PUBLIC BOOKING PAGE"
+        open={!!open.availability}
+        onToggle={() => toggle("availability")}
+      >
+        <AvailabilitySettings
+          weeklyHours={settings.weeklyHours}
+          overrides={overrides}
+          bookingSlotMinutes={settings.bookingSlotMinutes}
+          bookingMinNoticeMins={settings.bookingMinNoticeMins}
+          bookingHorizonDays={settings.bookingHorizonDays}
+          bookingBufferMinutes={settings.bookingBufferMinutes}
+          chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
+          bookingNotifyEmail={settings.bookingNotifyEmail}
+          baseUrl={baseUrl}
+        />
+      </Dropdown>
+
+      {/* ───────────────── 3 · The emails clients receive ───────────────── */}
+      <Stage
+        n={3}
+        title="The emails clients receive"
+        blurb="Every message that goes out, in order: a warm welcome when they first book, their intake form as its own separate step, then a gentle review request after the session."
+      />
+
+      <Dropdown
+        label="WELCOME EMAIL — A NEW CLIENT'S FIRST EMAIL, BY LOCATION"
+        open={!!open.emailTemplate}
+        onToggle={() => toggle("emailTemplate")}
+      >
+        <Card className="flex flex-col gap-3 px-[18px] py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+              {(["bethnal", "waterloo"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => {
+                    setEmailClinic(c);
+                    setEditingTemplate(false);
+                  }}
+                  className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+                    emailClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                  }`}
+                >
+                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                if (!editingTemplate) setTemplateDraft(template);
+                setEditingTemplate(!editingTemplate);
+              }}
+              className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+            >
+              {editingTemplate ? "Cancel" : "Edit"}
+            </button>
+          </div>
+          {!editingTemplate ? (
+            <div className="rounded-[10px] bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.35_0.02_60)]">
+              {template}
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={templateDraft}
+                onChange={(e) => setTemplateDraft(e.target.value)}
+                className="min-h-[170px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+              />
+              <PrimaryButton
+                onClick={() =>
+                  save(
+                    emailClinic === "waterloo"
+                      ? { emailTemplateWaterloo: templateDraft }
+                      : { emailTemplateBethnal: templateDraft },
+                    () => setEditingTemplate(false),
+                    "Email template updated ✓",
+                  )
+                }
+                className="self-start px-[18px] py-[9px] text-[13px]"
+              >
+                Save
+              </PrimaryButton>
+            </>
+          )}
+          <div className="text-[11.5px] leading-[1.6] text-muted">
+            This is the first email a new client gets — use {"{name}"} for their name and {"{accessNote}"} for the
+            access note below. It goes out when you confirm their booking; returning clients just get the calendar
+            invite. The intake form is <b>no longer attached here</b> — it&apos;s sent as its own step after booking,
+            so if your saved template still says &quot;the intake form link is below&quot;, you can remove that line.
+          </div>
+        </Card>
+      </Dropdown>
+
+      <Dropdown
+        label="· ACCESS NOTE — INCLUDED IN THE WELCOME EMAIL"
+        open={!!open.accessNote}
+        onToggle={() => toggle("accessNote")}
+      >
         <div className="flex items-center justify-end px-0.5">
           <button
-            onClick={() => setEditingGoogle(!editingGoogle)}
+            onClick={() => {
+              if (!editingNote) setNoteDraft(settings.accessNote);
+              setEditingNote(!editingNote);
+            }}
             className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
           >
-            {editingGoogle ? "Cancel" : "Edit"}
+            {editingNote ? "Cancel" : "Edit"}
           </button>
         </div>
-        {!editingGoogle ? (
-          <Card className="px-5 py-1.5">
-            <Row label="Connection">
-              <span className={settings.googleConnected ? "text-sage-text" : "text-amber-text"}>
-                {settings.googleConnected ? "✓ Connected — Drive · Calendar · Gmail · Sheets" : "Not connected — sign out and back in with Google"}
-              </span>
-            </Row>
-            <Row label="Client folders & Docs">Drive › CSTL › Clients › (client name)</Row>
-            <Row label="Marketing spreadsheet">Drive › CSTL › Clients › Docs</Row>
-            <Row label="Intake form">In-app form — {baseUrl}/intake/…</Row>
-            <Row label="Personal calendar">{settings.personalCalendarId || "primary"}</Row>
-            <Row label="R5 room calendar">{settings.roomCalendarId || "not set — needed for Waterloo bookings"}</Row>
-            <Row label="Chalk Farm calendar">
-              {settings.chalkFarmCalendarId || "not set — needed for Bethnal Green bookings"}
-            </Row>
-            <Row label="Event reminders" last>
-              Email 24 h before · popup 1 h before
-            </Row>
-          </Card>
+        {!editingNote ? (
+          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] text-[oklch(0.4_0.06_48)]">
+            &quot;{settings.accessNote}&quot;
+          </div>
         ) : (
-          <Card className="flex flex-col gap-[11px] border-[1.5px] border-clay/35 px-4 py-3.5">
-            {(
-              [
-                ["personalCalendarId", "PERSONAL CALENDAR ID", '"primary" or a calendar\'s ID from Google Calendar settings'],
-                ["roomCalendarId", "R5 ROOM CALENDAR ID", "the room calendar's ID (Waterloo bookings)"],
-                ["chalkFarmCalendarId", "CHALK FARM CALENDAR ID", "the Chalk Farm calendar's ID (Bethnal Green blocks)"],
-                ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-4july.vercel.app"],
-              ] as const
-            ).map(([key, label, hint]) => (
-              <label key={key} className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
-                <input
-                  value={googleDraft[key]}
-                  onChange={(e) => setGoogleDraft({ ...googleDraft, [key]: e.target.value })}
-                  className={inputClass}
-                />
-                <span className="text-[10.5px] text-faint">{hint}</span>
-              </label>
-            ))}
+          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+            />
             <PrimaryButton
-              onClick={() => save({ ...googleDraft }, () => setEditingGoogle(false), "Google settings updated ✓")}
+              onClick={() => save({ accessNote: noteDraft }, () => setEditingNote(false), "Access note updated ✓")}
               className="self-start px-[18px] py-[9px] text-[13px]"
             >
               Save
             </PrimaryButton>
           </Card>
         )}
+        <div className="text-[11.5px] text-muted">
+          Slots into the welcome email wherever you put {"{accessNote}"} in the template above.
+        </div>
       </Dropdown>
 
-      <Dropdown label="INTAKE FORM QUESTIONS" open={!!open.intakeQuestions} onToggle={() => toggle("intakeQuestions")}>
+      <Dropdown
+        label="· PAYMENT / BANK DETAILS — INCLUDED IN THE WELCOME EMAIL"
+        open={!!open.payment}
+        onToggle={() => toggle("payment")}
+      >
+        <div className="flex items-center justify-end px-0.5">
+          <button
+            onClick={() => {
+              if (!editingPayment) setPaymentDraft(settings.paymentDetails);
+              setEditingPayment(!editingPayment);
+            }}
+            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+          >
+            {editingPayment ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {!editingPayment ? (
+          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.4_0.06_48)]">
+            {settings.paymentDetails}
+          </div>
+        ) : (
+          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
+            <textarea
+              value={paymentDraft}
+              onChange={(e) => setPaymentDraft(e.target.value)}
+              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+            />
+            <PrimaryButton
+              onClick={() => save({ paymentDetails: paymentDraft }, () => setEditingPayment(false), "Payment details updated ✓")}
+              className="self-start px-[18px] py-[9px] text-[13px]"
+            >
+              Save
+            </PrimaryButton>
+          </Card>
+        )}
+        <div className="text-[11.5px] text-muted">
+          Your real bank details — inserted when you tick &quot;include payment details&quot; while confirming a new
+          client&apos;s session.
+        </div>
+      </Dropdown>
+
+      <Dropdown
+        label="INTAKE FORM — SENT ON ITS OWN, AFTER BOOKING"
+        open={!!open.intakeQuestions}
+        onToggle={() => toggle("intakeQuestions")}
+      >
+        <div className="rounded-xl border border-line bg-inputbg px-4 py-3 text-[12.5px] leading-[1.6] text-muted">
+          The intake form is kept out of the welcome email on purpose, so a client&apos;s first message stays a warm
+          hello. You send it as its own step — the &quot;Send intake form&quot; button appears right after you book
+          someone, and on every client&apos;s profile. These are the questions it asks:
+        </div>
         <IntakeQuestionsEditor initial={settings.intakeQuestions} />
       </Dropdown>
 
@@ -539,6 +554,71 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
             out.
           </div>
         </Card>
+      </Dropdown>
+
+      {/* ───────────────── 4 · Behind the scenes ───────────────── */}
+      <Stage
+        n={4}
+        title="Behind the scenes"
+        blurb="How the app connects to your Google account to create calendar events, save notes to Drive, and send email as you."
+      />
+
+      <Dropdown label="GOOGLE — CALENDAR, DRIVE & GMAIL" open={!!open.google} onToggle={() => toggle("google")}>
+        <div className="flex items-center justify-end px-0.5">
+          <button
+            onClick={() => setEditingGoogle(!editingGoogle)}
+            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+          >
+            {editingGoogle ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {!editingGoogle ? (
+          <Card className="px-5 py-1.5">
+            <Row label="Connection">
+              <span className={settings.googleConnected ? "text-sage-text" : "text-amber-text"}>
+                {settings.googleConnected ? "✓ Connected — Drive · Calendar · Gmail · Sheets" : "Not connected — sign out and back in with Google"}
+              </span>
+            </Row>
+            <Row label="Client folders & Docs">Drive › CSTL › Clients › (client name)</Row>
+            <Row label="Marketing spreadsheet">Drive › CSTL › Clients › Docs</Row>
+            <Row label="Intake form">In-app form — {baseUrl}/intake/…</Row>
+            <Row label="Personal calendar">{settings.personalCalendarId || "primary"}</Row>
+            <Row label="R5 room calendar">{settings.roomCalendarId || "not set — needed for Waterloo bookings"}</Row>
+            <Row label="Chalk Farm calendar">
+              {settings.chalkFarmCalendarId || "not set — needed for Bethnal Green bookings"}
+            </Row>
+            <Row label="Event reminders" last>
+              Email 24 h before · popup 1 h before
+            </Row>
+          </Card>
+        ) : (
+          <Card className="flex flex-col gap-[11px] border-[1.5px] border-clay/35 px-4 py-3.5">
+            {(
+              [
+                ["personalCalendarId", "PERSONAL CALENDAR ID", '"primary" or a calendar\'s ID from Google Calendar settings'],
+                ["roomCalendarId", "R5 ROOM CALENDAR ID", "the room calendar's ID (Waterloo bookings)"],
+                ["chalkFarmCalendarId", "CHALK FARM CALENDAR ID", "the Chalk Farm calendar's ID (Bethnal Green blocks)"],
+                ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-4july.vercel.app"],
+              ] as const
+            ).map(([key, label, hint]) => (
+              <label key={key} className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
+                <input
+                  value={googleDraft[key]}
+                  onChange={(e) => setGoogleDraft({ ...googleDraft, [key]: e.target.value })}
+                  className={inputClass}
+                />
+                <span className="text-[10.5px] text-faint">{hint}</span>
+              </label>
+            ))}
+            <PrimaryButton
+              onClick={() => save({ ...googleDraft }, () => setEditingGoogle(false), "Google settings updated ✓")}
+              className="self-start px-[18px] py-[9px] text-[13px]"
+            >
+              Save
+            </PrimaryButton>
+          </Card>
+        )}
       </Dropdown>
 
       <SectionLabel className="pt-2">ADD TO YOUR IPHONE</SectionLabel>

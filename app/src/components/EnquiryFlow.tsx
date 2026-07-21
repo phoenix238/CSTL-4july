@@ -97,6 +97,9 @@ export function EnquiryFlow({
   const [booking, setBooking] = useState(false);
   const [offering, setOffering] = useState(false);
   const [result, setResult] = useState<BookResult | null>(null);
+  // Intake is sent as its own step after booking — never inside the welcome email.
+  const [sendingIntake, setSendingIntake] = useState(false);
+  const [intakeSent, setIntakeSent] = useState(false);
 
   // one session-start for confirm mode
   const confirmSlot = bookMode === "confirm" && selected.length ? selected[0] : null;
@@ -215,6 +218,34 @@ export function EnquiryFlow({
     setBookMode("offer");
     setEmailDirty(false);
     setResult(null);
+    setIntakeSent(false);
+    setSendingIntake(false);
+  }
+
+  /**
+   * Send the intake form as its own deliberate step, once a session is booked.
+   * Emails it if we have an address; otherwise (a WhatsApp/Instagram enquiry with
+   * no email) copies the personal link so Phoenix can paste it into that chat.
+   */
+  async function sendIntakeForm() {
+    if (!result) return;
+    setSendingIntake(true);
+    try {
+      await api(`/api/clients/${result.clientId}/intake-email`, { method: "POST" });
+      toast(`Intake form sent to ${result.clientName.split(" ")[0]} ✓`);
+      setIntakeSent(true);
+    } catch {
+      try {
+        const { url } = await api<{ url: string }>(`/api/clients/${result.clientId}/intake-link`);
+        await navigator.clipboard?.writeText(url).catch(() => {});
+        toast("No email on record — intake link copied to your clipboard instead");
+        setIntakeSent(true);
+      } catch (err) {
+        toast(err instanceof Error ? err.message : "Couldn't send the intake form");
+      }
+    } finally {
+      setSendingIntake(false);
+    }
   }
 
   function applyLoaded(
@@ -427,6 +458,7 @@ export function EnquiryFlow({
         await navigator.clipboard?.writeText(res.emailTextForClipboard).catch(() => {});
       }
       setResult(res);
+      setIntakeSent(false);
       setNameDraft(res.clientName);
       invalidate();
       void refreshWaiting();
@@ -503,6 +535,27 @@ export function EnquiryFlow({
                 <span>{it}</span>
               </div>
             ))}
+          </div>
+          <div className="mt-3 rounded-xl border border-clay/25 bg-clay-tint/40 px-4 py-3.5 text-left">
+            {intakeSent ? (
+              <div className="flex items-center gap-2 text-[13px] text-sage-text">
+                <span>✓</span>
+                <span>Intake form on its way — it&apos;ll land straight in their confidential record.</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-[13px] font-semibold text-clay-text">One last thing — their intake form</div>
+                <div className="mt-0.5 text-[12.5px] text-muted">
+                  It&apos;s kept out of the welcome email on purpose, so the first message stays a warm hello.
+                  Send it whenever feels right.
+                </div>
+                <div className="mt-2.5">
+                  <PrimaryButton onClick={sendIntakeForm} disabled={sendingIntake}>
+                    {sendingIntake ? "Sending…" : "Send intake form"}
+                  </PrimaryButton>
+                </div>
+              </>
+            )}
           </div>
           <div className="mt-4 flex justify-center gap-2">
             <Link href={`/clients/${result.clientId}`}>
