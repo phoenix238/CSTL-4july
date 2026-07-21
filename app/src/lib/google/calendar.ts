@@ -119,10 +119,18 @@ export interface BusySpan {
  * Used by the availability grid, the week/month calendar, and the enquiry picker.
  */
 export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<BusySpan[]> {
-  const bookings = await prisma.booking.findMany({
-    where: { status: "confirmed", startsAt: { gte: new Date(windowStart.getTime() - 2 * 3600_000), lt: windowEnd } },
-    include: { client: true },
-  });
+  // These three are independent — fetch our confirmed bookings, the Chalk Farm
+  // day blocks, and the Google client together rather than back to back.
+  const [bookings, chalkFarmBlocks, calendar] = await Promise.all([
+    prisma.booking.findMany({
+      where: { status: "confirmed", startsAt: { gte: new Date(windowStart.getTime() - 2 * 3600_000), lt: windowEnd } },
+      include: { client: true },
+    }),
+    prisma.chalkFarmDayBlock.findMany({
+      where: { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
+    }),
+    getCalendarApi(),
+  ]);
   // The booking span is the 1-hour session itself. The paired room / Chalk Farm
   // event stays visible (see below) so it renders side by side with the session.
   const known: BusySpan[] = bookings.map((b) => {
@@ -146,12 +154,8 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
 
   // The shared Chalk Farm day block(s) in this window — tagged `roomBlock` so
   // every collision check below can ignore them (only real sessions count).
-  const chalkFarmBlocks = await prisma.chalkFarmDayBlock.findMany({
-    where: { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
-  });
   const chalkFarmBlockEventIds = new Set(chalkFarmBlocks.map((b) => b.eventId));
 
-  const calendar = await getCalendarApi();
   const sources: Array<{ id: string; source: SpanSource }> = [
     { id: await calendarId("personal"), source: "personal" },
   ];
@@ -164,57 +168,68 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     }
   }
 
-  const google: BusySpan[] = [];
-  for (const { id, source } of sources) {
-    try {
-      const res = await calendar.events.list({
-        calendarId: id,
-        timeMin: windowStart.toISOString(),
-        timeMax: windowEnd.toISOString(),
-        singleEvents: true,
-        orderBy: "startTime",
-        maxResults: 250,
-      });
-      for (const ev of res.data.items ?? []) {
-        if (!ev.id || ownEventIds.has(ev.id)) continue;
-        if (ev.transparency === "transparent" || ev.status === "cancelled") continue;
-        const startISO = ev.start?.dateTime ?? (ev.start?.date ? `${ev.start.date}T00:00:00Z` : null);
-        const endISO = ev.end?.dateTime ?? (ev.end?.date ? `${ev.end.date}T00:00:00Z` : null);
-        if (!startISO || !endISO || !ev.start?.dateTime) continue; // skip all-day events
-        google.push({
-          start: new Date(startISO),
-          end: new Date(endISO),
-          title: ev.summary || "Busy",
-          known: false,
-          source,
-          googleEventId: ev.id,
-          roomBlock: source === "chalkFarm" && chalkFarmBlockEventIds.has(ev.id),
-        });
-      }
-    } catch {
-      // events.list can 403 on freeBusyReader-only calendars — fall back to opaque busy blocks.
+  // Each calendar is a separate network round-trip to Google. Fetch them all
+  // concurrently — running them together instead of one after another is the
+  // main speedup for the calendar and availability views.
+  const perSource = await Promise.all(
+    sources.map(async ({ id, source }): Promise<BusySpan[]> => {
       try {
-        const fb = await calendar.freebusy.query({
-          requestBody: {
-            timeMin: windowStart.toISOString(),
-            timeMax: windowEnd.toISOString(),
-            timeZone: TZ,
-            items: [{ id }],
-          },
+        const res = await calendar.events.list({
+          calendarId: id,
+          timeMin: windowStart.toISOString(),
+          timeMax: windowEnd.toISOString(),
+          singleEvents: true,
+          orderBy: "startTime",
+          maxResults: 250,
         });
-        for (const cal of Object.values(fb.data.calendars ?? {})) {
-          for (const span of cal.busy ?? []) {
-            if (!span.start || !span.end) continue;
-            const start = new Date(span.start);
-            const end = new Date(span.end);
-            const isOwn = known.some((k) => start < k.end && end > k.start);
-            if (!isOwn) google.push({ start, end, title: "Busy", known: false, source });
-          }
+        const spans: BusySpan[] = [];
+        for (const ev of res.data.items ?? []) {
+          if (!ev.id || ownEventIds.has(ev.id)) continue;
+          if (ev.transparency === "transparent" || ev.status === "cancelled") continue;
+          const startISO = ev.start?.dateTime ?? (ev.start?.date ? `${ev.start.date}T00:00:00Z` : null);
+          const endISO = ev.end?.dateTime ?? (ev.end?.date ? `${ev.end.date}T00:00:00Z` : null);
+          if (!startISO || !endISO || !ev.start?.dateTime) continue; // skip all-day events
+          spans.push({
+            start: new Date(startISO),
+            end: new Date(endISO),
+            title: ev.summary || "Busy",
+            known: false,
+            source,
+            googleEventId: ev.id,
+            roomBlock: source === "chalkFarm" && chalkFarmBlockEventIds.has(ev.id),
+          });
         }
+        return spans;
       } catch {
-        /* calendar unreachable — skip it rather than failing the whole view */
+        // events.list can 403 on freeBusyReader-only calendars — fall back to opaque busy blocks.
+        try {
+          const fb = await calendar.freebusy.query({
+            requestBody: {
+              timeMin: windowStart.toISOString(),
+              timeMax: windowEnd.toISOString(),
+              timeZone: TZ,
+              items: [{ id }],
+            },
+          });
+          const spans: BusySpan[] = [];
+          for (const cal of Object.values(fb.data.calendars ?? {})) {
+            for (const span of cal.busy ?? []) {
+              if (!span.start || !span.end) continue;
+              const start = new Date(span.start);
+              const end = new Date(span.end);
+              const isOwn = known.some((k) => start < k.end && end > k.start);
+              if (!isOwn) spans.push({ start, end, title: "Busy", known: false, source });
+            }
+          }
+          return spans;
+        } catch {
+          /* calendar unreachable — skip it rather than failing the whole view */
+          return [];
+        }
       }
-    }
-  }
+    }),
+  );
+
+  const google = perSource.flat();
   return [...known, ...google].sort((a, b) => a.start.getTime() - b.start.getTime());
 }
