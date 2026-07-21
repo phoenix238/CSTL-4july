@@ -18,6 +18,7 @@ export const GET = guarded(async () => {
     bookingMinNoticeMins: s.bookingMinNoticeMins,
     bookingHorizonDays: s.bookingHorizonDays,
     bookingBufferMinutes: s.bookingBufferMinutes,
+    chalkFarmBufferMinutes: s.chalkFarmBufferMinutes,
     bookingNotifyEmail: s.bookingNotifyEmail,
     // Which calendars are wired up — for the calendar page's event composer.
     calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },

@@ -46,6 +46,7 @@ export function AvailabilitySettings({
   bookingMinNoticeMins,
   bookingHorizonDays,
   bookingBufferMinutes,
+  chalkFarmBufferMinutes,
   bookingNotifyEmail,
   baseUrl,
 }: {
@@ -55,6 +56,7 @@ export function AvailabilitySettings({
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
+  chalkFarmBufferMinutes: number;
   bookingNotifyEmail: boolean;
   baseUrl: string;
 }) {
@@ -152,6 +154,7 @@ export function AvailabilitySettings({
     minNoticeHours: Math.round(bookingMinNoticeMins / 60),
     horizonDays: bookingHorizonDays,
     bufferMinutes: bookingBufferMinutes,
+    chalkFarmBufferMinutes,
     notifyEmail: bookingNotifyEmail,
   });
   const [tuningDirty, setTuningDirty] = useState(false);
@@ -167,6 +170,7 @@ export function AvailabilitySettings({
           bookingMinNoticeMins: tuning.minNoticeHours * 60,
           bookingHorizonDays: tuning.horizonDays,
           bookingBufferMinutes: tuning.bufferMinutes,
+          chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
           bookingNotifyEmail: tuning.notifyEmail,
         }),
       });
@@ -392,6 +396,19 @@ export function AvailabilitySettings({
           hint="Extra padding either side of every session, on top of the calendar footprint — breathing room between clients."
           onChange={(v) => {
             setTuning((p) => ({ ...p, bufferMinutes: v }));
+            setTuningDirty(true);
+          }}
+        />
+        <TuningSlider
+          label="Safety gap around Chalk Farm studio-mates"
+          value={tuning.chalkFarmBufferMinutes}
+          display={tuning.chalkFarmBufferMinutes === 0 ? "None" : `${tuning.chalkFarmBufferMinutes} min`}
+          min={0}
+          max={60}
+          step={5}
+          hint="Bethnal Green only. When someone else has booked the shared Chalk Farm calendar (e.g. Amy), this much clearance is kept either side of their booking — on top of the buffer above — before a client can book with you."
+          onChange={(v) => {
+            setTuning((p) => ({ ...p, chalkFarmBufferMinutes: v }));
             setTuningDirty(true);
           }}
         />

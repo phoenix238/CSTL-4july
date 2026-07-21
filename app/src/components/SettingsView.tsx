@@ -32,6 +32,7 @@ export interface SettingsData {
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
+  chalkFarmBufferMinutes: number;
   bookingNotifyEmail: boolean;
 }
 
@@ -160,6 +161,7 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
           bookingMinNoticeMins={settings.bookingMinNoticeMins}
           bookingHorizonDays={settings.bookingHorizonDays}
           bookingBufferMinutes={settings.bookingBufferMinutes}
+          chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
         />

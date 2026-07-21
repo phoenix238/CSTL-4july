@@ -34,8 +34,11 @@ export async function GET(req: Request) {
       overrides: overrides.map((o) => ({ date: o.date, kind: o.kind as "open" | "block", startMin: o.startMin, endMin: o.endMin })),
       // The shared Chalk Farm room block spans the whole day's Bethnal
       // sessions — exclude it or a new slot between two sessions would look
-      // "busy" even though the room's actually free right then.
-      busy: busy.filter((b) => !b.roomBlock),
+      // "busy" even though the room's actually free right then. A studio-mate's
+      // real booking on that same calendar gets its own bigger safety gap.
+      busy: busy
+        .filter((b) => !b.roomBlock)
+        .map((b) => ({ ...b, bufferMinutes: b.source === "chalkFarm" ? settings.chalkFarmBufferMinutes : undefined })),
       slotMinutes: settings.bookingSlotMinutes,
       bufferMinutes: settings.bookingBufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,

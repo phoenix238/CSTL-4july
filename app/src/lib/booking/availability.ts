@@ -112,7 +112,13 @@ export interface AvailabilityParams {
   windowEnd: Date;
   weeklyHours: WeeklyWindow[]; // this clinic's list only
   overrides: OverrideWindow[]; // this clinic's overrides only
-  busy: Pick<{ start: Date; end: Date }, "start" | "end">[];
+  /**
+   * Optional per-span `bufferMinutes` overrides the default `bufferMinutes`
+   * for that one busy span — e.g. a studio-mate's booking on the shared
+   * Chalk Farm calendar needs a bigger safety gap than Phoenix's own
+   * back-to-back sessions do.
+   */
+  busy: Array<{ start: Date; end: Date; bufferMinutes?: number }>;
   slotMinutes?: number;
   bufferMinutes?: number;
   now?: Date;
@@ -166,9 +172,13 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
         const footprintEnd = minute + SESSION_MINUTES + endPadMin + bufferMinutes;
         if (footprintStart < interval.start || footprintEnd > interval.end) continue;
 
-        const footprint = pad(rawFootprint, bufferMinutes);
-
-        const collides = busy.some((b) => footprint.start < b.end && footprint.end > b.start);
+        // Each busy span pads by its own buffer if it has one (e.g. a bigger
+        // safety gap around a studio-mate's Chalk Farm booking), else the
+        // default bufferMinutes — see the AvailabilityParams.busy doc comment.
+        const collides = busy.some((b) => {
+          const padded = pad(b, b.bufferMinutes ?? bufferMinutes);
+          return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
+        });
         if (collides) continue;
 
         results.push(candidate);
