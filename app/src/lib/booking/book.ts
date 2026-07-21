@@ -22,6 +22,9 @@ export interface BookingRequest {
   sendPayment: boolean;
   /** the (possibly hand-edited) email body from the preview box */
   emailBody?: string;
+  /** set when this booking closes out a Gmail-add-on enquiry — replies land in that thread */
+  gmailThreadId?: string;
+  gmailMessageId?: string;
 }
 
 export interface BookingResult {
@@ -93,7 +96,12 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const body = (req.emailBody?.trim() || email.body).split(INTAKE_SENTINEL).join(intakeLink);
   let emailTextForClipboard: string | undefined;
   if (req.sendEmail && client.email) {
-    await sendEmail(client.email, email.subject, body);
+    await sendEmail(
+      client.email,
+      email.subject,
+      body,
+      req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
+    );
     await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
     if (!client.welcomeSent) {
       await prisma.client.update({ where: { id: clientId }, data: { welcomeSent: true } });

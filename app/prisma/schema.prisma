@@ -83,6 +83,8 @@ model Enquiry {
   client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   offeredTimes DateTime[] // slots offered to the client (offer mode), awaiting their pick
   createdAt    DateTime   @default(now())
+  gmailThreadId  String   @default("") // set when this enquiry came from the Gmail add-on — lets the reply land in the same thread
+  gmailMessageId String   @default("") // RFC Message-ID of the client's email, for In-Reply-To/References
 
   @@index([clientId])
 }

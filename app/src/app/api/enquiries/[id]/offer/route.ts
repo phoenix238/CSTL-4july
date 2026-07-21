@@ -17,7 +17,16 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   const body = (emailBody?.trim() as string) || composeOfferMessage(clientName || "", clinic as Clinic, dates);
 
   if (send && email) {
-    await sendEmail(email, `Some session times — ${CLINIC_LABEL[clinic as Clinic]}`, body);
+    const enquiry = await prisma.enquiry.findUnique({
+      where: { id },
+      select: { gmailThreadId: true, gmailMessageId: true },
+    });
+    await sendEmail(
+      email,
+      `Some session times — ${CLINIC_LABEL[clinic as Clinic]}`,
+      body,
+      enquiry?.gmailThreadId ? { threadId: enquiry.gmailThreadId, inReplyTo: enquiry.gmailMessageId } : undefined,
+    );
   }
 
   await prisma.enquiry.update({
