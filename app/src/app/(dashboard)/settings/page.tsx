@@ -34,6 +34,7 @@ export default async function SettingsPage() {
         bookingMinNoticeMins: settings.bookingMinNoticeMins,
         bookingHorizonDays: settings.bookingHorizonDays,
         bookingBufferMinutes: settings.bookingBufferMinutes,
+        chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
         bookingNotifyEmail: settings.bookingNotifyEmail,
       }}
     />

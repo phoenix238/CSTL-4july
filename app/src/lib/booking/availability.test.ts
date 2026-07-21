@@ -200,4 +200,24 @@ describe("computeAvailableSlots", () => {
     expect(withoutBuffer).toContainEqual(at(9, 30));
     expect(withBuffer).not.toContainEqual(at(9, 30));
   });
+
+  it("a busy span's own bufferMinutes overrides the default — e.g. a bigger gap around a studio-mate's booking", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 480, endMin: 1200 }]; // 8-20
+    // A studio-mate's Chalk Farm booking 16:00-17:00, needing a 30-min gap either side.
+    const busy = [{ start: at(16), end: at(17), bufferMinutes: 30 }];
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy,
+      slotMinutes: 30,
+      bufferMinutes: 15, // Phoenix's own default buffer between her own clients
+      now: at(0),
+    });
+    // 17:15 (only 15 min clear) is still inside the studio-mate's 30-min gap.
+    expect(slots).not.toContainEqual(at(17, 15));
+    // 17:30 (a full 30 min clear) is bookable.
+    expect(slots).toContainEqual(at(17, 30));
+  });
 });

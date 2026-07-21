@@ -63,7 +63,11 @@ export async function POST(req: Request) {
       weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic as Clinic],
       overrides: overrides.map((o) => ({ date: o.date, kind: o.kind as "open" | "block", startMin: o.startMin, endMin: o.endMin })),
       // Exclude the shared Chalk Farm day block — only real sessions block time.
-      busy: busy.filter((b) => !b.roomBlock),
+      // A studio-mate's real booking on that same calendar gets its own bigger
+      // safety gap (see slots/route.ts).
+      busy: busy
+        .filter((b) => !b.roomBlock)
+        .map((b) => ({ ...b, bufferMinutes: b.source === "chalkFarm" ? settings.chalkFarmBufferMinutes : undefined })),
       slotMinutes: settings.bookingSlotMinutes,
       bufferMinutes: settings.bookingBufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,
