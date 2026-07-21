@@ -105,7 +105,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       whenLabel: result.whenLabel,
       clientName: result.clientName,
-      emailSent: true,
+      emailSent: result.emailSent,
       intakeUrl: result.intakeUrl,
     });
   } catch (err) {

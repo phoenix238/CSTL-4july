@@ -4,7 +4,7 @@ import {
   planBookingEvents,
   type Clinic,
 } from "@/lib/booking/rules";
-import { calendarId, getCalendarApi } from "./client";
+import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
 import { londonDateKey } from "@/lib/time";
 
@@ -30,29 +30,42 @@ export async function createBookingEvents(bookingId: string) {
   let secondaryEventId = "";
   for (const ev of plan) {
     const calId = await calendarId(ev.calendar);
-    const res = await calendar.events.insert({
-      calendarId: calId,
-      sendUpdates: ev.inviteClient && booking.client.email ? "all" : "none",
-      requestBody: {
-        summary: ev.summary,
-        location: ev.location || undefined,
-        start: { dateTime: ev.start.toISOString(), timeZone: TZ },
-        end: { dateTime: ev.end.toISOString(), timeZone: TZ },
-        reminders: EVENT_REMINDERS,
-        attendees:
-          ev.inviteClient && booking.client.email
-            ? [{ email: booking.client.email, displayName: booking.client.name }]
-            : undefined,
-      },
-    });
+    const res = await withRetry(() =>
+      calendar.events.insert({
+        calendarId: calId,
+        sendUpdates: ev.inviteClient && booking.client.email ? "all" : "none",
+        requestBody: {
+          summary: ev.summary,
+          location: ev.location || undefined,
+          start: { dateTime: ev.start.toISOString(), timeZone: TZ },
+          end: { dateTime: ev.end.toISOString(), timeZone: TZ },
+          reminders: EVENT_REMINDERS,
+          attendees:
+            ev.inviteClient && booking.client.email
+              ? [{ email: booking.client.email, displayName: booking.client.name }]
+              : undefined,
+        },
+      }),
+    );
     if (ev.calendar === "personal") personalEventId = res.data.id!;
     else secondaryEventId = res.data.id!;
+    // Persist each event id as soon as it's created — a later failure (e.g. the
+    // Chalk Farm sync below) then can't orphan an already-created event.
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { personalEventId, secondaryEventId },
+    });
   }
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: { personalEventId, secondaryEventId },
-  });
-  if (clinic === "bethnal") await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
+  if (clinic === "bethnal") {
+    try {
+      await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
+    } catch (err) {
+      // The session itself is booked — the shared placeholder block is a nice-
+      // to-have that self-heals next time this day's block is synced. Don't
+      // fail the whole booking over it.
+      console.error("Chalk Farm day-block sync failed (booking still stands)", err);
+    }
+  }
   return { personalEventId, secondaryEventId };
 }
 

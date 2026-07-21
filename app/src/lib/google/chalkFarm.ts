@@ -1,5 +1,5 @@
 import { prisma, getSettings } from "@/lib/db";
-import { getCalendarApi } from "./client";
+import { getCalendarApi, withRetry } from "./client";
 import { EVENT_REMINDERS } from "@/lib/booking/rules";
 import { londonDayStart, londonTime } from "@/lib/time";
 
@@ -57,7 +57,7 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
 
   if (existing) {
     try {
-      await calendar.events.patch({ calendarId: calId, eventId: existing.eventId, requestBody });
+      await withRetry(() => calendar.events.patch({ calendarId: calId, eventId: existing.eventId, requestBody }));
       return;
     } catch (err) {
       if (!isGone(err)) throw err;
@@ -65,7 +65,7 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
     }
   }
 
-  const res = await calendar.events.insert({ calendarId: calId, requestBody });
+  const res = await withRetry(() => calendar.events.insert({ calendarId: calId, requestBody }));
   await prisma.chalkFarmDayBlock.upsert({
     where: { date: dateKey },
     update: { eventId: res.data.id! },

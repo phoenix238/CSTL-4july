@@ -1,4 +1,4 @@
-import { getGmailApi } from "./client";
+import { getGmailApi, withRetry } from "./client";
 
 /**
  * Send a plain-text email from Phoenix's Gmail.
@@ -22,10 +22,12 @@ export async function sendEmail(to: string, subject: string, body: string) {
     "",
     Buffer.from(body).toString("base64"),
   ].join("\r\n");
-  await gmail.users.messages.send({
-    userId: "me",
-    requestBody: {
-      raw: Buffer.from(message).toString("base64url"),
-    },
-  });
+  await withRetry(() =>
+    gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw: Buffer.from(message).toString("base64url"),
+      },
+    }),
+  );
 }

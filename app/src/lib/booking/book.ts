@@ -35,6 +35,8 @@ export interface BookingResult {
   emailTextForClipboard?: string;
   /** the client's personal intake-form link — already emailed, but also offered as a direct button */
   intakeUrl: string;
+  /** false if the confirmation email couldn't be sent (booking still stands) */
+  emailSent: boolean;
 }
 
 /**
@@ -94,17 +96,29 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // Use her edited text if any, but always resolve the sentinel to the real link.
   const body = (req.emailBody?.trim() || email.body).split(INTAKE_SENTINEL).join(intakeLink);
   let emailTextForClipboard: string | undefined;
+  let emailSent = false;
   if (req.sendEmail && client.email) {
-    await sendEmail(client.email, email.subject, body);
-    await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
-    if (!client.welcomeSent) {
-      await prisma.client.update({ where: { id: clientId }, data: { welcomeSent: true } });
+    // The session is already booked (calendar event exists) by this point — a
+    // hiccup sending the confirmation shouldn't fail the whole booking and
+    // scare the client into thinking they don't have a slot. Fall back to the
+    // clipboard text so it's not lost, and let Phoenix know to follow up.
+    try {
+      await sendEmail(client.email, email.subject, body);
+      emailSent = true;
+      await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
+      if (!client.welcomeSent) {
+        await prisma.client.update({ where: { id: clientId }, data: { welcomeSent: true } });
+      }
+      items.push(
+        client.welcomeSent && !isNew
+          ? "Email sent — calendar invite"
+          : "Email sent — invite, intake form link, access note" + (req.sendPayment ? ", payment details" : ""),
+      );
+    } catch (err) {
+      console.error("Booking confirmed but the confirmation email failed to send", err);
+      emailTextForClipboard = body;
+      items.push("Booked, but the confirmation email couldn't be sent — please follow up with them directly");
     }
-    items.push(
-      client.welcomeSent && !isNew
-        ? "Email sent — calendar invite"
-        : "Email sent — invite, intake form link, access note" + (req.sendPayment ? ", payment details" : ""),
-    );
   } else if (req.sendEmail && !client.email) {
     emailTextForClipboard = body;
     items.push("No email address on record yet — email text copied to your clipboard instead");
@@ -128,6 +142,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     items,
     emailTextForClipboard,
     intakeUrl: intakeLink,
+    emailSent,
   };
 }
 

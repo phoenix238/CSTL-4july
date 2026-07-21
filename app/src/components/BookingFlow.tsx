@@ -40,7 +40,12 @@ export function BookingFlow({
   const [phone, setPhone] = useState("");
   const [company, setCompany] = useState(""); // honeypot — real visitors never see or fill this
   const [submitting, setSubmitting] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ whenLabel: string; email: string; intakeUrl: string } | null>(null);
+  const [confirmed, setConfirmed] = useState<{
+    whenLabel: string;
+    email: string;
+    intakeUrl: string;
+    emailSent: boolean;
+  } | null>(null);
 
   const address = clinic === "waterloo" ? waterlooAddress : bethnalAddress;
   const note = clinic === "waterloo" ? waterlooNote : bethnalNote;
@@ -67,7 +72,7 @@ export function BookingFlow({
           body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company }),
         },
       );
-      setConfirmed({ whenLabel: result.whenLabel, email, intakeUrl: result.intakeUrl });
+      setConfirmed({ whenLabel: result.whenLabel, email, intakeUrl: result.intakeUrl, emailSent: result.emailSent });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't book that — please try again");
     } finally {
@@ -83,8 +88,10 @@ export function BookingFlow({
         </div>
         <div className="font-serif text-2xl font-medium">You&apos;re booked</div>
         <p className="text-[14px] leading-relaxed text-muted">
-          {confirmed.whenLabel}. A confirmation email is on its way to {confirmed.email}, with your calendar invite,
-          the address, and everything else you need.
+          {confirmed.whenLabel}.{" "}
+          {confirmed.emailSent
+            ? `A confirmation email is on its way to ${confirmed.email}, with your calendar invite, the address, and everything else you need.`
+            : "Your slot is confirmed — we're just having trouble getting the confirmation email out, so we'll be in touch with the details another way. Feel free to fill out the intake form below in the meantime."}
         </p>
 
         <Card className="mt-2 flex w-full flex-col gap-2.5 px-5 py-5 text-left">

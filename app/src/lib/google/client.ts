@@ -32,6 +32,27 @@ export async function getSheetsApi() {
   return google.sheets({ version: "v4", auth: await getOAuthClient() });
 }
 
+/**
+ * Retry a Google API call on transient failures (rate limiting, brief 5xx
+ * blips) with short backoff. Non-transient errors (4xx other than 429, or
+ * anything without a recognizable status) fail immediately.
+ */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const status = (err as { status?: number; code?: number }).status ?? (err as { code?: number }).code;
+      const transient = status === 429 || (typeof status === "number" && status >= 500);
+      if (!transient || i === attempts - 1) throw err;
+      await new Promise((r) => setTimeout(r, 300 * 2 ** i));
+    }
+  }
+  throw lastErr;
+}
+
 /** Resolve a logical calendar to its Google Calendar id from settings. */
 export async function calendarId(key: CalendarKey): Promise<string> {
   const s = await getSettings();
