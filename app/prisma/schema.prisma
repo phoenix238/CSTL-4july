@@ -91,10 +91,8 @@ model Enquiry {
 model AppSettings {
   id                    Int    @id @default(1)
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
-  // The welcome email. The intake form is NOT part of this — it's sent as its own
-  // step after booking (see app/src/lib/booking/email.ts), so the first email stays warm.
-  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nSee you soon,\nPhoenix")
-  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nSee you soon,\nPhoenix")
+  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
+  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nPlease fill out the short intake form when you get a moment — the link is below.\n\nSee you soon,\nPhoenix")
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
   waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
   bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
