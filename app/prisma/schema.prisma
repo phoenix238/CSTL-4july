@@ -83,6 +83,11 @@ model Enquiry {
   client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   offeredTimes DateTime[] // slots offered to the client (offer mode), awaiting their pick
   createdAt    DateTime   @default(now())
+  // Present in the shared production DB from a Gmail-reply-threading feature being
+  // built on another branch — not (yet) wired into any code on this branch. Kept
+  // here so `prisma db push` doesn't propose dropping real client data.
+  gmailThreadId  String   @default("")
+  gmailMessageId String   @default("")
 
   @@index([clientId])
 }
