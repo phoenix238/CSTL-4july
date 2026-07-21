@@ -13,6 +13,8 @@ export const GET = guarded(async () => {
     paymentDetails: s.paymentDetails,
     waterlooAddress: s.waterlooAddress,
     bethnalAddress: s.bethnalAddress,
+    waterlooArrivalNote: s.waterlooArrivalNote,
+    bethnalArrivalNote: s.bethnalArrivalNote,
     weeklyHours: resolveWeeklyHours(s.weeklyHours),
     bookingSlotMinutes: s.bookingSlotMinutes,
     bookingMinNoticeMins: s.bookingMinNoticeMins,

@@ -15,6 +15,8 @@ export interface SettingsData {
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
+  waterlooArrivalNote: string;
+  bethnalArrivalNote: string;
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
@@ -77,6 +79,8 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
   const [addressesDraft, setAddressesDraft] = useState({
     waterlooAddress: settings.waterlooAddress,
     bethnalAddress: settings.bethnalAddress,
+    waterlooArrivalNote: settings.waterlooArrivalNote,
+    bethnalArrivalNote: settings.bethnalArrivalNote,
   });
   const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("bethnal");
   const [editingTemplate, setEditingTemplate] = useState(false);
@@ -301,12 +305,17 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
         </div>
       </Dropdown>
 
-      <Dropdown label="CLINIC ADDRESSES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
+      <Dropdown label="CLINIC ADDRESSES & NOTES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
         <div className="flex items-center justify-end px-0.5">
           <button
             onClick={() => {
               if (!editingAddresses) {
-                setAddressesDraft({ waterlooAddress: settings.waterlooAddress, bethnalAddress: settings.bethnalAddress });
+                setAddressesDraft({
+                  waterlooAddress: settings.waterlooAddress,
+                  bethnalAddress: settings.bethnalAddress,
+                  waterlooArrivalNote: settings.waterlooArrivalNote,
+                  bethnalArrivalNote: settings.bethnalArrivalNote,
+                });
               }
               setEditingAddresses(!editingAddresses);
             }}
@@ -318,26 +327,43 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
         {!editingAddresses ? (
           <Card className="px-5 py-1.5">
             <Row label="Waterloo">{settings.waterlooAddress || "not set yet"}</Row>
-            <Row label="Bethnal Green" last>
-              {settings.bethnalAddress || "not set yet"}
+            <Row label="Waterloo note">{settings.waterlooArrivalNote || "not set yet"}</Row>
+            <Row label="Bethnal Green">{settings.bethnalAddress || "not set yet"}</Row>
+            <Row label="Bethnal Green note" last>
+              {settings.bethnalArrivalNote || "not set yet"}
             </Row>
           </Card>
         ) : (
-          <Card className="flex flex-col gap-[11px] border-[1.5px] border-clay/35 px-4 py-3.5">
+          <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
             {(
               [
-                ["waterlooAddress", "WATERLOO ADDRESS"],
-                ["bethnalAddress", "BETHNAL GREEN ADDRESS"],
+                ["waterlooAddress", "WATERLOO ADDRESS", "waterlooArrivalNote", "ABOUT WATERLOO"],
+                ["bethnalAddress", "BETHNAL GREEN ADDRESS", "bethnalArrivalNote", "ABOUT BETHNAL GREEN"],
               ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
-                <input
-                  value={addressesDraft[key]}
-                  onChange={(e) => setAddressesDraft({ ...addressesDraft, [key]: e.target.value })}
-                  className={inputClass}
-                />
-              </label>
+            ).map(([addrKey, addrLabel, noteKey, noteLabel]) => (
+              <div key={addrKey} className="flex flex-col gap-[11px]">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                    {addrLabel}
+                  </span>
+                  <input
+                    value={addressesDraft[addrKey]}
+                    onChange={(e) => setAddressesDraft({ ...addressesDraft, [addrKey]: e.target.value })}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                    {noteLabel}
+                  </span>
+                  <textarea
+                    value={addressesDraft[noteKey]}
+                    onChange={(e) => setAddressesDraft({ ...addressesDraft, [noteKey]: e.target.value })}
+                    placeholder="Parking, what to expect, how to find the door — shown to visitors on the booking page."
+                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+                  />
+                </label>
+              </div>
             ))}
             <PrimaryButton
               onClick={() => save({ ...addressesDraft }, () => setEditingAddresses(false), "Clinic addresses updated ✓")}
@@ -348,8 +374,9 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
           </Card>
         )}
         <div className="text-[11.5px] text-muted">
-          Used as the location on the calendar invite (Google adds a map link automatically) and for the Google Maps
-          link in a new client's first email.
+          Addresses are used as the location on the calendar invite (Google adds a map link automatically) and for
+          the Google Maps link in a new client's first email and on the booking page. The note for each clinic shows
+          under its address on the public booking page — useful for parking, buzzer codes, or what to expect.
         </div>
       </Dropdown>
 

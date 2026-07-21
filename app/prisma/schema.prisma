@@ -96,8 +96,8 @@ model AppSettings {
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
   waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
   bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
-  // Present in the production DB but not (yet) wired into any app code — kept here so
-  // `prisma db push` doesn't propose dropping real data. Safe to remove deliberately later.
+  // Short "about this clinic" note shown on the public booking page under the
+  // address — parking, what to expect, how to find the door, etc.
   waterlooArrivalNote   String @default("")
   bethnalArrivalNote    String @default("")
   intakeFormUrl         String @default("https://forms.gle/2nPTLzHcffgzmydo8")

@@ -33,6 +33,8 @@ export interface BookingResult {
   items: string[];
   /** set when no email was sent — the UI copies this to the clipboard */
   emailTextForClipboard?: string;
+  /** the client's personal intake-form link — already emailed, but also offered as a direct button */
+  intakeUrl: string;
 }
 
 /**
@@ -125,6 +127,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     whenLabel: `${whenLabel} · ${CLINIC_LABEL[req.clinic]}`,
     items,
     emailTextForClipboard,
+    intakeUrl: intakeLink,
   };
 }
 

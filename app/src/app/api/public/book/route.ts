@@ -102,7 +102,12 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ whenLabel: result.whenLabel, clientName: result.clientName, emailSent: true });
+    return NextResponse.json({
+      whenLabel: result.whenLabel,
+      clientName: result.clientName,
+      emailSent: true,
+      intakeUrl: result.intakeUrl,
+    });
   } catch (err) {
     // Never surface raw internal/Google API error text to a public visitor.
     console.error(err);

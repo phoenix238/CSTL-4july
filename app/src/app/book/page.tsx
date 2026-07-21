@@ -9,7 +9,12 @@ export default async function BookPage() {
 
   return (
     <ToastProvider>
-      <BookingFlow waterlooAddress={settings.waterlooAddress} bethnalAddress={settings.bethnalAddress} />
+      <BookingFlow
+        waterlooAddress={settings.waterlooAddress}
+        bethnalAddress={settings.bethnalAddress}
+        waterlooNote={settings.waterlooArrivalNote}
+        bethnalNote={settings.bethnalArrivalNote}
+      />
     </ToastProvider>
   );
 }
