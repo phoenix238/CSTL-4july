@@ -5,8 +5,9 @@ import {
   createBookingEvents,
   deleteBookingGoogleEvents,
 } from "@/lib/google/calendar";
+import { syncChalkFarmDayBlock } from "@/lib/google/chalkFarm";
 import { sendEmail } from "@/lib/google/gmail";
-import { fmtDayLong, fmtTime } from "@/lib/time";
+import { fmtDayLong, fmtTime, londonDateKey } from "@/lib/time";
 import { composeBookingEmail, INTAKE_SENTINEL } from "./email";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
@@ -139,13 +140,21 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
   if (booking.status !== "confirmed") throw new Error("Only confirmed bookings can be rescheduled.");
   const start = new Date(newStartISO);
   if (Number.isNaN(start.getTime())) throw new Error("Invalid new start time.");
+  const oldDateKey = londonDateKey(booking.startsAt);
 
   await deleteBookingGoogleEvents(booking);
   await prisma.booking.update({
     where: { id: bookingId },
     data: { startsAt: start, personalEventId: "", secondaryEventId: "" },
   });
-  await createBookingEvents(bookingId);
+  await createBookingEvents(bookingId); // re-syncs the new day's Chalk Farm block (Bethnal)
+
+  // Moved to a different day — the old day's shared block needs recomputing
+  // too, now this session's no longer part of it.
+  const newDateKey = londonDateKey(start);
+  if (booking.clinic === "bethnal" && newDateKey !== oldDateKey) {
+    await syncChalkFarmDayBlock(oldDateKey);
+  }
 
   return {
     whenLabel: `${fmtDayLong(start)} · ${fmtTime(start)} · ${CLINIC_LABEL[booking.clinic as Clinic]}`,

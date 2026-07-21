@@ -21,22 +21,16 @@ describe("planBookingEvents", () => {
     expect(room.inviteClient).toBe(false);
   });
 
-  it("Bethnal Green creates a 2h Chalk Farm block with the 1h session centred in it", () => {
+  it("Bethnal Green creates just the 1h personal session — the shared Chalk Farm block is computed separately", () => {
     const plan = planBookingEvents("bethnal", "Amara Wilson", at(14));
-    expect(plan).toHaveLength(2);
+    expect(plan).toHaveLength(1);
 
-    const personal = plan.find((e) => e.calendar === "personal")!;
+    const personal = plan[0];
+    expect(personal.calendar).toBe("personal");
     expect(personal.summary).toBe("Amara Wilson — Bethnal Green");
     expect(personal.start).toEqual(at(14));
     expect(personal.end).toEqual(at(15));
-
-    const block = plan.find((e) => e.calendar === "chalkFarm")!;
-    expect(block.summary).toBe("Phoenix");
-    expect(block.start).toEqual(at(13, 30));
-    expect(block.end).toEqual(at(15, 30));
-    // session is exactly centred: 30 min either side
-    expect(personal.start.getTime() - block.start.getTime()).toBe(30 * 60_000);
-    expect(block.end.getTime() - personal.end.getTime()).toBe(30 * 60_000);
+    expect(personal.inviteClient).toBe(true);
   });
 });
 
@@ -44,7 +38,7 @@ describe("blockedRange", () => {
   it("Waterloo blocks only the session hour", () => {
     expect(blockedRange("waterloo", at(9))).toEqual({ start: at(9), end: at(10) });
   });
-  it("Bethnal blocks the full 2h window", () => {
-    expect(blockedRange("bethnal", at(14))).toEqual({ start: at(13, 30), end: at(15, 30) });
+  it("Bethnal also blocks only the session hour — no room padding, sessions can sit close together", () => {
+    expect(blockedRange("bethnal", at(14))).toEqual({ start: at(14), end: at(15) });
   });
 });

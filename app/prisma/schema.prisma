@@ -135,6 +135,15 @@ model AppSettings {
   bookingNotifyEmail   Boolean @default(true) // email Phoenix when someone books via /book
 }
 
+// The single shared "Phoenix" room block on the Chalk Farm calendar for one day.
+// Bethnal Green sessions nest inside it; the block auto-grows/shrinks to span the
+// day's sessions, so clients can sit as close as the schedule allows (not 2h apart).
+model ChalkFarmDayBlock {
+  date      String   @id // "YYYY-MM-DD" London calendar date
+  eventId   String // the Google event id of that day's shared block
+  updatedAt DateTime @updatedAt
+}
+
 // One-off availability exceptions — either opens an extra date/window beyond the
 // recurring weekly hours, or blocks/closes a normally-open one (holidays etc.).
 model AvailabilityOverride {

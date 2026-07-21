@@ -115,8 +115,8 @@ describe("computeAvailableSlots", () => {
     expect(slots).toEqual([at(10, 0, SUNDAY)]);
   });
 
-  it("Bethnal: the first/last slot leave room for the 30-min pad either side of the 2h block", () => {
-    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }]; // 9-17
+  it("Bethnal: slots span edge-to-edge like Waterloo — no fixed room padding, sessions can sit close together", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10, exactly 1h
     const slots = computeAvailableSlots({
       clinic: "bethnal",
       ...dayWindow(TUESDAY),
@@ -125,8 +125,23 @@ describe("computeAvailableSlots", () => {
       busy: [],
       now: at(0),
     });
-    expect(slots[0]).toEqual(at(9, 30));
-    expect(slots[slots.length - 1]).toEqual(at(15, 30));
+    expect(slots).toEqual([at(9)]); // fits exactly — no 30-min pad eating into the window
+  });
+
+  it("Bethnal: a prior session's real busy span still blocks, but leaves the very next 15-min slot free", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 720 }]; // 9-12
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [{ start: at(9), end: at(10) }], // an existing 9-10 session
+      slotMinutes: 15,
+      now: at(0),
+    });
+    // 9:00 is taken; 10:00 (right after) is free — no artificial 2h gap.
+    expect(slots).not.toContainEqual(at(9));
+    expect(slots).toContainEqual(at(10));
   });
 
   it("excludes slots inside the minimum-notice window from now", () => {

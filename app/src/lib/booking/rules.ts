@@ -5,8 +5,12 @@
 //     1h  "R5 - Phoenix"         on the room calendar
 //
 //   Bethnal Green (£30–60 sliding · 60 min):
-//     2h  "Phoenix"                    on the Chalk Farm calendar
-//     1h  "(Client) — Bethnal Green"   on the personal calendar, centred in the block
+//     1h  "(Client) — Bethnal Green"   on the personal calendar
+//     A single shared "Phoenix" block on the Chalk Farm calendar, one per day,
+//     auto-sized to span that day's Bethnal sessions — see
+//     src/lib/google/chalkFarm.ts. Not part of planBookingEvents: it's kept in
+//     sync separately whenever a Bethnal booking is created/moved/cancelled,
+//     so sessions can sit as close together as the schedule allows.
 //
 // All events get reminders: email 24h before, popup 1h before.
 
@@ -26,7 +30,6 @@ export interface PlannedEvent {
 }
 
 export const SESSION_MINUTES = 60;
-export const BETHNAL_BLOCK_MINUTES = 120;
 
 export const CLINIC_LABEL: Record<Clinic, string> = {
   waterloo: "Waterloo",
@@ -67,9 +70,8 @@ export function planBookingEvents(
       },
     ];
   }
-  // Bethnal Green: the 1h session sits in the middle of the 2h Chalk Farm block
-  const blockStart = addMinutes(sessionStart, -30);
-  const blockEnd = addMinutes(blockStart, BETHNAL_BLOCK_MINUTES);
+  // Bethnal Green: just the 1h session — the shared Chalk Farm room block is
+  // computed separately (src/lib/google/chalkFarm.ts) from the day's bookings.
   return [
     {
       calendar: "personal",
@@ -78,13 +80,6 @@ export function planBookingEvents(
       end: sessionEnd,
       inviteClient: true,
       location: address || undefined,
-    },
-    {
-      calendar: "chalkFarm",
-      summary: "Phoenix",
-      start: blockStart,
-      end: blockEnd,
-      inviteClient: false,
     },
   ];
 }
@@ -99,15 +94,11 @@ export const EVENT_REMINDERS = {
 };
 
 /**
- * The time range a booking blocks out (for availability):
- * Waterloo blocks the hour; Bethnal blocks the full 2h Chalk Farm window.
+ * The time range a booking blocks out (for availability). Both clinics block
+ * just the session hour — Bethnal no longer pads for a private room window,
+ * since the shared Chalk Farm block (see chalkFarm.ts) doesn't factor into
+ * availability itself, only the real 1h sessions do.
  */
 export function blockedRange(clinic: Clinic, sessionStart: Date) {
-  if (clinic === "waterloo") {
-    return { start: sessionStart, end: addMinutes(sessionStart, SESSION_MINUTES) };
-  }
-  return {
-    start: addMinutes(sessionStart, -30),
-    end: addMinutes(sessionStart, 90),
-  };
+  return { start: sessionStart, end: addMinutes(sessionStart, SESSION_MINUTES) };
 }

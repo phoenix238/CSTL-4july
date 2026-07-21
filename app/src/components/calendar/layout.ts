@@ -16,6 +16,9 @@ export interface SpanDTO {
   clinic?: Clinic;
   /** Google's event id — present on real Google events, enables edit/delete. */
   googleEventId?: string;
+  /** true for the shared Chalk Farm day block — visible, but ignored by
+   * availability/collision checks (only real sessions block time). */
+  roomBlock?: boolean;
 }
 
 export const SPAN_COLORS: Record<

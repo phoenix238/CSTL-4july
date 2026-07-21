@@ -244,8 +244,9 @@ export function AvailabilitySettings({
         </PrimaryButton>
         {hoursClinic === "bethnal" && (
           <div className="text-[11.5px] text-muted">
-            Bethnal Green sessions need 30 min either side for the 2h Chalk Farm block — the first bookable slot
-            lands 30 min after the hours below start, the last one 30 min before they end.
+            The shared &quot;Phoenix&quot; block on your Chalk Farm calendar grows and shrinks automatically to fit
+            that day&apos;s Bethnal Green sessions — book clients as close together as you like (use the buffer
+            slider below for breathing room between them).
           </div>
         )}
       </Card>

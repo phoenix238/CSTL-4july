@@ -5,6 +5,8 @@ import {
   type Clinic,
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi } from "./client";
+import { syncChalkFarmDayBlock } from "./chalkFarm";
+import { londonDateKey } from "@/lib/time";
 
 const TZ = "Europe/London";
 
@@ -50,6 +52,7 @@ export async function createBookingEvents(bookingId: string) {
     where: { id: bookingId },
     data: { personalEventId, secondaryEventId },
   });
+  if (clinic === "bethnal") await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
   return { personalEventId, secondaryEventId };
 }
 
@@ -82,6 +85,7 @@ export async function cancelBookingEvents(bookingId: string) {
   const booking = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
   await deleteBookingGoogleEvents(booking);
   await prisma.booking.update({ where: { id: bookingId }, data: { status: "cancelled" } });
+  if (booking.clinic === "bethnal") await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
 }
 
 export type SpanSource = "booking" | "room" | "chalkFarm" | "personal";
@@ -103,6 +107,10 @@ export interface BusySpan {
   /** Google's event id — set on real Google events (not our bookings / opaque
    * free-busy blocks); enables editing/deleting the event in place. */
   googleEventId?: string;
+  /** true for the shared Chalk Farm day block — shown for visibility, but
+   * ignored by every availability/collision check (only real sessions block
+   * time; see syncChalkFarmDayBlock). */
+  roomBlock?: boolean;
 }
 
 /**
@@ -135,6 +143,13 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
   // Only the personal-calendar event is suppressed — the booking span already
   // represents it. The room / Chalk Farm event is kept so it shows alongside.
   const ownEventIds = new Set(bookings.map((b) => b.personalEventId).filter(Boolean));
+
+  // The shared Chalk Farm day block(s) in this window — tagged `roomBlock` so
+  // every collision check below can ignore them (only real sessions count).
+  const chalkFarmBlocks = await prisma.chalkFarmDayBlock.findMany({
+    where: { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
+  });
+  const chalkFarmBlockEventIds = new Set(chalkFarmBlocks.map((b) => b.eventId));
 
   const calendar = await getCalendarApi();
   const sources: Array<{ id: string; source: SpanSource }> = [
@@ -173,6 +188,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
           known: false,
           source,
           googleEventId: ev.id,
+          roomBlock: source === "chalkFarm" && chalkFarmBlockEventIds.has(ev.id),
         });
       }
     } catch {

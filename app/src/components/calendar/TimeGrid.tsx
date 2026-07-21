@@ -79,9 +79,10 @@ export function TimeGrid({
     startHour * 60 + Math.floor((offsetY / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
 
   // Would a clinic session starting at `slot` collide with anything busy?
+  // The shared Chalk Farm room block is excluded — only real sessions count.
   const isBusyAt = (clinic: Clinic, slot: Date) => {
     const { start, end } = blockedRange(clinic, slot);
-    return spans.some((s) => new Date(s.start) < end && new Date(s.end) > start);
+    return spans.some((s) => !s.roomBlock && new Date(s.start) < end && new Date(s.end) > start);
   };
 
   const slotSelectable = mode === "display" && (!!onSlotClick || !!onRangeSelect);

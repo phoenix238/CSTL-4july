@@ -32,7 +32,10 @@ export async function GET(req: Request) {
       windowEnd,
       weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic as Clinic],
       overrides: overrides.map((o) => ({ date: o.date, kind: o.kind as "open" | "block", startMin: o.startMin, endMin: o.endMin })),
-      busy,
+      // The shared Chalk Farm room block spans the whole day's Bethnal
+      // sessions — exclude it or a new slot between two sessions would look
+      // "busy" even though the room's actually free right then.
+      busy: busy.filter((b) => !b.roomBlock),
       slotMinutes: settings.bookingSlotMinutes,
       bufferMinutes: settings.bookingBufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,

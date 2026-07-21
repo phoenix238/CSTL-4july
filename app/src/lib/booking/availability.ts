@@ -153,10 +153,10 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
         const candidate = londonTime(y, m, d, Math.floor(minute / 60), minute % 60);
         if (candidate < cutoff) continue;
 
-        // The clinic's real calendar footprint can extend beyond the raw session
-        // minute (e.g. Bethnal pads 30 min either side for the 2h Chalk Farm block);
-        // require the whole padded footprint to fit inside this open interval, not
-        // just the session start.
+        // Both clinics currently footprint to exactly the session hour (see
+        // blockedRange in rules.ts), but this stays generic in case a future
+        // clinic rule pads its real calendar footprint beyond the raw session
+        // minute — the whole padded footprint must fit inside the open interval.
         const rawFootprint = blockedRange(clinic, candidate);
         const startPadMin = Math.round((candidate.getTime() - rawFootprint.start.getTime()) / 60_000);
         const endPadMin = Math.round(

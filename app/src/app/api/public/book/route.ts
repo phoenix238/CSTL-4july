@@ -62,7 +62,8 @@ export async function POST(req: Request) {
       windowEnd,
       weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic as Clinic],
       overrides: overrides.map((o) => ({ date: o.date, kind: o.kind as "open" | "block", startMin: o.startMin, endMin: o.endMin })),
-      busy,
+      // Exclude the shared Chalk Farm day block — only real sessions block time.
+      busy: busy.filter((b) => !b.roomBlock),
       slotMinutes: settings.bookingSlotMinutes,
       bufferMinutes: settings.bookingBufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,

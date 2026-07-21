@@ -135,8 +135,9 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
             <span className="text-xs font-semibold text-sage-text">£30–60 sliding · 60 min</span>
           </div>
           <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
-            Creates a 2-hour &quot;Phoenix&quot; block on the Chalk Farm calendar with the 1-hour &quot;(Client) —
-            Bethnal Green&quot; personal event in the middle.
+            Creates the 1-hour &quot;(Client) — Bethnal Green&quot; personal event, and keeps one shared
+            &quot;Phoenix&quot; block on the Chalk Farm calendar in sync — it grows and shrinks to span that
+            day&apos;s sessions, so clients can be booked close together.
           </div>
         </div>
         <div className="py-[15px]">
