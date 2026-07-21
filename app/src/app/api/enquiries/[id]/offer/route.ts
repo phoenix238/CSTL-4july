@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
@@ -28,6 +29,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
       ...(clientId ? { clientId } : {}),
     },
   });
+  revalidateTag("shell");
 
   return NextResponse.json({ ok: true, body });
 });

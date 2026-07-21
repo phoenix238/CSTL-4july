@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { analyseEnquiry } from "@/lib/claude";
@@ -8,6 +9,7 @@ import { findExistingClient } from "@/lib/clients";
 export const DELETE = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   await prisma.enquiry.delete({ where: { id } });
+  revalidateTag("shell");
   return NextResponse.json({ ok: true });
 });
 

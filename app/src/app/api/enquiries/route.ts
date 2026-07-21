@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { analyseEnquiry } from "@/lib/claude";
@@ -28,6 +29,7 @@ export const POST = guarded(async (req: Request) => {
     const enquiry = await prisma.enquiry.create({
       data: { text: "", name: client.name, via: "PASTED", status: "waiting", clientId },
     });
+    revalidateTag("shell");
     return NextResponse.json({
       enquiry,
       analysis: null,
@@ -45,6 +47,7 @@ export const POST = guarded(async (req: Request) => {
   const enquiry = await prisma.enquiry.create({
     data: { text, name: analysis.name || "", via: analysis.via, status: "waiting" },
   });
+  revalidateTag("shell");
   const existing = analysis.name
     ? await findExistingClient(analysis.name, analysis.email || undefined, analysis.phone || undefined)
     : null;

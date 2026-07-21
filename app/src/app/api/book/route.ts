@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { bookSession } from "@/lib/booking/book";
@@ -11,6 +12,7 @@ export const POST = guarded(async (req: Request) => {
       where: { id: enquiryId },
       data: { status: "booked", clientId: result.clientId },
     });
+    revalidateTag("shell");
   }
   return NextResponse.json(result);
 });
