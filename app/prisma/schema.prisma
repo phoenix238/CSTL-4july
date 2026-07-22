@@ -39,6 +39,7 @@ model Client {
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
   notes         SessionNote[]
+  recordings    SessionRecording[]
   enquiries     Enquiry[]
 
   @@index([name])
@@ -57,6 +58,24 @@ model SessionNote {
   raw       String
   bullets   String[]
   createdAt DateTime @default(now())
+
+  @@index([clientId, date])
+}
+
+// A live Clean Language session captured in the Session tab. The full verbatim
+// transcript lives here (the app is where you glance back at exact words); a
+// curated summary + pinned phrases + notes are also appended to the client's Doc.
+model SessionRecording {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  date       DateTime
+  clinic     String
+  transcript String   // full live transcript, verbatim
+  pinned     String[] // the client's exact words, pinned in the moment
+  myNotes    String   @default("") // therapist's own notes taken during the session
+  bullets    String[] // Claude-generated summary bullets
+  createdAt  DateTime @default(now())
 
   @@index([clientId, date])
 }

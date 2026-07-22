@@ -1,31 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, OutlineButton, PrimaryButton, useToast } from "./ui";
-
-// Minimal typings for the Web Speech API (not yet in lib.dom for all setups)
-interface SpeechRecognitionLike {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start(): void;
-  stop(): void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-}
-interface SpeechRecognitionEventLike {
-  resultIndex: number;
-  results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-}
-
-function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as Record<string, unknown>;
-  return (w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null) as
-    | (new () => SpeechRecognitionLike)
-    | null;
-}
+import { useLiveTranscript } from "./useLiveTranscript";
 
 export function NotesComposer({
   clientId,
@@ -39,47 +16,28 @@ export function NotesComposer({
   const toast = useToast();
   const [text, setText] = useState("");
   const [bullets, setBullets] = useState<string[] | null>(null);
-  const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState<"" | "summarise" | "save">("");
-  const recRef = useRef<SpeechRecognitionLike | null>(null);
-  const baseRef = useRef("");
+  const baseRef = useRef(""); // textarea content captured when the mic started
+  const finalRef = useRef(""); // finalized dictation appended since then
 
-  useEffect(() => () => recRef.current?.stop(), []);
+  const { listening: recording, start, stop } = useLiveTranscript({
+    onFinal: (chunk) => {
+      finalRef.current += chunk + " ";
+      setText(baseRef.current + finalRef.current);
+    },
+    onInterim: (interim) => setText(baseRef.current + finalRef.current + interim),
+    onUnsupported: () => toast("Voice dictation needs Chrome or Safari — you can still type"),
+    onBlocked: () => toast("Microphone blocked — allow it in your browser settings"),
+  });
 
   const toggleMic = () => {
     if (recording) {
-      recRef.current?.stop();
-      setRecording(false);
+      stop();
       return;
     }
-    const SR = getSpeechRecognition();
-    if (!SR) {
-      toast("Voice dictation needs Chrome or Safari — you can still type");
-      return;
-    }
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-GB";
     baseRef.current = text ? text.replace(/\s+$/, "") + " " : "";
-    rec.onresult = (event) => {
-      let final = "";
-      let interim = "";
-      for (let i = 0; i < event.results.length; i++) {
-        const r = event.results[i];
-        if (r.isFinal) final += r[0].transcript;
-        else interim += r[0].transcript;
-      }
-      setText(baseRef.current + final + interim);
-    };
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed") toast("Microphone blocked — allow it in your browser settings");
-      setRecording(false);
-    };
-    rec.onend = () => setRecording(false);
-    recRef.current = rec;
-    rec.start();
-    setRecording(true);
+    finalRef.current = "";
+    start();
   };
 
   const summarise = async () => {
@@ -106,7 +64,7 @@ export function NotesComposer({
       toast("Nothing to save yet");
       return;
     }
-    recRef.current?.stop();
+    stop();
     setBusy("save");
     try {
       await api(`/api/clients/${clientId}/notes`, {

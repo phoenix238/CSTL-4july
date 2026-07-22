@@ -77,6 +77,31 @@ export async function summariseNote(raw: string): Promise<string[]> {
   return z.array(z.string()).min(1).parse(arr);
 }
 
+/**
+ * Summarise a live Clean Language session into a few bullets for the client's
+ * record. Clean Language works with the client's OWN words and metaphors, so the
+ * summary must preserve them verbatim rather than paraphrase into clinical terms.
+ */
+export async function summariseSession(input: {
+  transcript: string;
+  pinned: string[];
+  myNotes: string;
+}): Promise<string[]> {
+  const parts = [
+    input.transcript.trim() && `TRANSCRIPT:\n${input.transcript.trim()}`,
+    input.pinned.length && `THEIR EXACT WORDS (pinned in the moment):\n${input.pinned.map((p) => `- ${p}`).join("\n")}`,
+    input.myNotes.trim() && `THERAPIST'S OWN NOTES:\n${input.myNotes.trim()}`,
+  ].filter(Boolean);
+
+  const text = await chat(
+    `You summarise a Clean Language session for the client's record. Clean Language stays with the client's OWN words and metaphors — never translate them into clinical or therapist language. Write 3–6 short bullets that capture the developing metaphor landscape and anything that shifted, quoting the client's exact phrases where they matter. Reply with ONLY a JSON array of strings, no other text.`,
+    parts.join("\n\n"),
+    400,
+  );
+  const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
+  return z.array(z.string()).min(1).parse(arr);
+}
+
 const importedClientSchema = z.object({
   name: z.string(),
   email: z.string(),
