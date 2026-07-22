@@ -16,11 +16,10 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
 
   const transcript: string = (body.transcript ?? "").trim();
   const pinned: string[] = asStrings(body.pinned);
-  const questions: string[] = asStrings(body.questions);
   const myNotes: string = (body.myNotes ?? "").trim();
   const clinic: string = body.clinic ?? "waterloo";
 
-  if (!transcript && !pinned.length && !questions.length && !myNotes) {
+  if (!transcript && !pinned.length && !myNotes) {
     return NextResponse.json({ error: "Nothing recorded yet" }, { status: 400 });
   }
 
@@ -28,7 +27,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   const date = new Date();
 
   const recording = await prisma.sessionRecording.create({
-    data: { clientId: id, date, clinic, transcript, pinned, questions, myNotes, bullets },
+    data: { clientId: id, date, clinic, transcript, pinned, myNotes, bullets },
   });
 
   const clinicLabel = clinic === "waterloo" ? "Waterloo" : "Bethnal Green";
@@ -38,9 +37,9 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
       heading: `Session (Clean Language) — ${fmtDate(date)} · ${clinicLabel}`,
       lines: [
         { kind: "bullets", label: "Summary", items: bullets },
-        ...(pinned.length ? [{ kind: "bullets" as const, label: "Their words", items: pinned }] : []),
-        ...(questions.length ? [{ kind: "bullets" as const, label: "Questions I asked", items: questions }] : []),
+        ...(pinned.length ? [{ kind: "bullets" as const, label: "Highlights — their words", items: pinned }] : []),
         ...(myNotes ? [{ kind: "paragraph" as const, label: "My notes", value: myNotes }] : []),
+        ...(transcript ? [{ kind: "paragraph" as const, label: "Full conversation", value: transcript }] : []),
       ],
     },
   ]);

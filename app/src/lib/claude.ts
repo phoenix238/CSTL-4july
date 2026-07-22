@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HIGHLIGHT_RUBRIC } from "./cleanLanguage";
 
 const MODEL = "anthropic/claude-haiku-4.5";
 
@@ -102,59 +103,40 @@ export async function summariseSession(input: {
   return z.array(z.string()).min(1).parse(arr);
 }
 
-const sessionMomentsSchema = z.object({
-  highlights: z.array(z.string()).catch([]),
-  questions: z.array(z.string()).catch([]),
-});
-
-export interface SessionMoments {
-  highlights: string[];
-  questions: string[];
-}
-
 /**
- * Live during a session, from each new chunk of transcript, pull out two things:
- * - highlights: the CLIENT's most significant exact phrases (vivid metaphors,
- *   charged statements, repeated/stressed words, what they want to have happen).
- * - questions: the QUESTIONS the practitioner asked, verbatim — in Clean Language
- *   the exact question matters as much as the answer.
- * It's told what's already been captured so it only returns genuinely new items.
+ * Live during a session: surface the client's "highlight moments" from each new
+ * chunk of transcript, using the Clean Language rubric (HIGHLIGHT_RUBRIC). It
+ * judges the words themselves — it does NOT try to identify who is speaking — and
+ * is told what's already been surfaced so it only returns genuinely new phrases,
+ * quoted verbatim. May return [].
  */
-export async function extractSessionMoments(
-  recent: string,
-  existingHighlights: string[],
-  existingQuestions: string[],
-): Promise<SessionMoments> {
-  if (!recent.trim()) return { highlights: [], questions: [] };
+export async function extractHighlights(recent: string, existing: string[]): Promise<string[]> {
+  if (!recent.trim()) return [];
   const user = [
-    existingHighlights.length
-      ? `HIGHLIGHTS ALREADY SURFACED (don't repeat these or near-duplicates):\n${existingHighlights.map((e) => `- ${e}`).join("\n")}`
+    existing.length
+      ? `ALREADY SURFACED (do not repeat these or near-duplicates):\n${existing.map((e) => `- ${e}`).join("\n")}`
       : "",
-    existingQuestions.length
-      ? `QUESTIONS ALREADY CAPTURED (don't repeat these or near-duplicates):\n${existingQuestions.map((e) => `- ${e}`).join("\n")}`
-      : "",
-    `NEW TRANSCRIPT (both the practitioner and the client are speaking, unlabelled):\n${recent}`,
+    `NEW TRANSCRIPT:\n${recent}`,
   ]
     .filter(Boolean)
     .join("\n\n");
 
   const text = await chat(
-    `You follow a live Clean Language coaching session and, from each new chunk of transcript, pull out two things:
-- "highlights": the CLIENT's most significant exact phrases — vivid metaphors, emotionally charged statements, words they repeat or stress, and anything about what they want to have happen. Quote them VERBATIM and keep each one short (their actual phrase, not a paraphrase).
-- "questions": the QUESTIONS the practitioner asked, quoted verbatim. Clean Language questions almost always start with "And" and end with "?" (e.g. "And what kind of X is that X?"). These matter as much as the answers, so capture them.
-Only return items not already listed. Reply with ONLY a JSON object of this shape: {"highlights": [...], "questions": [...]}. Use an empty array for either when this chunk has nothing for it. No other text.`,
+    `${HIGHLIGHT_RUBRIC}\n\nOnly return phrases not already surfaced. Reply with ONLY a JSON array of strings — an empty array [] when this chunk has nothing worth highlighting. No other text.`,
     user,
-    350,
+    250,
   );
-  const open = text.indexOf("{");
-  if (open === -1) return { highlights: [], questions: [] };
+  const open = text.indexOf("[");
+  if (open === -1) return [];
   try {
-    const obj = JSON.parse(text.slice(open, text.lastIndexOf("}") + 1));
-    const parsed = sessionMomentsSchema.parse(obj);
-    const clean = (a: string[]) => a.map((s) => s.trim()).filter(Boolean);
-    return { highlights: clean(parsed.highlights), questions: clean(parsed.questions) };
+    const arr = JSON.parse(text.slice(open, text.lastIndexOf("]") + 1));
+    return z
+      .array(z.string())
+      .parse(arr)
+      .map((s) => s.trim())
+      .filter(Boolean);
   } catch {
-    return { highlights: [], questions: [] };
+    return [];
   }
 }
 

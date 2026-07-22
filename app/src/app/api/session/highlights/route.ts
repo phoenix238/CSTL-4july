@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
-import { extractSessionMoments } from "@/lib/claude";
+import { extractHighlights } from "@/lib/claude";
 
-const strings = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((e): e is string => typeof e === "string") : [];
-
-// Live surfacing during a session. Ephemeral: analyses the latest chunk of
-// transcript against what's already been captured and returns any NEW highlight
-// moments (the client's words) and questions (the practitioner's). Nothing is
+// Live highlight-surfacing during a session. Ephemeral: analyses the latest chunk
+// of transcript against what's already been surfaced and returns any NEW moments,
+// using the Clean Language rubric (it judges the words, not who spoke). Nothing is
 // persisted here — the finished set is saved via /api/clients/[id]/session.
 export const POST = guarded(async (req: Request) => {
-  const { recent, highlights, questions } = await req.json();
-  const out = await extractSessionMoments(
+  const { recent, existing } = await req.json();
+  const highlights = await extractHighlights(
     typeof recent === "string" ? recent : "",
-    strings(highlights),
-    strings(questions),
+    Array.isArray(existing) ? existing.filter((e: unknown): e is string => typeof e === "string") : [],
   );
-  return NextResponse.json(out);
+  return NextResponse.json({ highlights });
 });

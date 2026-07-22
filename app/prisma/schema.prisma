@@ -72,8 +72,7 @@ model SessionRecording {
   date       DateTime
   clinic     String
   transcript String   // full live transcript, verbatim
-  pinned     String[] // the client's exact words / highlight moments
-  questions  String[] // the clean questions the practitioner asked, verbatim
+  pinned     String[] // the client's highlight moments (their words)
   myNotes    String   @default("") // therapist's own notes taken during the session
   bullets    String[] // Claude-generated summary bullets
   createdAt  DateTime @default(now())
