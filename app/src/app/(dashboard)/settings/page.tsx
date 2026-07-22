@@ -2,6 +2,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { SettingsView } from "@/components/SettingsView";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
+import { resolveClientCopy } from "@/lib/clientCopy";
 
 export default async function SettingsPage() {
   const settings = await getSettings();
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
         bookingBufferMinutes: settings.bookingBufferMinutes,
         chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
         bookingNotifyEmail: settings.bookingNotifyEmail,
+        clientCopy: resolveClientCopy(settings.clientCopy),
       }}
     />
   );

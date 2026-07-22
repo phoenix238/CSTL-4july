@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma, getSettings } from "@/lib/db";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
+import { resolveClientCopy } from "@/lib/clientCopy";
 
 /** The editable settings the UI needs (email preview etc.) — no Google secrets. */
 export const GET = guarded(async () => {
@@ -22,6 +23,7 @@ export const GET = guarded(async () => {
     bookingBufferMinutes: s.bookingBufferMinutes,
     chalkFarmBufferMinutes: s.chalkFarmBufferMinutes,
     bookingNotifyEmail: s.bookingNotifyEmail,
+    clientCopy: resolveClientCopy(s.clientCopy),
     // Which calendars are wired up — for the calendar page's event composer.
     calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },
   });

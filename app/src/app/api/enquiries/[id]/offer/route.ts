@@ -5,6 +5,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { composeOfferMessage } from "@/lib/booking/offer";
 import { getOrCreateOfferToken, offerUrl } from "@/lib/intake";
+import { resolveClientCopy, applyCopy } from "@/lib/clientCopy";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 
 /** Offer a client a group of times (nothing booked yet). Body: { clientName, clinic, times: ISO[], sendEmail, email?, emailBody? } */
@@ -27,14 +28,17 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     },
   });
 
-  let body = (emailBody?.trim() as string) || composeOfferMessage(clientName || "", clinic as Clinic, dates);
+  const settings = await getSettings();
+  const copy = resolveClientCopy(settings.clientCopy);
+  let body = (emailBody?.trim() as string) || composeOfferMessage(clientName || "", clinic as Clinic, dates, undefined, copy);
   if (send && email) {
     if (!clientId) {
       return NextResponse.json({ error: "Link this enquiry to a client before sending an offer email." }, { status: 400 });
     }
-    const settings = await getSettings();
     const link = offerUrl(settings, await getOrCreateOfferToken(id));
-    body = emailBody?.trim() ? `${emailBody.trim()}\n\n${link}` : composeOfferMessage(clientName || "", clinic as Clinic, dates, link);
+    body = emailBody?.trim()
+      ? `${emailBody.trim()}\n\n${link}`
+      : composeOfferMessage(clientName || "", clinic as Clinic, dates, link, copy);
     // If this enquiry came in via the Gmail add-on, keep the offer reply in that thread.
     const enquiry = await prisma.enquiry.findUnique({
       where: { id },
@@ -42,7 +46,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     });
     await sendEmail(
       email,
-      `Some session times — ${CLINIC_LABEL[clinic as Clinic]}`,
+      applyCopy(copy.offerEmailSubject, { clinic: CLINIC_LABEL[clinic as Clinic] }),
       body,
       enquiry?.gmailThreadId ? { threadId: enquiry.gmailThreadId, inReplyTo: enquiry.gmailMessageId } : undefined,
     );

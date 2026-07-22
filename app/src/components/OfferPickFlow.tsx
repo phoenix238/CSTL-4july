@@ -5,6 +5,7 @@ import { api, Card, PrimaryButton, useToast } from "./ui";
 import { BookingConfirmation } from "./BookingConfirmation";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
+import { applyCopy, type ClientCopy } from "@/lib/clientCopy";
 
 /**
  * The client-facing "pick one of the times Phoenix offered" page. Deliberately
@@ -19,12 +20,14 @@ export function OfferPickFlow({
   clientEmail,
   clinic,
   offeredTimes,
+  copy,
 }: {
   token: string;
   clientName: string;
   clientEmail: string;
   clinic: Clinic;
   offeredTimes: string[];
+  copy: ClientCopy;
 }) {
   const toast = useToast();
   const [freeTimes, setFreeTimes] = useState<string[] | null>(null);
@@ -75,6 +78,7 @@ export function OfferPickFlow({
         emailSent={confirmed.emailSent}
         email={clientEmail}
         intakeUrl={confirmed.intakeUrl}
+        copy={copy}
       />
     );
   }
@@ -84,9 +88,9 @@ export function OfferPickFlow({
   return (
     <div className="mx-auto max-w-[600px] px-5 py-10">
       <header className="mb-6 text-center">
-        <h1 className="font-serif text-[28px] leading-[1.1]">Pick a time, {first}</h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
-          Here are the times offered for {CLINIC_LABEL[clinic]} — tap one to book it straight away.
+        <h1 className="font-serif text-[28px] leading-[1.1]">{applyCopy(copy.offerPickTitle, { name: first })}</h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">
+          {applyCopy(copy.offerPickIntro, { clinic: CLINIC_LABEL[clinic] })}
         </p>
       </header>
 

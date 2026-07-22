@@ -17,6 +17,7 @@ import {
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
 import { composeOfferMessage, composeOfferTimesOnly } from "@/lib/booking/offer";
+import type { ClientCopy } from "@/lib/clientCopy";
 import { fmtDayLong, fmtTime, londonDayStart, londonWeekStart } from "@/lib/time";
 import { Legend } from "./calendar/Legend";
 import { TimeGrid } from "./calendar/TimeGrid";
@@ -90,7 +91,7 @@ export function EnquiryFlow({
   const [offeredTimes, setOfferedTimes] = useState<Date[]>([]);
 
   // booking panel
-  const [settings, setSettings] = useState<EmailSettings | null>(null);
+  const [settings, setSettings] = useState<(EmailSettings & { clientCopy?: ClientCopy }) | null>(null);
   const [sendPayment, setSendPayment] = useState(true);
   const [emailBody, setEmailBody] = useState("");
   const [emailDirty, setEmailDirty] = useState(false);
@@ -122,7 +123,7 @@ export function EnquiryFlow({
   }, [openEnquiryId]);
 
   useEffect(() => {
-    api<EmailSettings>("/api/settings").then(setSettings).catch(() => {});
+    api<EmailSettings & { clientCopy?: ClientCopy }>("/api/settings").then(setSettings).catch(() => {});
   }, []);
 
   // Debounced dedupe check while the name is typed (only when nothing is saved yet).
@@ -152,7 +153,7 @@ export function EnquiryFlow({
     if (!settings) return null;
     if (bookMode === "offer") {
       if (!selected.length) return null;
-      return { body: composeOfferMessage(displayName, clinic, selected) };
+      return { body: composeOfferMessage(displayName, clinic, selected, undefined, settings.clientCopy) };
     }
     if (!confirmSlot) return null;
     const whenLabel = `${fmtDayLong(confirmSlot)} · ${fmtTime(confirmSlot)}`;
@@ -409,7 +410,7 @@ export function EnquiryFlow({
     try {
       const id = await ensureEnquiry();
       const displayName = (activeClient?.name || name || "there").trim();
-      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected);
+      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected, undefined, settings?.clientCopy);
       // The clipboard gets either the full message or just the bare times/days;
       // the offer itself (times + status) is recorded the same way regardless.
       const clip = timesOnly ? composeOfferTimesOnly(selected) : message;
@@ -456,7 +457,7 @@ export function EnquiryFlow({
     try {
       const id = await ensureEnquiry();
       const displayName = (activeClient.name || name || "there").trim();
-      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected);
+      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected, undefined, settings?.clientCopy);
       await api(`/api/enquiries/${id}/offer`, {
         method: "POST",
         body: JSON.stringify({

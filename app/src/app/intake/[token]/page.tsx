@@ -2,6 +2,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { IntakeForm } from "@/components/IntakeForm";
 import { ToastProvider } from "@/components/ui";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
+import { resolveClientCopy } from "@/lib/clientCopy";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
 
   const settings = await getSettings();
   const questions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
+  const copy = resolveClientCopy(settings.clientCopy);
 
   return (
     <ToastProvider>
@@ -37,6 +39,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
         clientEmail={client.email}
         alreadyDone={client.intakeDone}
         questions={questions}
+        copy={copy}
       />
     </ToastProvider>
   );

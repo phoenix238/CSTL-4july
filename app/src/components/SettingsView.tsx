@@ -5,8 +5,10 @@ import { useState } from "react";
 import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./ui";
 import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./AvailabilitySettings";
+import { ClientMessagesEditor } from "./ClientMessagesEditor";
 import { reconnectGoogle } from "@/lib/googleActions";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
+import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
@@ -37,6 +39,7 @@ export interface SettingsData {
   bookingBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   bookingNotifyEmail: boolean;
+  clientCopy: ClientCopy;
 }
 
 /**
@@ -288,12 +291,20 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
         />
       </Dropdown>
 
-      {/* ───────────────── 3 · The emails clients receive ───────────────── */}
+      {/* ───────────────── 3 · The messages clients receive ───────────────── */}
       <Stage
         n={3}
-        title="The emails clients receive"
-        blurb="Every message that goes out, in order: a warm welcome when they first book, their intake form as its own separate step, then a gentle review request after the session."
+        title="The messages clients receive"
+        blurb="Every word a client reads — offer email, intake, booking pages, confirmations, review. Walk through them, check each one sounds like you, and edit anything. The welcome and review emails have their own per-location editors below."
       />
+
+      <Dropdown
+        label="ALL CLIENT MESSAGES — REVIEW & EDIT EVERY WORD"
+        open={!!open.clientMessages}
+        onToggle={() => toggle("clientMessages")}
+      >
+        <ClientMessagesEditor initial={settings.clientCopy} />
+      </Dropdown>
 
       <Dropdown
         label="WELCOME EMAIL — A NEW CLIENT'S FIRST EMAIL, BY LOCATION"

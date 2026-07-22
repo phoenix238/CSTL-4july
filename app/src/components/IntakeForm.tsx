@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, Card, PrimaryButton, inputClass, useToast } from "./ui";
 import { formatDateInput } from "@/lib/time";
 import { CONSENT_PARAGRAPHS, type IntakeQuestion } from "@/lib/intakeQuestions";
+import type { ClientCopy } from "@/lib/clientCopy";
 
 export function IntakeForm({
   token,
@@ -12,6 +13,7 @@ export function IntakeForm({
   clientEmail,
   alreadyDone,
   questions,
+  copy,
 }: {
   token: string;
   clientName: string;
@@ -19,6 +21,7 @@ export function IntakeForm({
   clientEmail: string;
   alreadyDone: boolean;
   questions: IntakeQuestion[];
+  copy: ClientCopy;
 }) {
   const toast = useToast();
   const [name, setName] = useState(clientName);
@@ -65,11 +68,8 @@ export function IntakeForm({
         <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-sage-tint text-2xl text-sage-text">
           ✓
         </div>
-        <div className="font-serif text-2xl font-medium">Thank you</div>
-        <p className="text-[14px] leading-relaxed text-muted">
-          Your details are with Phoenix. Your Google Calendar invite and session details are on their way to
-          your email — looking forward to seeing you.
-        </p>
+        <div className="font-serif text-2xl font-medium">{copy.intakeThanksTitle}</div>
+        <p className="text-[14px] leading-relaxed text-muted">{copy.intakeThanksBody}</p>
       </div>
     );
   }
@@ -77,13 +77,8 @@ export function IntakeForm({
   return (
     <div className="mx-auto max-w-[600px] px-5 py-10">
       <header className="mb-6 text-center">
-        <h1 className="font-serif text-[28px] leading-[1.1]">Your intake form</h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
-          A few details before your craniosacral session with Phoenix Tanner — it takes a couple of minutes
-          and helps him prepare so you can settle in quickly on the day. Once it&apos;s done, you&apos;ll get your
-          Google Calendar invite and everything you need for the session. Everything here is private and kept
-          in your confidential record.
-        </p>
+        <h1 className="font-serif text-[28px] leading-[1.1]">{copy.intakePageTitle}</h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.intakePageIntro}</p>
         {alreadyDone && (
           <p className="mt-3 rounded-xl bg-sage-tint px-3.5 py-2 text-[12.5px] text-sage-text">
             You&apos;ve filled this in before — you can update anything that&apos;s changed.
@@ -106,9 +101,7 @@ export function IntakeForm({
             placeholder="you@example.com"
             className={inputClass}
           />
-          <span className="text-[12px] leading-[1.5] text-muted">
-            So Phoenix can send your Google Calendar invite and session details.
-          </span>
+          <span className="text-[12px] leading-[1.5] text-muted">{copy.intakeEmailHelp}</span>
         </label>
 
         {questions.map((q) => (

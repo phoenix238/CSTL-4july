@@ -6,6 +6,7 @@ import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
+import type { ClientCopy } from "@/lib/clientCopy";
 
 function MapsLink({ address }: { address: string }) {
   const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -27,11 +28,13 @@ export function BookingFlow({
   bethnalAddress,
   waterlooNote,
   bethnalNote,
+  copy,
 }: {
   waterlooAddress: string;
   bethnalAddress: string;
   waterlooNote: string;
   bethnalNote: string;
+  copy: ClientCopy;
 }) {
   const toast = useToast();
   const [clinic, setClinic] = useState<Clinic>("bethnal");
@@ -88,6 +91,7 @@ export function BookingFlow({
         emailSent={confirmed.emailSent}
         email={confirmed.email}
         intakeUrl={confirmed.intakeUrl}
+        copy={copy}
       />
     );
   }
@@ -95,12 +99,8 @@ export function BookingFlow({
   return (
     <div className="mx-auto max-w-[600px] px-5 py-10">
       <header className="mb-6 text-center">
-        <h1 className="font-serif text-[28px] leading-[1.1]">Book a session</h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
-          Craniosacral therapy with Phoenix Tanner — a gentle, hands-on session to help your nervous system settle.
-          Pick a time below; you&apos;ll get a confirmation email straight after with everything you need, including
-          a quick intake form to fill out beforehand.
-        </p>
+        <h1 className="font-serif text-[28px] leading-[1.1]">{copy.bookPageTitle}</h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.bookPageIntro}</p>
       </header>
 
       <Card className="flex flex-col gap-4 px-5 py-6">
