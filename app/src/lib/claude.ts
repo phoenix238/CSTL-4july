@@ -102,36 +102,59 @@ export async function summariseSession(input: {
   return z.array(z.string()).min(1).parse(arr);
 }
 
+const sessionMomentsSchema = z.object({
+  highlights: z.array(z.string()).catch([]),
+  questions: z.array(z.string()).catch([]),
+});
+
+export interface SessionMoments {
+  highlights: string[];
+  questions: string[];
+}
+
 /**
- * Live during a session: surface the CLIENT's "highlight moments" — their most
- * significant exact phrases (vivid metaphors, emotionally charged statements,
- * repeated/emphasised words, statements of what they want to have happen). Runs
- * repeatedly on each new chunk of talk, so it's told what's already been surfaced
- * and returns only genuinely NEW moments, quoted verbatim. May return [].
+ * Live during a session, from each new chunk of transcript, pull out two things:
+ * - highlights: the CLIENT's most significant exact phrases (vivid metaphors,
+ *   charged statements, repeated/stressed words, what they want to have happen).
+ * - questions: the QUESTIONS the practitioner asked, verbatim — in Clean Language
+ *   the exact question matters as much as the answer.
+ * It's told what's already been captured so it only returns genuinely new items.
  */
-export async function extractHighlights(recent: string, existing: string[]): Promise<string[]> {
-  if (!recent.trim()) return [];
+export async function extractSessionMoments(
+  recent: string,
+  existingHighlights: string[],
+  existingQuestions: string[],
+): Promise<SessionMoments> {
+  if (!recent.trim()) return { highlights: [], questions: [] };
   const user = [
-    existing.length
-      ? `ALREADY SURFACED (do not repeat these or near-duplicates):\n${existing.map((e) => `- ${e}`).join("\n")}`
+    existingHighlights.length
+      ? `HIGHLIGHTS ALREADY SURFACED (don't repeat these or near-duplicates):\n${existingHighlights.map((e) => `- ${e}`).join("\n")}`
       : "",
-    `NEW TRANSCRIPT (may contain both the practitioner and the client speaking):\n${recent}`,
+    existingQuestions.length
+      ? `QUESTIONS ALREADY CAPTURED (don't repeat these or near-duplicates):\n${existingQuestions.map((e) => `- ${e}`).join("\n")}`
+      : "",
+    `NEW TRANSCRIPT (both the practitioner and the client are speaking, unlabelled):\n${recent}`,
   ]
     .filter(Boolean)
     .join("\n\n");
 
   const text = await chat(
-    `You listen to a live Clean Language coaching session and surface the CLIENT's "highlight moments": their most significant exact phrases — vivid metaphors, emotionally charged statements, words they repeat or stress, and anything about what they want to have happen. These are the words the practitioner will reflect straight back, so quote the client VERBATIM and keep each one short (their actual phrase, not a paraphrase). Ignore the practitioner's own questions. Only return moments not already surfaced. Reply with ONLY a JSON array of strings — an empty array [] if this chunk has nothing notable. No other text.`,
+    `You follow a live Clean Language coaching session and, from each new chunk of transcript, pull out two things:
+- "highlights": the CLIENT's most significant exact phrases — vivid metaphors, emotionally charged statements, words they repeat or stress, and anything about what they want to have happen. Quote them VERBATIM and keep each one short (their actual phrase, not a paraphrase).
+- "questions": the QUESTIONS the practitioner asked, quoted verbatim. Clean Language questions almost always start with "And" and end with "?" (e.g. "And what kind of X is that X?"). These matter as much as the answers, so capture them.
+Only return items not already listed. Reply with ONLY a JSON object of this shape: {"highlights": [...], "questions": [...]}. Use an empty array for either when this chunk has nothing for it. No other text.`,
     user,
-    250,
+    350,
   );
-  const open = text.indexOf("[");
-  if (open === -1) return [];
+  const open = text.indexOf("{");
+  if (open === -1) return { highlights: [], questions: [] };
   try {
-    const arr = JSON.parse(text.slice(open, text.lastIndexOf("]") + 1));
-    return z.array(z.string()).parse(arr).map((s) => s.trim()).filter(Boolean);
+    const obj = JSON.parse(text.slice(open, text.lastIndexOf("}") + 1));
+    const parsed = sessionMomentsSchema.parse(obj);
+    const clean = (a: string[]) => a.map((s) => s.trim()).filter(Boolean);
+    return { highlights: clean(parsed.highlights), questions: clean(parsed.questions) };
   } catch {
-    return [];
+    return { highlights: [], questions: [] };
   }
 }
 

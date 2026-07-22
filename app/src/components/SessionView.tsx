@@ -34,6 +34,11 @@ interface Highlight {
   source: "auto" | "pinned";
 }
 
+interface Question {
+  id: string;
+  text: string;
+}
+
 // The core clean questions, to glance at for your next move.
 const CLEAN_QUESTIONS = [
   "And what kind of X is that X?",
@@ -54,6 +59,20 @@ const uid = () =>
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
+// Append only items whose text isn't already present (case/space-insensitive).
+function appendUnique<T extends { text: string }>(prev: T[], texts: string[], make: (t: string) => T): T[] {
+  const seen = new Set(prev.map((p) => norm(p.text)));
+  const add: T[] = [];
+  for (const t of texts) {
+    const n = norm(t);
+    if (n && !seen.has(n)) {
+      seen.add(n);
+      add.push(make(t.trim()));
+    }
+  }
+  return add.length ? [...prev, ...add] : prev;
+}
+
 function fmtElapsed(s: number) {
   const m = Math.floor(s / 60);
   const sec = s % 60;
@@ -67,6 +86,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [interim, setInterim] = useState("");
   const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [finding, setFinding] = useState(false);
   const [myNotes, setMyNotes] = useState("");
   const [elapsed, setElapsed] = useState(0);
@@ -84,6 +104,8 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   linesRef.current = lines;
   const highlightsRef = useRef<Highlight[]>([]);
   highlightsRef.current = highlights;
+  const questionsRef = useRef<Question[]>([]);
+  questionsRef.current = questions;
   const lastCountRef = useRef(0); // transcript lines already sent for extraction
   const extractingRef = useRef(false);
 
@@ -96,21 +118,14 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   });
 
   const addHighlights = useCallback((texts: string[], source: Highlight["source"]) => {
-    setHighlights((hs) => {
-      const seen = new Set(hs.map((h) => norm(h.text)));
-      const add: Highlight[] = [];
-      for (const t of texts) {
-        const n = norm(t);
-        if (n && !seen.has(n)) {
-          seen.add(n);
-          add.push({ id: uid(), text: t.trim(), source });
-        }
-      }
-      return add.length ? [...hs, ...add] : hs;
-    });
+    setHighlights((hs) => appendUnique(hs, texts, (t) => ({ id: uid(), text: t, source })));
   }, []);
 
-  // Ask Claude for new highlight moments from the transcript since we last looked.
+  const addQuestions = useCallback((texts: string[]) => {
+    setQuestions((qs) => appendUnique(qs, texts, (t) => ({ id: uid(), text: t })));
+  }, []);
+
+  // Ask Claude for new highlight moments + questions from the transcript since we last looked.
   const runExtraction = useCallback(async () => {
     if (extractingRef.current) return;
     const all = linesRef.current;
@@ -121,22 +136,27 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     extractingRef.current = true;
     setFinding(true);
     try {
-      const { highlights: found } = await api<{ highlights: string[] }>("/api/session/highlights", {
+      const { highlights: fh, questions: fq } = await api<{
+        highlights: string[];
+        questions: string[];
+      }>("/api/session/highlights", {
         method: "POST",
         body: JSON.stringify({
           recent: newLines.map((l) => l.text).join("\n"),
-          existing: highlightsRef.current.map((h) => h.text),
+          highlights: highlightsRef.current.map((h) => h.text),
+          questions: questionsRef.current.map((q) => q.text),
         }),
       });
       lastCountRef.current = upto;
-      if (found?.length) addHighlights(found, "auto");
+      if (fh?.length) addHighlights(fh, "auto");
+      if (fq?.length) addQuestions(fq);
     } catch {
       // Transient failure — leave lastCountRef so the next tick retries this chunk.
     } finally {
       extractingRef.current = false;
       setFinding(false);
     }
-  }, [addHighlights]);
+  }, [addHighlights, addQuestions]);
 
   // Tick the session timer while recording.
   useEffect(() => {
@@ -164,6 +184,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     setLines([]);
     setInterim("");
     setHighlights([]);
+    setQuestions([]);
     setMyNotes("");
     setElapsed(0);
     lastCountRef.current = 0;
@@ -192,6 +213,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   };
 
   const removeHighlight = (id: string) => setHighlights((hs) => hs.filter((h) => h.id !== id));
+  const removeQuestion = (id: string) => setQuestions((qs) => qs.filter((q) => q.id !== id));
 
   const discard = () => {
     stop();
@@ -201,7 +223,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
 
   const save = async () => {
     const transcript = lines.map((l) => l.text).join("\n");
-    if (!transcript.trim() && !highlights.length && !myNotes.trim()) {
+    if (!transcript.trim() && !highlights.length && !questions.length && !myNotes.trim()) {
       toast("Nothing recorded yet");
       return;
     }
@@ -212,6 +234,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
         body: JSON.stringify({
           transcript,
           pinned: highlights.map((h) => h.text),
+          questions: questions.map((q) => q.text),
           myNotes,
           clinic,
         }),
@@ -369,6 +392,34 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
           </Card>
 
           <Card className="flex flex-col px-4 py-3.5">
+            <SectionLabel className="mb-2">QUESTIONS I ASKED</SectionLabel>
+            {questions.length === 0 ? (
+              <div className="text-[12.5px] text-muted">
+                The questions you put to them are captured here as you go — the exact wording, kept with
+                their answers.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {questions.map((q) => (
+                  <div
+                    key={q.id}
+                    className="flex items-start gap-2 rounded-lg bg-hoverbg px-3 py-2 text-[14px] leading-[1.45] text-ink-soft"
+                  >
+                    <span className="flex-1">{q.text}</span>
+                    <button
+                      onClick={() => removeQuestion(q.id)}
+                      aria-label="Remove question"
+                      className="cursor-pointer text-muted hover:text-ink"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="flex flex-col px-4 py-3.5">
             <SectionLabel className="mb-2">MY NOTES</SectionLabel>
             <textarea
               value={myNotes}
@@ -379,7 +430,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
           </Card>
 
           <Card className="flex flex-col px-4 py-3.5">
-            <SectionLabel className="mb-2">CLEAN QUESTIONS</SectionLabel>
+            <SectionLabel className="mb-2">CLEAN QUESTIONS · REFERENCE</SectionLabel>
             <div className="flex flex-col gap-1">
               {CLEAN_QUESTIONS.map((q) => (
                 <div key={q} className="text-[13px] leading-[1.5] text-ink-soft">
@@ -395,8 +446,8 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
       {phase === "review" && (
         <Card className="flex flex-wrap items-center gap-3 border-[1.5px] border-clay/35 px-4 py-3.5">
           <div className="text-[13.5px] text-ink-soft">
-            Session ended. Save the highlight moments, a summary and your notes to {client?.name}&apos;s
-            Doc — the full conversation stays here in the app.
+            Session ended. Save the highlight moments, the questions you asked, a summary and your notes to{" "}
+            {client?.name}&apos;s Doc — the full conversation stays here in the app.
           </div>
           <div className="flex-1" />
           <TintButton onClick={discard} disabled={saving}>
