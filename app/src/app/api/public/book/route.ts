@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans } from "@/lib/google/calendar";
 import { londonDayStart, londonDateKey } from "@/lib/time";
@@ -100,6 +101,24 @@ export async function POST(req: Request) {
       } catch (err) {
         console.error("Couldn't send booking notification email", err);
       }
+    }
+
+    // Surface the booking in the in-app inbox too, so it isn't invisible if the
+    // notification email is missed — a light, already-done entry Phoenix can
+    // glance at and dismiss. Non-fatal for the same reason as the email above.
+    try {
+      await prisma.enquiry.create({
+        data: {
+          via: "ONLINE",
+          name: result.clientName,
+          text: `Booked online — ${result.whenLabel}`,
+          status: "booked_online",
+          clientId: result.clientId,
+        },
+      });
+      revalidateTag("shell");
+    } catch (err) {
+      console.error("Couldn't record the online booking in the inbox", err);
     }
 
     return NextResponse.json({

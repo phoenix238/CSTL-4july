@@ -78,7 +78,7 @@ model Enquiry {
   via       String   @default("PASTED") // WHATSAPP | EMAIL | PASTED
   name      String   @default("")
   text      String
-  status       String     @default("waiting") // waiting | offered | booked | dismissed
+  status       String     @default("waiting") // waiting | offered | booked | booked_online | dismissed
   clientId     String? // set once the enquiry is saved as / matched to a client
   client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clinic       String     @default("") // which clinic the offered times are for

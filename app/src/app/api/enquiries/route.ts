@@ -5,10 +5,10 @@ import { prisma } from "@/lib/db";
 import { analyseEnquiry } from "@/lib/claude";
 import { findExistingClient } from "@/lib/clients";
 
-/** The inbox — waiting + offered (awaiting the client's reply). */
+/** The inbox — waiting + offered (awaiting the client's reply) + booked-online notices. */
 export const GET = guarded(async () => {
   const enquiries = await prisma.enquiry.findMany({
-    where: { status: { in: ["waiting", "offered"] } },
+    where: { status: { in: ["waiting", "offered", "booked_online"] } },
     orderBy: { createdAt: "desc" },
     select: { id: true, via: true, name: true, text: true, status: true, clientId: true, offeredTimes: true, createdAt: true },
   });

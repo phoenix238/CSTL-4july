@@ -20,6 +20,8 @@ export function viaChip(via: string) {
       return { label: "WhatsApp", color: "oklch(0.42 0.08 148)", bg: "oklch(0.94 0.03 148)" };
     case "EMAIL":
       return { label: "Email", color: "oklch(0.5 0.09 75)", bg: "oklch(0.95 0.035 85)" };
+    case "ONLINE":
+      return { label: "Online", color: "oklch(0.42 0.08 148)", bg: "oklch(0.94 0.03 148)" };
     default:
       return { label: "Pasted", color: "oklch(0.5 0.02 58)", bg: "oklch(0.94 0.01 80)" };
   }
@@ -46,6 +48,7 @@ export function Inbox({
         waiting.map((q) => {
           const chip = viaChip(q.via);
           const offered = q.status === "offered";
+          const bookedOnline = q.status === "booked_online";
           return (
             <Card key={q.id} className="flex flex-col gap-2 px-4 py-3.5">
               <div className="flex items-center justify-between gap-2">
@@ -65,23 +68,36 @@ export function Inbox({
                   </Chip>
                   <button
                     onClick={() => onDelete(q.id)}
-                    title="Delete this enquiry"
+                    title={bookedOnline ? "Dismiss this notice" : "Delete this enquiry"}
                     className="cursor-pointer text-[12px] font-semibold text-faint hover:text-[oklch(0.55_0.15_25)]"
                   >
                     ✕
                   </button>
                 </div>
               </div>
-              {offered ? (
+              {bookedOnline ? (
+                <div className="text-[12.5px] font-medium text-sage-text">✓ {q.text.trim()}</div>
+              ) : offered ? (
                 <div className="text-[12.5px] font-medium text-amber-text">
                   Offered {q.offeredTimes?.length ?? 0} time{(q.offeredTimes?.length ?? 0) === 1 ? "" : "s"} · awaiting reply
                 </div>
               ) : (
                 <div className="line-clamp-1 text-[12.5px] text-muted">&ldquo;{q.text.trim()}&rdquo;</div>
               )}
-              <TintButton className="self-start" onClick={() => onOpen(q.id)}>
-                {offered ? "Confirm a time" : "Open"}
-              </TintButton>
+              {bookedOnline ? (
+                q.clientId ? (
+                  <Link
+                    href={`/clients/${q.clientId}`}
+                    className="self-start text-[12.5px] font-semibold text-sage-text hover:text-sage"
+                  >
+                    Open client ›
+                  </Link>
+                ) : null
+              ) : (
+                <TintButton className="self-start" onClick={() => onOpen(q.id)}>
+                  {offered ? "Confirm a time" : "Open"}
+                </TintButton>
+              )}
             </Card>
           );
         })

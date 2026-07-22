@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const getShellData = unstable_cache(
   async () => {
     const [enquiryBadge, settings] = await Promise.all([
-      prisma.enquiry.count({ where: { status: { in: ["waiting", "offered"] } } }),
+      prisma.enquiry.count({ where: { status: { in: ["waiting", "offered", "booked_online"] } } }),
       prisma.appSettings.findUnique({ where: { id: 1 }, select: { googleRefreshToken: true } }),
     ]);
     return { enquiryBadge, googleConnected: !!settings?.googleRefreshToken };

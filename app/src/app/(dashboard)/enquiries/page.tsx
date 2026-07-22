@@ -20,7 +20,7 @@ export default async function EnquiriesPage({
     : null;
 
   const waiting = await prisma.enquiry.findMany({
-    where: { status: { in: ["waiting", "offered"] } },
+    where: { status: { in: ["waiting", "offered", "booked_online"] } },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
