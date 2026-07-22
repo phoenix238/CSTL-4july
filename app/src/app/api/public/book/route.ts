@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 
     // Let Phoenix know a booking came in — non-fatal: the booking itself has
     // already succeeded, so a notification hiccup shouldn't fail the visitor's
-    // confirmation. Email lands in Gmail, which already pushes to her phone.
+    // confirmation. Email lands in Gmail, which already pushes to his phone.
     if (settings.bookingNotifyEmail && process.env.ALLOWED_EMAIL) {
       try {
         await sendEmail(

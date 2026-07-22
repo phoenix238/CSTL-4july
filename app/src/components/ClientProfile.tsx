@@ -514,7 +514,8 @@ export function ClientProfile({
                   try {
                     const { url } = await api<{ url: string }>(`/api/clients/${client.id}/intake-link`);
                     await navigator.clipboard?.writeText(url);
-                    toast("Intake link copied ✓");
+                    toast("Intake link copied ✓ — marked as shared");
+                    router.refresh();
                   } catch (err) {
                     toast(err instanceof Error ? err.message : "Couldn't get the link");
                   }
@@ -566,7 +567,11 @@ export function ClientProfile({
             <div className="flex flex-col gap-0.5 px-0.5 text-[11px] text-muted">
               <span>
                 Intake form:{" "}
-                {client.intakeEmailSentAt ? `sent ${client.intakeEmailSentAt}` : "not sent yet"}
+                {client.intakeDone
+                  ? "completed ✓"
+                  : client.intakeEmailSentAt
+                    ? `shared ${client.intakeEmailSentAt}`
+                    : "not sent yet"}
               </span>
               <span>
                 Review request:{" "}

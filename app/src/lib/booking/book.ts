@@ -105,7 +105,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   let emailTextForClipboard: string | undefined;
   let emailSent = false;
   // Did the welcome message actually reach the client (emailed by us, or handed
-  // to Phoenix on the clipboard to send herself)? A failed send doesn't count.
+  // to Phoenix on the clipboard to send himself)? A failed send doesn't count.
   let firstContactMade = false;
   if (req.sendEmail && client.email) {
     // The session is already booked (calendar event exists) by this point — a

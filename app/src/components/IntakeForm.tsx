@@ -80,7 +80,7 @@ export function IntakeForm({
         <h1 className="font-serif text-[28px] leading-[1.1]">Your intake form</h1>
         <p className="mt-2 text-[13.5px] leading-relaxed text-muted">
           A few details before your craniosacral session with Phoenix Tanner — it takes a couple of minutes
-          and helps her prepare so you can settle in quickly on the day. Once it&apos;s done, you&apos;ll get your
+          and helps him prepare so you can settle in quickly on the day. Once it&apos;s done, you&apos;ll get your
           Google Calendar invite and everything you need for the session. Everything here is private and kept
           in your confidential record.
         </p>

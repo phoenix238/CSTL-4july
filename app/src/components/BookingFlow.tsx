@@ -14,10 +14,10 @@ function MapsLink({ address }: { address: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 font-semibold text-clay-text underline decoration-clay/40 underline-offset-2 hover:text-clay"
+      className="inline-flex w-fit items-center gap-1 font-semibold text-clay-text underline decoration-clay/40 underline-offset-2 hover:text-clay"
     >
       <span aria-hidden="true">📍</span>
-      {address}
+      Open in Google Maps
     </a>
   );
 }
@@ -120,10 +120,14 @@ export function BookingFlow({
             </button>
           ))}
         </div>
-        <div className="flex flex-col gap-1 text-[12.5px] text-muted">
-          <div>
-            {CLINIC_PRICE[clinic]} · 60 minutes{address ? <> · <MapsLink address={address} /></> : null}
-          </div>
+        <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
+          <div>{CLINIC_PRICE[clinic]} · 60 minutes</div>
+          {address && (
+            <div className="flex flex-col gap-1 text-[12px] leading-relaxed text-[oklch(0.45_0.02_60)]">
+              <span>{address}</span>
+              <MapsLink address={address} />
+            </div>
+          )}
           {note && <p className="text-[12px] leading-relaxed text-[oklch(0.45_0.02_60)]">{note}</p>}
         </div>
 

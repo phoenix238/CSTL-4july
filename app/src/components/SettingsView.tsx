@@ -5,6 +5,7 @@ import { useState } from "react";
 import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./ui";
 import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./AvailabilitySettings";
+import { reconnectGoogle } from "@/lib/googleActions";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { WeeklyHours } from "@/lib/booking/availability";
 
@@ -572,6 +573,18 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
             {editingGoogle ? "Cancel" : "Edit"}
           </button>
         </div>
+        <form action={reconnectGoogle} className="px-0.5 pb-1.5">
+          <button
+            type="submit"
+            className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-clay-text hover:bg-hoverbg"
+          >
+            Reconnect Google
+          </button>
+          <p className="mt-1.5 text-[11px] leading-[1.5] text-muted">
+            Use this if sending an email fails with a permissions error — it refreshes Google&apos;s
+            connection with the latest access (Calendar, Drive, Gmail, Sheets).
+          </p>
+        </form>
         {!editingGoogle ? (
           <Card className="px-5 py-1.5">
             <Row label="Connection">

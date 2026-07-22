@@ -69,7 +69,7 @@ Extract from the message and reply with ONLY a JSON object, no other text:
 /** Turn a raw (often dictated) session note into short bullet points for the Doc. */
 export async function summariseNote(raw: string): Promise<string[]> {
   const text = await chat(
-    `You summarise a craniosacral therapist's raw session notes into 3–6 short bullet points for the client's record. Keep her clinical vocabulary (stillpoint, occipital base, sacrum, unwinding, etc.). Each bullet is one short phrase or sentence. Reply with ONLY a JSON array of strings, no other text.`,
+    `You summarise a craniosacral therapist's raw session notes into 3–6 short bullet points for the client's record. Keep their clinical vocabulary (stillpoint, occipital base, sacrum, unwinding, etc.). Each bullet is one short phrase or sentence. Reply with ONLY a JSON array of strings, no other text.`,
     raw,
     400,
   );

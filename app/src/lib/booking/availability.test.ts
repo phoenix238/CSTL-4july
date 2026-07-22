@@ -213,7 +213,7 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy,
       slotMinutes: 30,
-      bufferMinutes: 15, // Phoenix's own default buffer between her own clients
+      bufferMinutes: 15, // Phoenix's own default buffer between his own clients
       now: at(0),
     });
     // 17:15 (only 15 min clear) is still inside the studio-mate's 30-min gap.
