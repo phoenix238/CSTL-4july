@@ -102,6 +102,39 @@ export async function summariseSession(input: {
   return z.array(z.string()).min(1).parse(arr);
 }
 
+/**
+ * Live during a session: surface the CLIENT's "highlight moments" — their most
+ * significant exact phrases (vivid metaphors, emotionally charged statements,
+ * repeated/emphasised words, statements of what they want to have happen). Runs
+ * repeatedly on each new chunk of talk, so it's told what's already been surfaced
+ * and returns only genuinely NEW moments, quoted verbatim. May return [].
+ */
+export async function extractHighlights(recent: string, existing: string[]): Promise<string[]> {
+  if (!recent.trim()) return [];
+  const user = [
+    existing.length
+      ? `ALREADY SURFACED (do not repeat these or near-duplicates):\n${existing.map((e) => `- ${e}`).join("\n")}`
+      : "",
+    `NEW TRANSCRIPT (may contain both the practitioner and the client speaking):\n${recent}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const text = await chat(
+    `You listen to a live Clean Language coaching session and surface the CLIENT's "highlight moments": their most significant exact phrases — vivid metaphors, emotionally charged statements, words they repeat or stress, and anything about what they want to have happen. These are the words the practitioner will reflect straight back, so quote the client VERBATIM and keep each one short (their actual phrase, not a paraphrase). Ignore the practitioner's own questions. Only return moments not already surfaced. Reply with ONLY a JSON array of strings — an empty array [] if this chunk has nothing notable. No other text.`,
+    user,
+    250,
+  );
+  const open = text.indexOf("[");
+  if (open === -1) return [];
+  try {
+    const arr = JSON.parse(text.slice(open, text.lastIndexOf("]") + 1));
+    return z.array(z.string()).parse(arr).map((s) => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 const importedClientSchema = z.object({
   name: z.string(),
   email: z.string(),

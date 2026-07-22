@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   Card,
@@ -26,7 +26,12 @@ type Phase = "idle" | "live" | "review";
 interface Line {
   id: string;
   text: string;
-  pinned: boolean;
+}
+
+interface Highlight {
+  id: string;
+  text: string;
+  source: "auto" | "pinned";
 }
 
 // The core clean questions, to glance at for your next move.
@@ -41,8 +46,13 @@ const CLEAN_QUESTIONS = [
   "And what would X like to have happen?",
 ];
 
+// How often, while live, we ask Claude for new highlight moments.
+const EXTRACT_EVERY_MS = 12_000;
+
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
+
+const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
 function fmtElapsed(s: number) {
   const m = Math.floor(s / 60);
@@ -56,6 +66,8 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [lines, setLines] = useState<Line[]>([]);
   const [interim, setInterim] = useState("");
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [finding, setFinding] = useState(false);
   const [myNotes, setMyNotes] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -64,14 +76,67 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   const clinic = client?.clinic ?? "waterloo";
   const supported = useMemo(() => dictationSupported(), []);
 
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const highlightRef = useRef<HTMLDivElement | null>(null);
+
+  // Mirrors of state read inside the extraction loop, to avoid stale closures.
+  const linesRef = useRef<Line[]>([]);
+  linesRef.current = lines;
+  const highlightsRef = useRef<Highlight[]>([]);
+  highlightsRef.current = highlights;
+  const lastCountRef = useRef(0); // transcript lines already sent for extraction
+  const extractingRef = useRef(false);
 
   const { listening, start, stop } = useLiveTranscript({
-    onFinal: (text) => setLines((ls) => [...ls, { id: uid(), text, pinned: false }]),
+    onFinal: (text) => setLines((ls) => [...ls, { id: uid(), text }]),
     onInterim: setInterim,
-    onUnsupported: () => toast("Live transcription needs Chrome or Safari — you can still type your notes"),
+    onUnsupported: () =>
+      toast("Live transcription needs Chrome or Safari — you can still type your notes"),
     onBlocked: () => toast("Microphone blocked — allow it in your browser settings"),
   });
+
+  const addHighlights = useCallback((texts: string[], source: Highlight["source"]) => {
+    setHighlights((hs) => {
+      const seen = new Set(hs.map((h) => norm(h.text)));
+      const add: Highlight[] = [];
+      for (const t of texts) {
+        const n = norm(t);
+        if (n && !seen.has(n)) {
+          seen.add(n);
+          add.push({ id: uid(), text: t.trim(), source });
+        }
+      }
+      return add.length ? [...hs, ...add] : hs;
+    });
+  }, []);
+
+  // Ask Claude for new highlight moments from the transcript since we last looked.
+  const runExtraction = useCallback(async () => {
+    if (extractingRef.current) return;
+    const all = linesRef.current;
+    const from = lastCountRef.current;
+    if (all.length <= from) return;
+    const newLines = all.slice(from);
+    const upto = all.length;
+    extractingRef.current = true;
+    setFinding(true);
+    try {
+      const { highlights: found } = await api<{ highlights: string[] }>("/api/session/highlights", {
+        method: "POST",
+        body: JSON.stringify({
+          recent: newLines.map((l) => l.text).join("\n"),
+          existing: highlightsRef.current.map((h) => h.text),
+        }),
+      });
+      lastCountRef.current = upto;
+      if (found?.length) addHighlights(found, "auto");
+    } catch {
+      // Transient failure — leave lastCountRef so the next tick retries this chunk.
+    } finally {
+      extractingRef.current = false;
+      setFinding(false);
+    }
+  }, [addHighlights]);
 
   // Tick the session timer while recording.
   useEffect(() => {
@@ -80,22 +145,36 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     return () => clearInterval(t);
   }, [phase]);
 
-  // Keep the transcript scrolled to the latest line.
+  // Surface highlights on a gentle cadence while recording.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [lines, interim]);
+    if (phase !== "live") return;
+    const t = setInterval(() => void runExtraction(), EXTRACT_EVERY_MS);
+    return () => clearInterval(t);
+  }, [phase, runExtraction]);
 
-  const pinned = lines.filter((l) => l.pinned);
+  // Keep both columns scrolled to their latest content.
+  useEffect(() => {
+    transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight });
+  }, [lines, interim]);
+  useEffect(() => {
+    highlightRef.current?.scrollTo({ top: highlightRef.current.scrollHeight });
+  }, [highlights]);
+
+  const resetSession = () => {
+    setLines([]);
+    setInterim("");
+    setHighlights([]);
+    setMyNotes("");
+    setElapsed(0);
+    lastCountRef.current = 0;
+  };
 
   const beginSession = () => {
     if (!clientId) {
       toast("Pick who you're with first");
       return;
     }
-    setLines([]);
-    setInterim("");
-    setMyNotes("");
-    setElapsed(0);
+    resetSession();
     setPhase("live");
     start();
   };
@@ -104,6 +183,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     stop();
     setInterim("");
     setPhase("review");
+    void runExtraction(); // catch anything said since the last tick
   };
 
   const resumeSession = () => {
@@ -111,21 +191,17 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     start();
   };
 
-  const togglePin = (id: string) =>
-    setLines((ls) => ls.map((l) => (l.id === id ? { ...l, pinned: !l.pinned } : l)));
+  const removeHighlight = (id: string) => setHighlights((hs) => hs.filter((h) => h.id !== id));
 
   const discard = () => {
     stop();
     setPhase("idle");
-    setLines([]);
-    setInterim("");
-    setMyNotes("");
-    setElapsed(0);
+    resetSession();
   };
 
   const save = async () => {
     const transcript = lines.map((l) => l.text).join("\n");
-    if (!transcript.trim() && !pinned.length && !myNotes.trim()) {
+    if (!transcript.trim() && !highlights.length && !myNotes.trim()) {
       toast("Nothing recorded yet");
       return;
     }
@@ -135,7 +211,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
         method: "POST",
         body: JSON.stringify({
           transcript,
-          pinned: pinned.map((l) => l.text),
+          pinned: highlights.map((h) => h.text),
           myNotes,
           clinic,
         }),
@@ -152,13 +228,13 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   const chip = clinicChip(clinic);
 
   return (
-    <div className="flex max-w-[1200px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
+    <div className="flex max-w-[1240px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
       {/* header / controls */}
       <div className="flex flex-wrap items-center gap-3">
         <div>
           <h1 className="font-serif text-[22px] leading-tight">Session</h1>
           <div className="text-[12.5px] text-muted">
-            Record what&apos;s said, pin their exact words, keep your notes to hand.
+            The whole conversation on the left, their highlight moments surfaced on the right.
           </div>
         </div>
         <div className="flex-1" />
@@ -210,35 +286,31 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-        {/* live transcript */}
-        <Card className="flex min-h-[420px] flex-col px-0 py-0">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_1fr]">
+        {/* left — the whole conversation */}
+        <Card className="flex min-h-[460px] flex-col px-0 py-0">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <SectionLabel>TRANSCRIPT</SectionLabel>
+            <SectionLabel>CONVERSATION</SectionLabel>
             {phase !== "idle" && (
-              <span className="text-[11.5px] text-muted">Tap a line to pin their exact words</span>
+              <span className="text-[11.5px] text-muted">Tap a line to keep it as a highlight</span>
             )}
           </div>
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
+          <div ref={transcriptRef} className="flex-1 overflow-y-auto px-4 py-3">
             {lines.length === 0 && !interim ? (
               <div className="pt-10 text-center text-[13.5px] text-muted">
                 {phase === "idle"
-                  ? "Pick who you're with and press Start — what's said appears here as you talk."
-                  : "Listening… speak and it shows up here."}
+                  ? "Pick who you're with and press Start — every word appears here as you talk."
+                  : "Listening… what's said shows up here."}
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {lines.map((l) => (
                   <button
                     key={l.id}
-                    onClick={() => togglePin(l.id)}
-                    className={`cursor-pointer rounded-lg px-3 py-2 text-left text-[15px] leading-[1.5] transition-colors ${
-                      l.pinned
-                        ? "bg-clay-tint text-clay-text"
-                        : "text-ink hover:bg-hoverbg"
-                    }`}
+                    onClick={() => addHighlights([l.text], "pinned")}
+                    title="Keep as a highlight"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-left text-[15px] leading-[1.5] text-ink transition-colors hover:bg-hoverbg"
                   >
-                    {l.pinned && <span className="mr-1.5">📌</span>}
                     {l.text}
                   </button>
                 ))}
@@ -250,49 +322,62 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
           </div>
         </Card>
 
-        {/* right rail */}
+        {/* right — highlight moments + notes + prompts */}
         <div className="flex flex-col gap-4">
-          {/* pinned exact words */}
-          <Card className="flex flex-col px-4 py-3.5">
-            <SectionLabel className="mb-2">THEIR EXACT WORDS</SectionLabel>
-            {pinned.length === 0 ? (
-              <div className="text-[12.5px] text-muted">
-                Tap any line in the transcript to keep the words they actually used — the ones you&apos;ll
-                reflect back.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {pinned.map((l) => (
-                  <div
-                    key={l.id}
-                    className="flex items-start gap-2 rounded-lg bg-clay-tint px-3 py-2 text-[14px] leading-[1.45] text-clay-text"
-                  >
-                    <span className="flex-1">{l.text}</span>
-                    <button
-                      onClick={() => togglePin(l.id)}
-                      aria-label="Unpin"
-                      className="cursor-pointer text-clay-text/60 hover:text-clay-text"
+          <Card className="flex min-h-[240px] flex-col px-0 py-0">
+            <div className="flex items-center justify-between border-b border-line px-4 py-3">
+              <SectionLabel>HIGHLIGHT MOMENTS</SectionLabel>
+              {finding ? (
+                <span className="flex items-center gap-1.5 text-[11.5px] text-muted">
+                  <span className="h-[7px] w-[7px] animate-ct-pulse rounded-full bg-clay" />
+                  listening for highlights
+                </span>
+              ) : (
+                <span className="text-[11.5px] text-muted">their words, as they land</span>
+              )}
+            </div>
+            <div ref={highlightRef} className="flex-1 overflow-y-auto px-4 py-3">
+              {highlights.length === 0 ? (
+                <div className="pt-6 text-center text-[12.5px] text-muted">
+                  {phase === "idle"
+                    ? "The standout things they say — vivid images, charged phrases, what they want — appear here as you record."
+                    : "Nothing stood out yet — their key phrases will appear here."}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {highlights.map((h) => (
+                    <div
+                      key={h.id}
+                      className="flex items-start gap-2 rounded-lg bg-clay-tint px-3 py-2 text-[14.5px] leading-[1.45] text-clay-text"
                     >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                      <span className="flex-1">
+                        {h.source === "pinned" && <span className="mr-1">📌</span>}
+                        {h.text}
+                      </span>
+                      <button
+                        onClick={() => removeHighlight(h.id)}
+                        aria-label="Remove highlight"
+                        className="cursor-pointer text-clay-text/60 hover:text-clay-text"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </Card>
 
-          {/* my notes */}
           <Card className="flex flex-col px-4 py-3.5">
             <SectionLabel className="mb-2">MY NOTES</SectionLabel>
             <textarea
               value={myNotes}
               onChange={(e) => setMyNotes(e.target.value)}
               placeholder="Your own notes — what you're noticing, what to ask next…"
-              className="min-h-[120px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-3 text-[14px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+              className="min-h-[100px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-3 text-[14px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
             />
           </Card>
 
-          {/* clean questions */}
           <Card className="flex flex-col px-4 py-3.5">
             <SectionLabel className="mb-2">CLEAN QUESTIONS</SectionLabel>
             <div className="flex flex-col gap-1">
@@ -310,8 +395,8 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
       {phase === "review" && (
         <Card className="flex flex-wrap items-center gap-3 border-[1.5px] border-clay/35 px-4 py-3.5">
           <div className="text-[13.5px] text-ink-soft">
-            Session ended. Save a summary, the pinned words and your notes to {client?.name}&apos;s Doc — the
-            full transcript stays here in the app.
+            Session ended. Save the highlight moments, a summary and your notes to {client?.name}&apos;s
+            Doc — the full conversation stays here in the app.
           </div>
           <div className="flex-1" />
           <TintButton onClick={discard} disabled={saving}>
