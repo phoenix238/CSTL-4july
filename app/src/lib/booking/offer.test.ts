@@ -22,6 +22,15 @@ describe("composeOfferMessage", () => {
   it("falls back to 'there' with no name", () => {
     expect(composeOfferMessage("", "waterloo", [t1])).toContain("Hi there,");
   });
+
+  it("appends the pick link when given one", () => {
+    const msg = composeOfferMessage("Maya", "waterloo", [t1], "https://cstl.example/offer/abc123");
+    expect(msg).toContain("https://cstl.example/offer/abc123");
+  });
+
+  it("omits any link when none is given", () => {
+    expect(composeOfferMessage("Maya", "waterloo", [t1])).not.toContain("http");
+  });
 });
 
 describe("composeOfferTimesOnly", () => {

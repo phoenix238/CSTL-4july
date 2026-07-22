@@ -96,6 +96,7 @@ export function EnquiryFlow({
   const [emailDirty, setEmailDirty] = useState(false);
   const [booking, setBooking] = useState(false);
   const [offering, setOffering] = useState(false);
+  const [sendingOffer, setSendingOffer] = useState(false);
   const [result, setResult] = useState<BookResult | null>(null);
 
   // one session-start for confirm mode
@@ -404,6 +405,46 @@ export function EnquiryFlow({
       toast(err instanceof Error ? err.message : "Couldn't mark those times as offered");
     } finally {
       setOffering(false);
+    }
+  }
+
+  async function sendOfferEmail() {
+    if (!selected.length) {
+      toast("Pick some times to offer first");
+      return;
+    }
+    if (!activeClient?.id) {
+      toast("Save or link a client first — an email needs somewhere to go");
+      return;
+    }
+    if (!activeClient.email) {
+      toast("This client has no email on record — use Copy instead");
+      return;
+    }
+    setSendingOffer(true);
+    try {
+      const id = await ensureEnquiry();
+      const displayName = (activeClient.name || name || "there").trim();
+      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected);
+      await api(`/api/enquiries/${id}/offer`, {
+        method: "POST",
+        body: JSON.stringify({
+          clientName: displayName,
+          clinic,
+          times: selected.map((d) => d.toISOString()),
+          sendEmail: true,
+          email: activeClient.email,
+          clientId: activeClient.id,
+          emailBody: message,
+        }),
+      });
+      toast("Offer email sent — it includes a link so they can pick a time themselves");
+      void refreshWaiting();
+      resetToEmpty();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't send the offer email");
+    } finally {
+      setSendingOffer(false);
     }
   }
 
@@ -806,10 +847,13 @@ export function EnquiryFlow({
             </>
           )}
           <div className="flex flex-wrap gap-2">
-            <PrimaryButton onClick={() => copyAndMarkOffered(true)} disabled={offering}>
-              {offering ? "Copying…" : "Copy times only & mark as offered"}
+            <PrimaryButton onClick={sendOfferEmail} disabled={sendingOffer || offering}>
+              {sendingOffer ? "Sending…" : "Send offer email"}
             </PrimaryButton>
-            <OutlineButton onClick={() => copyAndMarkOffered(false)} disabled={offering}>
+            <OutlineButton onClick={() => copyAndMarkOffered(true)} disabled={offering || sendingOffer}>
+              {offering ? "Copying…" : "Copy times only & mark as offered"}
+            </OutlineButton>
+            <OutlineButton onClick={() => copyAndMarkOffered(false)} disabled={offering || sendingOffer}>
               Copy full message instead
             </OutlineButton>
           </div>

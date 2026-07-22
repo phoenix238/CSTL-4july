@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeAvailableSlots,
   dayOpenIntervals,
+  isSlotAvailable,
   mergeIntervals,
   resolveWeeklyHours,
   subtractInterval,
@@ -219,5 +220,46 @@ describe("computeAvailableSlots", () => {
     expect(slots).not.toContainEqual(at(17, 15));
     // 17:30 (a full 30 min clear) is bookable.
     expect(slots).toContainEqual(at(17, 30));
+  });
+});
+
+describe("isSlotAvailable", () => {
+  const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }]; // 9-17
+
+  it("is true for a free time even off the slotMinutes grid (e.g. offered at a 15-min mark)", () => {
+    expect(
+      isSlotAvailable(at(9, 15), { clinic: "waterloo", weeklyHours, overrides: [], busy: [], now: at(0) }),
+    ).toBe(true);
+  });
+
+  it("is false once a busy span now overlaps it", () => {
+    expect(
+      isSlotAvailable(at(9, 15), {
+        clinic: "waterloo",
+        weeklyHours,
+        overrides: [],
+        busy: [{ start: at(9), end: at(10) }],
+        now: at(0),
+      }),
+    ).toBe(false);
+  });
+
+  it("is false outside the open hours", () => {
+    expect(
+      isSlotAvailable(at(18), { clinic: "waterloo", weeklyHours, overrides: [], busy: [], now: at(0) }),
+    ).toBe(false);
+  });
+
+  it("is false once inside the minimum-notice window", () => {
+    expect(
+      isSlotAvailable(at(10), {
+        clinic: "waterloo",
+        weeklyHours,
+        overrides: [],
+        busy: [],
+        now: at(9),
+        minNoticeMinutes: 120,
+      }),
+    ).toBe(false);
   });
 });

@@ -4,7 +4,7 @@
 // routes) fetch the raw data and pass it in.
 
 import { blockedRange, SESSION_MINUTES, type Clinic } from "./rules";
-import { londonDateKey, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
+import { londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
 
 export interface WeeklyWindow {
   weekday: number; // 0=Mon..6=Sun, matches londonWeekdayIndex
@@ -130,6 +130,43 @@ const pad = (iv: { start: Date; end: Date }, minutes: number) =>
     ? { start: new Date(iv.start.getTime() - minutes * 60_000), end: new Date(iv.end.getTime() + minutes * 60_000) }
     : iv;
 
+/**
+ * Does this exact candidate instant (at `minute` past London midnight) fit
+ * inside one of the day's open intervals, with its full padded footprint,
+ * and clear of every busy span? Shared by the grid scan below and by
+ * `isSlotAvailable`, which checks one arbitrary instant that may not land on
+ * the grid at all.
+ */
+function slotFits(
+  candidate: Date,
+  minute: number,
+  intervals: Interval[],
+  clinic: Clinic,
+  busy: AvailabilityParams["busy"],
+  bufferMinutes: number,
+): boolean {
+  // Both clinics currently footprint to exactly the session hour (see
+  // blockedRange in rules.ts), but this stays generic in case a future
+  // clinic rule pads its real calendar footprint beyond the raw session
+  // minute — the whole padded footprint must fit inside the open interval.
+  const rawFootprint = blockedRange(clinic, candidate);
+  const startPadMin = Math.round((candidate.getTime() - rawFootprint.start.getTime()) / 60_000);
+  const endPadMin = Math.round(
+    (rawFootprint.end.getTime() - (candidate.getTime() + SESSION_MINUTES * 60_000)) / 60_000,
+  );
+  const footprintStart = minute - startPadMin - bufferMinutes;
+  const footprintEnd = minute + SESSION_MINUTES + endPadMin + bufferMinutes;
+  if (!intervals.some((iv) => footprintStart >= iv.start && footprintEnd <= iv.end)) return false;
+
+  // Each busy span pads by its own buffer if it has one (e.g. a bigger
+  // safety gap around a studio-mate's Chalk Farm booking), else the
+  // default bufferMinutes — see the AvailabilityParams.busy doc comment.
+  return !busy.some((b) => {
+    const padded = pad(b, b.bufferMinutes ?? bufferMinutes);
+    return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
+  });
+}
+
 /** Real bookable slot start times: open hours minus busy time, minus past/too-soon. */
 export function computeAvailableSlots(params: AvailabilityParams): Date[] {
   const {
@@ -158,33 +195,35 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
       for (let minute = interval.start; minute + SESSION_MINUTES <= interval.end; minute += slotMinutes) {
         const candidate = londonTime(y, m, d, Math.floor(minute / 60), minute % 60);
         if (candidate < cutoff) continue;
-
-        // Both clinics currently footprint to exactly the session hour (see
-        // blockedRange in rules.ts), but this stays generic in case a future
-        // clinic rule pads its real calendar footprint beyond the raw session
-        // minute — the whole padded footprint must fit inside the open interval.
-        const rawFootprint = blockedRange(clinic, candidate);
-        const startPadMin = Math.round((candidate.getTime() - rawFootprint.start.getTime()) / 60_000);
-        const endPadMin = Math.round(
-          (rawFootprint.end.getTime() - (candidate.getTime() + SESSION_MINUTES * 60_000)) / 60_000,
-        );
-        const footprintStart = minute - startPadMin - bufferMinutes;
-        const footprintEnd = minute + SESSION_MINUTES + endPadMin + bufferMinutes;
-        if (footprintStart < interval.start || footprintEnd > interval.end) continue;
-
-        // Each busy span pads by its own buffer if it has one (e.g. a bigger
-        // safety gap around a studio-mate's Chalk Farm booking), else the
-        // default bufferMinutes — see the AvailabilityParams.busy doc comment.
-        const collides = busy.some((b) => {
-          const padded = pad(b, b.bufferMinutes ?? bufferMinutes);
-          return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
-        });
-        if (collides) continue;
-
+        if (!slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes)) continue;
         results.push(candidate);
       }
     }
   }
 
   return results;
+}
+
+/**
+ * Is this one exact instant still genuinely bookable, right now? Same rules
+ * as `computeAvailableSlots`, but for a specific candidate rather than the
+ * `slotMinutes`-stepped grid — a time offered from the admin calendar's
+ * finer 15-min steps may fall between grid points and would otherwise never
+ * appear as a "candidate" even though it's perfectly free.
+ */
+export function isSlotAvailable(
+  candidate: Date,
+  params: Omit<AvailabilityParams, "windowStart" | "windowEnd" | "slotMinutes">,
+): boolean {
+  const { clinic, weeklyHours, overrides, busy, bufferMinutes = 0, now = new Date(), minNoticeMinutes = 0 } = params;
+  const cutoff = new Date(now.getTime() + minNoticeMinutes * 60_000);
+  if (candidate < cutoff) return false;
+
+  const weekday = londonWeekdayIndex(candidate);
+  const dateKey = londonDateKey(candidate);
+  const intervals = dayOpenIntervals(weekday, dateKey, weeklyHours, overrides);
+  if (!intervals.length) return false;
+
+  const minute = londonMinutes(candidate);
+  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes);
 }

@@ -4,8 +4,10 @@ import { CLINIC_LABEL, type Clinic } from "./rules";
 /**
  * The message offering a client a few times to choose from. Pure — used both
  * for the email (server) and the WhatsApp text (client) so they read the same.
+ * `pickUrl`, when given, adds a line so the client can self-book instantly
+ * instead of replying to say which time suits.
  */
-export function composeOfferMessage(clientName: string, clinic: Clinic, times: Date[]): string {
+export function composeOfferMessage(clientName: string, clinic: Clinic, times: Date[], pickUrl?: string): string {
   const first = clientName?.trim() ? clientName.trim().split(/\s+/)[0] : "there";
   const sorted = [...times].sort((a, b) => a.getTime() - b.getTime());
   const lines = sorted.map((t) => `  • ${fmtDayLong(t)} at ${fmtTime(t)}`);
@@ -14,6 +16,7 @@ export function composeOfferMessage(clientName: string, clinic: Clinic, times: D
     `Lovely to hear from you. I've got a few times that could work at ${CLINIC_LABEL[clinic]} — ` +
     `let me know which suits and I'll confirm it:\n\n` +
     `${lines.join("\n")}\n\n` +
+    (pickUrl ? `Or click here to pick one yourself and it'll be booked straight away:\n${pickUrl}\n\n` : ``) +
     `Warm wishes,\nPhoenix`
   );
 }

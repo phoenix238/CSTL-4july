@@ -81,10 +81,13 @@ model Enquiry {
   status       String     @default("waiting") // waiting | offered | booked | dismissed
   clientId     String? // set once the enquiry is saved as / matched to a client
   client       Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clinic       String     @default("") // which clinic the offered times are for
   offeredTimes DateTime[] // slots offered to the client (offer mode), awaiting their pick
+  offerToken   String     @default("") // private token for the client's self-book link
   createdAt    DateTime   @default(now())
 
   @@index([clientId])
+  @@index([offerToken])
 }
 
 // Single row (id = 1). Holds editable settings and the Google wiring.
