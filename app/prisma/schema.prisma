@@ -31,6 +31,10 @@ model Client {
   intakeEmailSentAt DateTime? // last time the intake-form email was sent
   reviewEmailSentAt DateTime? // last time the post-session review email was sent
   consentGiven  Boolean? // null = not yet answered; set from the intake form's Yes/No consent question
+  // Present in the shared production DB from the intake-auto-share feature on
+  // another branch (client-message-intake-workflow) — not wired into any code
+  // here. Declared so `prisma db push` never proposes dropping this real data.
+  calendarInviteSharedAt DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
@@ -85,6 +89,11 @@ model Enquiry {
   offeredTimes DateTime[] // slots offered to the client (offer mode), awaiting their pick
   offerToken   String     @default("") // private token for the client's self-book link
   createdAt    DateTime   @default(now())
+  // Present in the shared production DB from the Gmail-reply-threading feature on
+  // another branch (client-email-booking-integration) — not wired into any code
+  // here. Declared so `prisma db push` never proposes dropping this real data.
+  gmailThreadId  String   @default("")
+  gmailMessageId String   @default("")
 
   @@index([clientId])
   @@index([offerToken])
