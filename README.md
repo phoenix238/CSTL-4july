@@ -29,6 +29,9 @@ phone, and updates itself whenever this repo changes.
 - **Import** — drop old files; Claude extracts client records, duplicates are merged,
   originals stored in each client's folder, legacy notes appended to their Doc.
 - **Settings** — clinic rules, access note, per-location email templates, Google wiring.
+- **Gmail add-on** (`../gmail-addon`) — a button inside Gmail (desktop + mobile) that turns
+  an open client email into an enquiry here, one tap, with the reply landing back in the
+  same Gmail thread. See `gmail-addon/README.md` for setup.
 
 ## Tech
 

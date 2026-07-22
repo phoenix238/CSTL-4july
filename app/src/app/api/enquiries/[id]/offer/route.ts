@@ -35,7 +35,17 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     const settings = await getSettings();
     const link = offerUrl(settings, await getOrCreateOfferToken(id));
     body = emailBody?.trim() ? `${emailBody.trim()}\n\n${link}` : composeOfferMessage(clientName || "", clinic as Clinic, dates, link);
-    await sendEmail(email, `Some session times — ${CLINIC_LABEL[clinic as Clinic]}`, body);
+    // If this enquiry came in via the Gmail add-on, keep the offer reply in that thread.
+    const enquiry = await prisma.enquiry.findUnique({
+      where: { id },
+      select: { gmailThreadId: true, gmailMessageId: true },
+    });
+    await sendEmail(
+      email,
+      `Some session times — ${CLINIC_LABEL[clinic as Clinic]}`,
+      body,
+      enquiry?.gmailThreadId ? { threadId: enquiry.gmailThreadId, inReplyTo: enquiry.gmailMessageId } : undefined,
+    );
   }
   revalidateTag("shell");
 

@@ -22,6 +22,9 @@ export interface BookingRequest {
   sendPayment: boolean;
   /** the (possibly hand-edited) email body from the preview box */
   emailBody?: string;
+  /** set when this booking closes out a Gmail-add-on enquiry — the reply lands in that thread */
+  gmailThreadId?: string;
+  gmailMessageId?: string;
 }
 
 export interface BookingResult {
@@ -110,7 +113,12 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     // scare the client into thinking they don't have a slot. Fall back to the
     // clipboard text so it's not lost, and let Phoenix know to follow up.
     try {
-      await sendEmail(client.email, email.subject, body);
+      await sendEmail(
+        client.email,
+        email.subject,
+        body,
+        req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
+      );
       emailSent = true;
       firstContactMade = true;
       await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });

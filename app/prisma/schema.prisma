@@ -89,11 +89,10 @@ model Enquiry {
   offeredTimes DateTime[] // slots offered to the client (offer mode), awaiting their pick
   offerToken   String     @default("") // private token for the client's self-book link
   createdAt    DateTime   @default(now())
-  // Present in the shared production DB from the Gmail-reply-threading feature on
-  // another branch (client-email-booking-integration) — not wired into any code
-  // here. Declared so `prisma db push` never proposes dropping this real data.
-  gmailThreadId  String   @default("")
-  gmailMessageId String   @default("")
+  // Set when the enquiry came in via the Gmail add-on — so booking/offer replies
+  // land back in the client's original Gmail thread instead of a fresh email.
+  gmailThreadId  String   @default("") // Gmail thread id of the client's email
+  gmailMessageId String   @default("") // RFC Message-ID, for In-Reply-To/References
 
   @@index([clientId])
   @@index([offerToken])
