@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma, getSettings } from "@/lib/db";
 import { updateClientDetails } from "@/lib/clients";
 import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
-import { fmtDate } from "@/lib/time";
+import { shareCalendarInvite } from "@/lib/google/calendar";
+import { composeBookingEmail } from "@/lib/booking/email";
+import { sendEmail } from "@/lib/google/gmail";
+import { isValidEmail } from "@/lib/validate";
+import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
+import type { Clinic } from "@/lib/booking/rules";
 import { COLUMN_KEYS, CONSENT_PARAGRAPHS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
 
 // Standard keys that read as short client-detail fields (vs. clinical paragraphs).
@@ -18,8 +23,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const client = await prisma.client.findFirst({ where: { intakeToken: token } });
     if (!client) return NextResponse.json({ error: "This link has expired." }, { status: 404 });
 
-    const { name, answers, consent } = (await req.json()) as {
+    const { name, email, answers, consent } = (await req.json()) as {
       name?: string;
+      email?: string;
       answers?: Record<string, string>;
       consent?: boolean;
     };
@@ -27,16 +33,58 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
     const finalName = str(name) || client.name;
 
+    // The intake form is where a WhatsApp/Instagram client (booked without an
+    // email) gives us their address — so we can then invite + confirm them.
+    const submittedEmail = str(email);
+    if (submittedEmail && !isValidEmail(submittedEmail)) {
+      return NextResponse.json({ error: "Please add a valid email address" }, { status: 400 });
+    }
+    const finalEmail = submittedEmail || client.email;
+    const emailChanged = !!finalEmail && finalEmail.toLowerCase() !== (client.email || "").toLowerCase();
+
     const settings = await getSettings();
     const questions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
 
     // Standard answers update the record; everything shows in the Doc too.
     const columnUpdate: Record<string, string | boolean> = { name: finalName, intakeDone: true };
+    if (submittedEmail) columnUpdate.email = submittedEmail;
     if (typeof consent === "boolean") columnUpdate.consentGiven = consent;
     for (const q of questions) {
       if (COLUMN_KEYS.has(q.key) && a[q.key] !== undefined) columnUpdate[q.key] = str(a[q.key]);
     }
     await updateClientDetails(client.id, columnUpdate);
+
+    // Now that we (may) have their email, close the loop on any upcoming session
+    // they were booked into without one — invite them to the calendar event and
+    // send the welcome/confirmation email. Both are non-fatal: the intake itself
+    // has already saved, so a Google/Gmail hiccup shouldn't fail the submission.
+    if (emailChanged) {
+      try {
+        await shareCalendarInvite(client.id);
+      } catch (err) {
+        console.error("shareCalendarInvite failed during intake submit", err);
+      }
+      try {
+        const booking = await prisma.booking.findFirst({
+          where: { clientId: client.id, status: "confirmed", startsAt: { gte: new Date() } },
+          orderBy: { startsAt: "asc" },
+        });
+        if (booking && !booking.emailSent) {
+          const clinic = booking.clinic as Clinic;
+          const whenLabel = `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`;
+          // Force the full welcome (welcomeSent:false) so a WhatsApp client who
+          // never got an email now receives the access note, address and payment.
+          const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings);
+          await sendEmail(finalEmail, welcome.subject, welcome.body);
+          await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
+          if (!client.welcomeSent) {
+            await prisma.client.update({ where: { id: client.id }, data: { welcomeSent: true } });
+          }
+        }
+      } catch (err) {
+        console.error("welcome email after intake failed", err);
+      }
+    }
 
     const { docId } = await ensureClientFolderAndDoc(client.id);
 
