@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
 import { ReflectionComposer } from "./ReflectionComposer";
+import { BookSlotPicker } from "./BookSlotPicker";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
@@ -87,6 +88,9 @@ export function ClientProfile({
   const [noteOpen, setNoteOpen] = useState(false);
   const [reflectionOpen, setReflectionOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [movingSlot, setMovingSlot] = useState(false);
+  const [marketingDraft, setMarketingDraft] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<{ raw: string; bullets: string[] }>({ raw: "", bullets: [] });
@@ -108,6 +112,24 @@ export function ClientProfile({
       toast(err instanceof Error ? err.message : "Couldn't cancel that booking");
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function reschedule(iso: string) {
+    if (!nextBookingId) return;
+    setMovingSlot(true);
+    try {
+      const res = await api<{ whenLabel: string }>(`/api/bookings/${nextBookingId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ startISO: iso }),
+      });
+      toast(`Moved to ${res.whenLabel} ✓`);
+      setRescheduling(false);
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't change the time");
+    } finally {
+      setMovingSlot(false);
     }
   }
 
@@ -204,6 +226,7 @@ export function ClientProfile({
 
   const startEdit = () => {
     setDraft(Object.fromEntries(EDIT_FIELDS.map(([k]) => [k, (client[k] as string) || ""])));
+    setMarketingDraft(client.marketing);
     setEditing(true);
   };
 
@@ -212,7 +235,7 @@ export function ClientProfile({
     try {
       await api(`/api/clients/${client.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ ...draft, syncToDoc: true }),
+        body: JSON.stringify({ ...draft, marketing: marketingDraft, syncToDoc: true }),
       });
       toast(`Updated ${draft.name || client.name}'s details ✓ — also added to their Doc`);
       setEditing(false);
@@ -565,14 +588,28 @@ export function ClientProfile({
           <SectionLabel>NEXT SESSION</SectionLabel>
           <div className="flex flex-col gap-1.5 rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.55)] px-4 py-[13px]">
             <button
-              onClick={() => router.push(`/enquiries?client=${client.id}`)}
+              onClick={() =>
+                nextBookingId ? setRescheduling((v) => !v) : router.push(`/enquiries?client=${client.id}`)
+              }
               className="flex cursor-pointer items-center justify-between gap-2.5 text-left text-[13.5px] text-[oklch(0.4_0.07_45)]"
             >
               <span>{nextSession ?? 'Nothing booked — use "Book next session".'}</span>
               <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
-                Change ›
+                {nextBookingId ? (rescheduling ? "Close" : "Change time ›") : "Book ›"}
               </span>
             </button>
+
+            {rescheduling && nextBookingId && (
+              <div className="mt-1 flex flex-col gap-2 rounded-xl border border-[oklch(0.87_0.05_48_/_0.6)] bg-card/70 px-3 py-3">
+                <span className="text-[11.5px] leading-[1.5] text-[oklch(0.45_0.06_45)]">
+                  Pick a new time for {client.name.split(" ")[0]} — {CLINIC_LABEL[client.clinic as Clinic]}. The
+                  calendar events move and the invite updates automatically.
+                </span>
+                <BookSlotPicker clinic={client.clinic as Clinic} selected={null} onSelect={reschedule} />
+                {movingSlot && <span className="text-[11.5px] font-semibold text-muted">Moving…</span>}
+              </div>
+            )}
+
             {nextBookingId && (
               <button
                 onClick={cancelNextSession}
@@ -701,6 +738,34 @@ export function ClientProfile({
                   />
                 </label>
               ))}
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                  EMAIL MARKETING
+                </span>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      [true, "Yes"],
+                      [false, "No"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setMarketingDraft(value)}
+                      className={`cursor-pointer rounded-full px-4 py-1.5 text-[12.5px] font-semibold select-none ${
+                        marketingDraft === value ? "bg-clay text-cream" : "border border-line bg-card text-ink-soft"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[11px] leading-[1.5] text-muted">
+                  Whether {client.name.split(" ")[0]} gets occasional offers &amp; clinic news — kept in step with the
+                  marketing sheet.
+                </span>
+              </div>
               <PrimaryButton onClick={saveDetails} disabled={saving} className="py-2.5 text-[13px]">
                 {saving ? "Saving…" : "Save details"}
               </PrimaryButton>
