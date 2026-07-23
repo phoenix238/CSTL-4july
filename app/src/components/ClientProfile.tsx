@@ -136,7 +136,9 @@ export function ClientProfile({
   }
 
   async function copyLocation() {
-    const text = [location?.address, location?.url, location?.directions]
+    // Map link on its own line, a blank line, then the directions (line breaks
+    // kept) — reads cleanly pasted into WhatsApp or an email.
+    const text = [location?.url, location?.directions]
       .map((p) => p?.trim())
       .filter(Boolean)
       .join("\n\n");

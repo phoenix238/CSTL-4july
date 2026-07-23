@@ -147,10 +147,11 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
   };
 
   const copyLocation = async (clinic: "waterloo" | "bethnal") => {
-    const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
     const url = clinic === "waterloo" ? settings.waterlooLocationUrl : settings.bethnalLocationUrl;
     const directions = clinic === "waterloo" ? settings.waterlooDirections : settings.bethnalDirections;
-    const text = [address, url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
+    // Map link on its own line, a blank line, then the directions (their own
+    // line breaks kept) — reads cleanly pasted into WhatsApp or an email.
+    const text = [url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
     if (!text) {
       toast("Nothing to copy yet — add a location link or directions first");
       return;
