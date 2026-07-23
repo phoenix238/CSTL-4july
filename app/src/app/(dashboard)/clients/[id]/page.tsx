@@ -1,13 +1,16 @@
 import { notFound } from "next/navigation";
 import { getSettings, prisma } from "@/lib/db";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
-import { ClientProfile, type ProfileNote } from "@/components/ClientProfile";
+import { ClientProfile, type ProfileNote, type ProfileRecording } from "@/components/ClientProfile";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const client = await prisma.client.findUnique({
     where: { id },
-    include: { notes: { orderBy: { date: "desc" } } },
+    include: {
+      notes: { orderBy: { date: "desc" } },
+      recordings: { orderBy: { date: "desc" } },
+    },
   });
   if (!client) notFound();
 
@@ -40,6 +43,16 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     raw: n.raw,
   }));
 
+  const recordings: ProfileRecording[] = client.recordings.map((r) => ({
+    id: r.id,
+    date: fmtDate(r.date),
+    clinic: r.clinic,
+    bullets: r.bullets,
+    pinned: r.pinned,
+    myNotes: r.myNotes,
+    transcript: r.transcript,
+  }));
+
   return (
     <ClientProfile
       client={{
@@ -63,6 +76,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         docId: client.docId,
       }}
       notes={notes}
+      recordings={recordings}
       nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
       nextBookingId={nextBooking?.id ?? null}
       activeOffer={activeOffer}

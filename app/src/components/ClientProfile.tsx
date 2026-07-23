@@ -38,6 +38,16 @@ export interface ProfileNote {
   raw: string;
 }
 
+export interface ProfileRecording {
+  id: string;
+  date: string;
+  clinic: string;
+  bullets: string[]; // summary
+  pinned: string[]; // highlights — their words
+  myNotes: string;
+  transcript: string; // full conversation
+}
+
 const EDIT_FIELDS: Array<[keyof ProfileClient & string, string]> = [
   ["name", "FULL NAME"],
   ["email", "EMAIL"],
@@ -54,6 +64,7 @@ const EDIT_FIELDS: Array<[keyof ProfileClient & string, string]> = [
 export function ClientProfile({
   client,
   notes,
+  recordings,
   nextSession,
   nextBookingId,
   activeOffer,
@@ -61,6 +72,7 @@ export function ClientProfile({
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
+  recordings: ProfileRecording[];
   nextSession: string | null;
   nextBookingId?: string | null;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
@@ -470,6 +482,81 @@ export function ClientProfile({
           {notes.length === 0 && !noteOpen && (
             <div className="rounded-2xl border border-dashed border-[oklch(0.87_0.02_78)] bg-inputbg p-[22px] text-center text-[13px] text-muted">
               No sessions yet.
+            </div>
+          )}
+
+          {recordings.length > 0 && (
+            <div className="mt-4 flex flex-col gap-2.5">
+              <SectionLabel>CLEAN LANGUAGE SESSIONS</SectionLabel>
+              {recordings.map((r) => {
+                const rChip = clinicChip(r.clinic);
+                const key = `rec-${r.id}`;
+                return (
+                  <Card key={r.id} className="px-[18px] py-[15px]">
+                    <div className="flex items-center gap-2.5">
+                      <div className="font-serif text-[15px] font-medium">{r.date}</div>
+                      <Chip color={rChip.color} bg={rChip.bg}>
+                        {r.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                      </Chip>
+                      <div className="flex-1" />
+                      {r.transcript && (
+                        <button
+                          onClick={() => setExpanded({ ...expanded, [key]: !expanded[key] })}
+                          className="cursor-pointer text-[11.5px] font-semibold text-muted hover:text-clay-text"
+                        >
+                          {expanded[key] ? "Hide conversation" : "Show conversation"}
+                        </button>
+                      )}
+                    </div>
+
+                    {r.bullets.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1">
+                        {r.bullets.map((b, i) => (
+                          <div key={i} className="flex gap-2 text-[13.5px] leading-[1.55]">
+                            <span className="text-clay">•</span>
+                            <span>{b}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {r.pinned.length > 0 && (
+                      <div className="mt-3">
+                        <div className="mb-1.5 text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                          THEIR WORDS
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {r.pinned.map((p, i) => (
+                            <span
+                              key={i}
+                              className="rounded-lg bg-clay-tint px-2.5 py-1 text-[13px] leading-[1.4] text-clay-text"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {r.myNotes && (
+                      <div className="mt-3">
+                        <div className="mb-1 text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                          MY NOTES
+                        </div>
+                        <div className="text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.45_0.02_60)]">
+                          {r.myNotes}
+                        </div>
+                      </div>
+                    )}
+
+                    {expanded[key] && r.transcript && (
+                      <div className="mt-2.5 rounded-[10px] bg-inputbg px-3.5 py-2.5 text-[12.5px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.45_0.02_60)]">
+                        {r.transcript}
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
             </div>
           )}
         </section>
