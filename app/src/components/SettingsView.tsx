@@ -20,6 +20,10 @@ export interface SettingsData {
   bethnalAddress: string;
   waterlooArrivalNote: string;
   bethnalArrivalNote: string;
+  waterlooLocationUrl: string;
+  bethnalLocationUrl: string;
+  waterlooDirections: string;
+  bethnalDirections: string;
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
@@ -104,6 +108,13 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
     waterlooArrivalNote: settings.waterlooArrivalNote,
     bethnalArrivalNote: settings.bethnalArrivalNote,
   });
+  const [editingLocations, setEditingLocations] = useState(false);
+  const [locationsDraft, setLocationsDraft] = useState({
+    waterlooLocationUrl: settings.waterlooLocationUrl,
+    bethnalLocationUrl: settings.bethnalLocationUrl,
+    waterlooDirections: settings.waterlooDirections,
+    bethnalDirections: settings.bethnalDirections,
+  });
   const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("bethnal");
   const [editingTemplate, setEditingTemplate] = useState(false);
   const [templateDraft, setTemplateDraft] = useState("");
@@ -132,6 +143,23 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
       toast(msg);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save");
+    }
+  };
+
+  const copyLocation = async (clinic: "waterloo" | "bethnal") => {
+    const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
+    const url = clinic === "waterloo" ? settings.waterlooLocationUrl : settings.bethnalLocationUrl;
+    const directions = clinic === "waterloo" ? settings.waterlooDirections : settings.bethnalDirections;
+    const text = [address, url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
+    if (!text) {
+      toast("Nothing to copy yet — add a location link or directions first");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`${clinic === "waterloo" ? "Waterloo" : "Bethnal Green"} location & directions copied ✓`);
+    } catch {
+      toast("Couldn't copy — try again");
     }
   };
 
@@ -643,6 +671,108 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
             </PrimaryButton>
           </Card>
         )}
+      </Dropdown>
+
+      <Dropdown
+        label="LOCATION LINK & DIRECTIONS — TO SEND CLIENTS"
+        open={!!open.locations}
+        onToggle={() => toggle("locations")}
+      >
+        <div className="flex items-center justify-end px-0.5">
+          <button
+            onClick={() => {
+              if (!editingLocations) {
+                setLocationsDraft({
+                  waterlooLocationUrl: settings.waterlooLocationUrl,
+                  bethnalLocationUrl: settings.bethnalLocationUrl,
+                  waterlooDirections: settings.waterlooDirections,
+                  bethnalDirections: settings.bethnalDirections,
+                });
+              }
+              setEditingLocations(!editingLocations);
+            }}
+            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+          >
+            {editingLocations ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {!editingLocations ? (
+          <Card className="flex flex-col gap-3.5 px-5 py-4">
+            {(
+              [
+                ["waterloo", "Waterloo", settings.waterlooLocationUrl, settings.waterlooDirections],
+                ["bethnal", "Bethnal Green", settings.bethnalLocationUrl, settings.bethnalDirections],
+              ] as const
+            ).map(([clinic, label, url, directions], i) => (
+              <div
+                key={clinic}
+                className={`flex flex-col gap-2 ${i === 0 ? "border-b border-hairline pb-3.5" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-2.5">
+                  <span className="font-serif text-[15px] font-medium">{label}</span>
+                  <button
+                    onClick={() => copyLocation(clinic)}
+                    className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text hover:opacity-90"
+                  >
+                    Copy location &amp; directions
+                  </button>
+                </div>
+                <div className="text-[12.5px] leading-[1.55] text-[oklch(0.45_0.02_58)]">
+                  <span className="font-semibold">Link: </span>
+                  {url ? <span className="break-all">{url}</span> : <span className="text-faint">not set yet</span>}
+                </div>
+                <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
+                  <span className="font-semibold">Directions: </span>
+                  {directions || <span className="text-faint">not set yet</span>}
+                </div>
+              </div>
+            ))}
+          </Card>
+        ) : (
+          <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
+            {(
+              [
+                ["waterlooLocationUrl", "WATERLOO LOCATION LINK", "waterlooDirections", "WATERLOO DIRECTIONS"],
+                ["bethnalLocationUrl", "BETHNAL GREEN LOCATION LINK", "bethnalDirections", "BETHNAL GREEN DIRECTIONS"],
+              ] as const
+            ).map(([urlKey, urlLabel, dirKey, dirLabel]) => (
+              <div key={urlKey} className="flex flex-col gap-[11px]">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                    {urlLabel}
+                  </span>
+                  <input
+                    value={locationsDraft[urlKey]}
+                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [urlKey]: e.target.value })}
+                    placeholder="A Google Maps pin / share link, what3words, etc."
+                    className={inputClass}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                    {dirLabel}
+                  </span>
+                  <textarea
+                    value={locationsDraft[dirKey]}
+                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [dirKey]: e.target.value })}
+                    placeholder="Buzzer code, which door, the nearest station, where to wait — whatever helps a client find you."
+                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+                  />
+                </label>
+              </div>
+            ))}
+            <PrimaryButton
+              onClick={() => save({ ...locationsDraft }, () => setEditingLocations(false), "Location & directions updated ✓")}
+              className="self-start px-[18px] py-[9px] text-[13px]"
+            >
+              Save
+            </PrimaryButton>
+          </Card>
+        )}
+        <div className="text-[11.5px] text-muted">
+          A quick &quot;where we are&quot; you can copy and paste into WhatsApp or an email. There&apos;s also a Copy
+          button on each client&apos;s profile that grabs the right clinic&apos;s details for you.
+        </div>
       </Dropdown>
 
       <SectionLabel className="pt-2">ADD TO YOUR IPHONE</SectionLabel>

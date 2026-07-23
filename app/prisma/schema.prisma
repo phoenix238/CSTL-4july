@@ -130,6 +130,12 @@ model AppSettings {
   // address — parking, what to expect, how to find the door, etc.
   waterlooArrivalNote   String @default("")
   bethnalArrivalNote    String @default("")
+  // Shareable "where we are" details you copy from a client's profile (or Settings)
+  // to paste into WhatsApp/email — a map/pin link plus any extra directions, per clinic.
+  waterlooLocationUrl   String @default("")
+  bethnalLocationUrl    String @default("")
+  waterlooDirections    String @default("")
+  bethnalDirections     String @default("")
   intakeFormUrl         String @default("https://forms.gle/2nPTLzHcffgzmydo8")
   googleRefreshToken    String @default("")
   personalCalendarId    String @default("primary")

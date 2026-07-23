@@ -14,7 +14,14 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   });
   if (!client) notFound();
 
-  const { reflectionsDocId } = await getSettings();
+  const settings = await getSettings();
+  const { reflectionsDocId } = settings;
+  const isWaterloo = client.clinic === "waterloo";
+  const location = {
+    address: isWaterloo ? settings.waterlooAddress : settings.bethnalAddress,
+    url: isWaterloo ? settings.waterlooLocationUrl : settings.bethnalLocationUrl,
+    directions: isWaterloo ? settings.waterlooDirections : settings.bethnalDirections,
+  };
 
   const nextBooking = await prisma.booking.findFirst({
     where: { clientId: id, status: "confirmed", startsAt: { gte: new Date() } },
@@ -81,6 +88,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       nextBookingId={nextBooking?.id ?? null}
       activeOffer={activeOffer}
       reflectionsDocId={reflectionsDocId || null}
+      location={location}
     />
   );
 }

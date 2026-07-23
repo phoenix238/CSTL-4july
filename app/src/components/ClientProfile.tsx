@@ -70,6 +70,7 @@ export function ClientProfile({
   nextBookingId,
   activeOffer,
   reflectionsDocId,
+  location,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
@@ -78,6 +79,7 @@ export function ClientProfile({
   nextBookingId?: string | null;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
   reflectionsDocId?: string | null;
+  location?: { address: string; url: string; directions: string } | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -130,6 +132,23 @@ export function ClientProfile({
       toast(err instanceof Error ? err.message : "Couldn't change the time");
     } finally {
       setMovingSlot(false);
+    }
+  }
+
+  async function copyLocation() {
+    const text = [location?.address, location?.url, location?.directions]
+      .map((p) => p?.trim())
+      .filter(Boolean)
+      .join("\n\n");
+    if (!text) {
+      toast("No location or directions set for this clinic yet — add them in Settings");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Location & directions copied ✓ — paste it to them");
+    } catch {
+      toast("Couldn't copy — try again");
     }
   }
 
@@ -619,6 +638,12 @@ export function ClientProfile({
                 {cancelling ? "Cancelling…" : "Cancel this session"}
               </button>
             )}
+            <button
+              onClick={copyLocation}
+              className="cursor-pointer self-start text-[11.5px] font-semibold text-[oklch(0.4_0.07_45)] underline decoration-[oklch(0.5_0.09_45_/_0.4)] underline-offset-2 hover:decoration-[oklch(0.5_0.09_45)]"
+            >
+              Copy location &amp; directions
+            </button>
           </div>
 
           <div className="flex items-center justify-between px-0.5 pt-2">
