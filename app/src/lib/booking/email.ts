@@ -22,13 +22,15 @@ export interface EmailSettings {
  *  - returning client → just the calendar invite (sent by Google Calendar itself);
  *    the email is a short confirmation.
  *  - new client (first email only) → location template with the access note,
- *    the address/map, and optionally payment details.
+ *    the intake-form link, the address/map, and optionally payment details.
  *
- * The intake form is deliberately NOT included here — it's sent as its own
- * separate step (the "Send intake form" button) so the first email stays a warm,
- * uncluttered welcome. See app/src/app/api/clients/[id]/intake-email/route.ts.
+ * The intake link is folded into this first welcome email (via the {intakeLink}
+ * placeholder) so it's one message, not two — the template's "the link is below"
+ * line is finally true. The standalone "Send intake form" button still exists as a
+ * resend for clients who need it again. See app/src/app/api/clients/[id]/intake-email/route.ts.
  *
- * Pure — also runs in the browser for the live preview in the booking panel.
+ * Pure — also runs in the browser for the live preview in the booking panel, where
+ * the real token doesn't exist yet, so a placeholder link string is passed instead.
  */
 export function composeBookingEmail(
   client: { name: string; welcomeSent: boolean },
@@ -36,6 +38,8 @@ export function composeBookingEmail(
   whenLabel: string,
   sendPayment: boolean,
   settings: EmailSettings,
+  /** the client's personal intake link — real URL on the server, a placeholder for preview */
+  intakeLink = "(your personal intake link)",
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
@@ -53,9 +57,18 @@ export function composeBookingEmail(
     .split("{name}")
     .join(client.name)
     .split("{accessNote}")
-    .join(settings.accessNote);
+    .join(settings.accessNote)
+    .split("{intakeLink}")
+    .join(intakeLink);
+  // Guarantee the intake link is actually present: older/custom templates say
+  // "the link is below" without a {intakeLink} placeholder, so append it if the
+  // template didn't already position it.
+  if (!template.includes("{intakeLink}")) {
+    body += `\n\nYour intake form (a couple of minutes, goes straight into your confidential record):\n${intakeLink}`;
+  }
   const includes = [
     "Google Calendar invite attached",
+    "Intake form link",
     "Access note — stairs, no step-free access",
   ];
   const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;

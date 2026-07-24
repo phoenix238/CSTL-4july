@@ -4,6 +4,7 @@ import { updateClientDetails } from "@/lib/clients";
 import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
 import { shareCalendarInvite } from "@/lib/google/calendar";
 import { composeBookingEmail } from "@/lib/booking/email";
+import { intakeUrl } from "@/lib/intake";
 import { sendEmail } from "@/lib/google/gmail";
 import { isValidEmail } from "@/lib/validate";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
@@ -74,7 +75,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           const whenLabel = `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`;
           // Force the full welcome (welcomeSent:false) so a WhatsApp client who
           // never got an email now receives the access note, address and payment.
-          const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings);
+          const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings, intakeUrl(settings, token));
           await sendEmail(finalEmail, welcome.subject, welcome.body);
           await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
           if (!client.welcomeSent) {

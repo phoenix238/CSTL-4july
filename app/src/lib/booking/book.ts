@@ -94,10 +94,10 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     );
   }
 
-  // The intake link is still returned (offered as its own button / follow-up),
-  // but it is no longer stitched into the welcome email — see composeBookingEmail.
+  // The intake link is folded into the first welcome email (see composeBookingEmail)
+  // so it's one message, not two; it's also returned for the standalone resend button.
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings);
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, intakeLink);
   const body = req.emailBody?.trim() || email.body;
   // Whether this is the client's very first welcome message — captured before we
   // flip welcomeSent, so the confirmation copy and the flip agree.
