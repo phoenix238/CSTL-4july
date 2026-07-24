@@ -61,7 +61,9 @@ export function EventComposer({
 
   async function save() {
     const s = atTime(start, startTime);
-    const e = atTime(start, endTime);
+    // Anchor the end on `end`'s own date, not `start`'s — otherwise an event
+    // that ends at/after midnight resolves before its start and can't be saved.
+    const e = atTime(end, endTime);
     if (e <= s) {
       toast("End time must be after the start");
       return;

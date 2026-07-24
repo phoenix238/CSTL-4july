@@ -39,11 +39,21 @@ export function londonTime(y: number, m: number, d: number, hour: number, minute
   return guess;
 }
 
+/**
+ * The London day `n` calendar days after `from`, at 00:00 London — DST-safe.
+ * Works off the wall-clock date (not a fixed 24 h step), so it never drifts an
+ * hour or lands on the wrong day across the spring/autumn clock changes.
+ * `Date.UTC` normalises day overflow/underflow (e.g. d + 1 past month end, or
+ * negative), then `londonTime` fixes the offset for that exact date.
+ */
+export function londonAddDays(from: Date, n: number): Date {
+  const { y, m, d } = londonYMD(from);
+  return londonTime(y, m, d + n, 0, 0);
+}
+
 /** Start of a London day `offsetDays` from today. */
 export function londonDayStart(offsetDays = 0, from = new Date()): Date {
-  const shifted = new Date(from.getTime() + offsetDays * 86_400_000);
-  const { y, m, d } = londonYMD(shifted);
-  return londonTime(y, m, d, 0, 0);
+  return londonAddDays(from, offsetDays);
 }
 
 export const fmtTime = (d: Date) =>

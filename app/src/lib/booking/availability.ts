@@ -4,7 +4,7 @@
 // routes) fetch the raw data and pass it in.
 
 import { blockedRange, SESSION_MINUTES, type Clinic } from "./rules";
-import { londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
+import { londonAddDays, londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
 
 export interface WeeklyWindow {
   weekday: number; // 0=Mon..6=Sun, matches londonWeekdayIndex
@@ -184,7 +184,9 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
   const cutoff = new Date(now.getTime() + minNoticeMinutes * 60_000);
   const results: Date[] = [];
 
-  for (let day = new Date(windowStart); day < windowEnd; day = new Date(day.getTime() + 86_400_000)) {
+  // Step by London calendar days (DST-safe). A fixed 24 h step would process
+  // the autumn fall-back Sunday twice (duplicate slots) and drop a day.
+  for (let day = new Date(windowStart); day < windowEnd; day = londonAddDays(day, 1)) {
     const { y, m, d } = londonYMD(day);
     const weekday = londonWeekdayIndex(day);
     const dateKey = londonDateKey(day);
