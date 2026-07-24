@@ -98,10 +98,6 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteDraft, setNoteDraft] = useState("");
-  const [editingPayment, setEditingPayment] = useState(false);
-  const [paymentDraft, setPaymentDraft] = useState("");
   const [editingContact, setEditingContact] = useState(false);
   const [contactDraft, setContactDraft] = useState("");
   const [editingAddresses, setEditingAddresses] = useState(false);
@@ -117,16 +113,6 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
     bethnalLocationUrl: settings.bethnalLocationUrl,
     waterlooDirections: settings.waterlooDirections,
     bethnalDirections: settings.bethnalDirections,
-  });
-  const [emailClinic, setEmailClinic] = useState<"waterloo" | "bethnal">("bethnal");
-  const [editingTemplate, setEditingTemplate] = useState(false);
-  const [templateDraft, setTemplateDraft] = useState("");
-  const [reviewClinic, setReviewClinic] = useState<"waterloo" | "bethnal">("bethnal");
-  const [editingReview, setEditingReview] = useState(false);
-  const [reviewDraft, setReviewDraft] = useState({
-    mapsReviewUrl: settings.mapsReviewUrlWaterloo,
-    reviewEmailSubject: settings.reviewEmailSubjectWaterloo,
-    reviewEmailBody: settings.reviewEmailBodyWaterloo,
   });
   const [editingGoogle, setEditingGoogle] = useState(false);
   const [googleDraft, setGoogleDraft] = useState({
@@ -166,21 +152,6 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
       toast("Couldn't copy — try again");
     }
   };
-
-  const template = emailClinic === "waterloo" ? settings.emailTemplateWaterloo : settings.emailTemplateBethnal;
-
-  const reviewFields =
-    reviewClinic === "waterloo"
-      ? {
-          mapsReviewUrl: settings.mapsReviewUrlWaterloo,
-          reviewEmailSubject: settings.reviewEmailSubjectWaterloo,
-          reviewEmailBody: settings.reviewEmailBodyWaterloo,
-        }
-      : {
-          mapsReviewUrl: settings.mapsReviewUrlBethnal,
-          reviewEmailSubject: settings.reviewEmailSubjectBethnal,
-          reviewEmailBody: settings.reviewEmailBodyBethnal,
-        };
 
   return (
     <div className="flex max-w-[760px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
@@ -371,7 +342,7 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
       <Stage
         n={3}
         title="The messages clients receive"
-        blurb="Every word a client reads — offer email, intake, booking pages, confirmations, review. Walk through them, check each one sounds like you, and edit anything. The welcome and review emails have their own per-location editors below."
+        blurb="Every word a client reads, in one place — the welcome email, offer, intake, booking pages, confirmations and the review request. Walk through them, check each one sounds like you, and edit anything."
       />
 
       <Dropdown
@@ -379,269 +350,34 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
         open={!!open.clientMessages}
         onToggle={() => toggle("clientMessages")}
       >
-        <ClientMessagesEditor initial={settings.clientCopy} />
+        <ClientMessagesEditor
+          initial={settings.clientCopy}
+          settingsInitial={{
+            emailTemplateWaterloo: settings.emailTemplateWaterloo,
+            emailTemplateBethnal: settings.emailTemplateBethnal,
+            accessNote: settings.accessNote,
+            paymentDetails: settings.paymentDetails,
+            reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
+            reviewEmailBodyWaterloo: settings.reviewEmailBodyWaterloo,
+            mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
+            reviewEmailSubjectBethnal: settings.reviewEmailSubjectBethnal,
+            reviewEmailBodyBethnal: settings.reviewEmailBodyBethnal,
+            mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
+          }}
+        />
       </Dropdown>
 
       <Dropdown
-        label="WELCOME EMAIL — A NEW CLIENT'S FIRST EMAIL, BY LOCATION"
-        open={!!open.emailTemplate}
-        onToggle={() => toggle("emailTemplate")}
-      >
-        <Card className="flex flex-col gap-3 px-[18px] py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["bethnal", "waterloo"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setEmailClinic(c);
-                    setEditingTemplate(false);
-                  }}
-                  className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                    emailClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-                  }`}
-                >
-                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                if (!editingTemplate) setTemplateDraft(template);
-                setEditingTemplate(!editingTemplate);
-              }}
-              className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-            >
-              {editingTemplate ? "Cancel" : "Edit"}
-            </button>
-          </div>
-          {!editingTemplate ? (
-            <div className="rounded-[10px] bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.35_0.02_60)]">
-              {template}
-            </div>
-          ) : (
-            <>
-              <textarea
-                value={templateDraft}
-                onChange={(e) => setTemplateDraft(e.target.value)}
-                className="min-h-[170px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-              />
-              <PrimaryButton
-                onClick={() =>
-                  save(
-                    emailClinic === "waterloo"
-                      ? { emailTemplateWaterloo: templateDraft }
-                      : { emailTemplateBethnal: templateDraft },
-                    () => setEditingTemplate(false),
-                    "Email template updated ✓",
-                  )
-                }
-                className="self-start px-[18px] py-[9px] text-[13px]"
-              >
-                Save
-              </PrimaryButton>
-            </>
-          )}
-          <div className="text-[11.5px] leading-[1.6] text-muted">
-            This is the first email a new client gets — use {"{name}"} for their name and {"{accessNote}"} for the
-            access note below. It goes out when you confirm their booking; returning clients just get the calendar
-            invite. The intake form is <b>no longer attached here</b> — it&apos;s sent as its own step after booking,
-            so if your saved template still says &quot;the intake form link is below&quot;, you can remove that line.
-          </div>
-        </Card>
-      </Dropdown>
-
-      <Dropdown
-        label="· ACCESS NOTE — INCLUDED IN THE WELCOME EMAIL"
-        open={!!open.accessNote}
-        onToggle={() => toggle("accessNote")}
-      >
-        <div className="flex items-center justify-end px-0.5">
-          <button
-            onClick={() => {
-              if (!editingNote) setNoteDraft(settings.accessNote);
-              setEditingNote(!editingNote);
-            }}
-            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-          >
-            {editingNote ? "Cancel" : "Edit"}
-          </button>
-        </div>
-        {!editingNote ? (
-          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] text-[oklch(0.4_0.06_48)]">
-            &quot;{settings.accessNote}&quot;
-          </div>
-        ) : (
-          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
-            <textarea
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-            />
-            <PrimaryButton
-              onClick={() => save({ accessNote: noteDraft }, () => setEditingNote(false), "Access note updated ✓")}
-              className="self-start px-[18px] py-[9px] text-[13px]"
-            >
-              Save
-            </PrimaryButton>
-          </Card>
-        )}
-        <div className="text-[11.5px] text-muted">
-          Slots into the welcome email wherever you put {"{accessNote}"} in the template above.
-        </div>
-      </Dropdown>
-
-      <Dropdown
-        label="· PAYMENT / BANK DETAILS — INCLUDED IN THE WELCOME EMAIL"
-        open={!!open.payment}
-        onToggle={() => toggle("payment")}
-      >
-        <div className="flex items-center justify-end px-0.5">
-          <button
-            onClick={() => {
-              if (!editingPayment) setPaymentDraft(settings.paymentDetails);
-              setEditingPayment(!editingPayment);
-            }}
-            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-          >
-            {editingPayment ? "Cancel" : "Edit"}
-          </button>
-        </div>
-        {!editingPayment ? (
-          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.4_0.06_48)]">
-            {settings.paymentDetails}
-          </div>
-        ) : (
-          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
-            <textarea
-              value={paymentDraft}
-              onChange={(e) => setPaymentDraft(e.target.value)}
-              className="min-h-[100px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-            />
-            <PrimaryButton
-              onClick={() => save({ paymentDetails: paymentDraft }, () => setEditingPayment(false), "Payment details updated ✓")}
-              className="self-start px-[18px] py-[9px] text-[13px]"
-            >
-              Save
-            </PrimaryButton>
-          </Card>
-        )}
-        <div className="text-[11.5px] text-muted">
-          Your real bank details — inserted when you tick &quot;include payment details&quot; while confirming a new
-          client&apos;s session.
-        </div>
-      </Dropdown>
-
-      <Dropdown
-        label="INTAKE FORM — SENT ON ITS OWN, AFTER BOOKING"
+        label="INTAKE FORM — SENT WITH THE WELCOME EMAIL"
         open={!!open.intakeQuestions}
         onToggle={() => toggle("intakeQuestions")}
       >
         <div className="rounded-xl border border-line bg-inputbg px-4 py-3 text-[12.5px] leading-[1.6] text-muted">
-          The intake form is kept out of the welcome email on purpose, so a client&apos;s first message stays a warm
-          hello. You send it as its own step — the &quot;Send intake form&quot; button appears right after you book
-          someone, and on every client&apos;s profile. These are the questions it asks:
+          The intake link now rides along in the welcome email, so a new client gets it in one message. You can also
+          resend it any time — the &quot;Send intake form&quot; button appears right after you book someone, and on
+          every client&apos;s profile. These are the questions it asks:
         </div>
         <IntakeQuestionsEditor initial={settings.intakeQuestions} />
-      </Dropdown>
-
-      <Dropdown label="POST-SESSION REVIEW EMAIL" open={!!open.reviewEmail} onToggle={() => toggle("reviewEmail")}>
-        <Card className="flex flex-col gap-3 px-[18px] py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["bethnal", "waterloo"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setReviewClinic(c);
-                    setEditingReview(false);
-                  }}
-                  className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                    reviewClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-                  }`}
-                >
-                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                if (!editingReview) setReviewDraft(reviewFields);
-                setEditingReview(!editingReview);
-              }}
-              className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-            >
-              {editingReview ? "Cancel" : "Edit"}
-            </button>
-          </div>
-          {!editingReview ? (
-            <>
-              <Row label="Google review link">{reviewFields.mapsReviewUrl || "not set yet"}</Row>
-              <Row label="Subject">{reviewFields.reviewEmailSubject}</Row>
-              <Row label="Body" last>
-                <span className="whitespace-pre-wrap">{reviewFields.reviewEmailBody}</span>
-              </Row>
-            </>
-          ) : (
-            <>
-              <label className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                  GOOGLE REVIEW LINK — {reviewClinic === "waterloo" ? "WATERLOO" : "BETHNAL GREEN"}
-                </span>
-                <input
-                  value={reviewDraft.mapsReviewUrl}
-                  onChange={(e) => setReviewDraft({ ...reviewDraft, mapsReviewUrl: e.target.value })}
-                  placeholder="https://g.page/r/…/review"
-                  className={inputClass}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">SUBJECT</span>
-                <input
-                  value={reviewDraft.reviewEmailSubject}
-                  onChange={(e) => setReviewDraft({ ...reviewDraft, reviewEmailSubject: e.target.value })}
-                  className={inputClass}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">BODY</span>
-                <textarea
-                  value={reviewDraft.reviewEmailBody}
-                  onChange={(e) => setReviewDraft({ ...reviewDraft, reviewEmailBody: e.target.value })}
-                  className="min-h-[180px] w-full resize-y rounded-[10px] border border-line bg-inputbg px-3.5 py-3 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-                />
-              </label>
-              <PrimaryButton
-                onClick={() =>
-                  save(
-                    reviewClinic === "waterloo"
-                      ? {
-                          mapsReviewUrlWaterloo: reviewDraft.mapsReviewUrl,
-                          reviewEmailSubjectWaterloo: reviewDraft.reviewEmailSubject,
-                          reviewEmailBodyWaterloo: reviewDraft.reviewEmailBody,
-                        }
-                      : {
-                          mapsReviewUrlBethnal: reviewDraft.mapsReviewUrl,
-                          reviewEmailSubjectBethnal: reviewDraft.reviewEmailSubject,
-                          reviewEmailBodyBethnal: reviewDraft.reviewEmailBody,
-                        },
-                    () => setEditingReview(false),
-                    "Review email updated ✓",
-                  )
-                }
-                className="self-start px-[18px] py-[9px] text-[13px]"
-              >
-                Save
-              </PrimaryButton>
-            </>
-          )}
-          <div className="text-[11.5px] text-muted">
-            Each clinic has its own Google review link and email — use {"{name}"} for their first name, {"{mapsUrl}"}{" "}
-            for that clinic&apos;s review link, and {"{optInLink}"} for the one-tap marketing opt-in link. Send it
-            from a client&apos;s profile after their first session; the clinic on their record picks which one goes
-            out.
-          </div>
-        </Card>
       </Dropdown>
 
       {/* ───────────────── 4 · Behind the scenes ───────────────── */}

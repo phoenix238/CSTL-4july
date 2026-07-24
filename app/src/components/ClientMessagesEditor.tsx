@@ -2,17 +2,60 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Card, PrimaryButton, SectionLabel, useToast } from "./ui";
+import { api, Card, PrimaryButton, useToast } from "./ui";
 import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } from "@/lib/clientCopy";
 
-type FieldDef = { key: keyof ClientCopy; label: string; multiline?: boolean; placeholders?: string[] };
-type Group = { title: string; blurb: string; fields: FieldDef[] };
+// The settings-backed messages (plain AppSettings columns, not part of clientCopy)
+// that also belong in "every word a client reads" — so this one editor genuinely
+// holds all of them instead of leaving the welcome/access/payment/review scattered
+// in separate Settings dropdowns.
+export interface SettingsMessages {
+  emailTemplateWaterloo: string;
+  emailTemplateBethnal: string;
+  accessNote: string;
+  paymentDetails: string;
+  reviewEmailSubjectWaterloo: string;
+  reviewEmailBodyWaterloo: string;
+  mapsReviewUrlWaterloo: string;
+  reviewEmailSubjectBethnal: string;
+  reviewEmailBodyBethnal: string;
+  mapsReviewUrlBethnal: string;
+}
+
+type CopyField = { key: keyof ClientCopy; label: string; multiline?: boolean; placeholders?: string[] };
+type SettingsField = { key: keyof SettingsMessages; label: string; multiline?: boolean; placeholders?: string[] };
+// A group is backed by either the clientCopy blob or the settings columns.
+type Group =
+  | { title: string; blurb: string; source: "copy"; fields: CopyField[] }
+  | { title: string; blurb: string; source: "settings"; fields: SettingsField[] };
 
 // The client's journey, in order — every word they might read, grouped by moment.
 const GROUPS: Group[] = [
   {
+    title: "The welcome email (a new client's first email)",
+    blurb: "Sent the moment you book a new client — with the intake link, access note and address.",
+    source: "settings",
+    fields: [
+      { key: "emailTemplateWaterloo", label: "Waterloo — welcome message", multiline: true, placeholders: ["name", "accessNote", "intakeLink"] },
+      { key: "emailTemplateBethnal", label: "Bethnal Green — welcome message", multiline: true, placeholders: ["name", "accessNote", "intakeLink"] },
+    ],
+  },
+  {
+    title: "The access note",
+    blurb: "Slots into the welcome email wherever you put {accessNote} — stairs, access needs, etc.",
+    source: "settings",
+    fields: [{ key: "accessNote", label: "Access note", multiline: true }],
+  },
+  {
+    title: "Payment / bank details",
+    blurb: "Added to the welcome email only when you tick “include payment details” for a new client.",
+    source: "settings",
+    fields: [{ key: "paymentDetails", label: "Payment details", multiline: true }],
+  },
+  {
     title: "The offer email",
     blurb: "Sent when you offer a few times. The link lets them book one themselves.",
+    source: "copy",
     fields: [
       { key: "offerEmailSubject", label: "Subject", placeholders: ["clinic"] },
       { key: "offerEmailBody", label: "Message", multiline: true, placeholders: ["name", "clinic", "times", "pickLink"] },
@@ -20,8 +63,9 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    title: "The intake email",
-    blurb: "Sent on its own after booking (or copied to paste into WhatsApp).",
+    title: "The intake email (a resend, on its own)",
+    blurb: "The intake link now rides along in the welcome email; this is the standalone resend.",
+    source: "copy",
     fields: [
       { key: "intakeEmailSubject", label: "Subject" },
       { key: "intakeEmailBody", label: "Message", multiline: true, placeholders: ["name", "link"] },
@@ -30,6 +74,7 @@ const GROUPS: Group[] = [
   {
     title: "The intake form page",
     blurb: "What a client sees when they open their intake link.",
+    source: "copy",
     fields: [
       { key: "intakePageTitle", label: "Heading" },
       { key: "intakePageIntro", label: "Intro paragraph", multiline: true },
@@ -41,6 +86,7 @@ const GROUPS: Group[] = [
   {
     title: "Your booking page (/book)",
     blurb: "The public page you can link from Instagram or your website.",
+    source: "copy",
     fields: [
       { key: "bookPageTitle", label: "Heading" },
       { key: "bookPageIntro", label: "Intro paragraph", multiline: true },
@@ -49,6 +95,7 @@ const GROUPS: Group[] = [
   {
     title: "The “you're booked” screen",
     blurb: "Shown right after a client books — on /book and via a self-book link.",
+    source: "copy",
     fields: [
       { key: "confirmTitle", label: "Heading" },
       { key: "confirmBodySent", label: "Message (email went out)", multiline: true, placeholders: ["emailLine"] },
@@ -60,9 +107,23 @@ const GROUPS: Group[] = [
   {
     title: "The offer-pick page",
     blurb: "What a client sees on the self-book link before choosing a time.",
+    source: "copy",
     fields: [
       { key: "offerPickTitle", label: "Heading", placeholders: ["name"] },
       { key: "offerPickIntro", label: "Intro", placeholders: ["clinic"] },
+    ],
+  },
+  {
+    title: "The review email (after a session)",
+    blurb: "Asks for a Google review and offers a one-tap marketing opt-in, per location.",
+    source: "settings",
+    fields: [
+      { key: "reviewEmailSubjectWaterloo", label: "Waterloo — subject" },
+      { key: "reviewEmailBodyWaterloo", label: "Waterloo — message", multiline: true, placeholders: ["name", "mapsUrl", "optInLink"] },
+      { key: "mapsReviewUrlWaterloo", label: "Waterloo — Google review link" },
+      { key: "reviewEmailSubjectBethnal", label: "Bethnal Green — subject" },
+      { key: "reviewEmailBodyBethnal", label: "Bethnal Green — message", multiline: true, placeholders: ["name", "mapsUrl", "optInLink"] },
+      { key: "mapsReviewUrlBethnal", label: "Bethnal Green — Google review link" },
     ],
   },
 ];
@@ -75,30 +136,113 @@ const SAMPLE: Record<string, string> = {
   link: "https://your-site/offer/ab12cd",
   pickLink: "Or click here to pick one yourself and it'll be booked straight away:\nhttps://your-site/offer/ab12cd\n\n",
   emailLine: " to maya@example.com",
+  accessNote: "There are stairs — please let me know about any access needs.",
+  intakeLink: "https://your-site/intake/ab12cd",
+  mapsUrl: "https://g.page/r/your-review-link",
+  optInLink: "https://your-site/preferences/ab12cd",
 };
 
-export function ClientMessagesEditor({ initial }: { initial: ClientCopy }) {
+// One editable field with its reset control, placeholders and live preview.
+function FieldEditor({
+  label,
+  value,
+  isDefault,
+  placeholders,
+  multiline,
+  onChange,
+  onReset,
+}: {
+  label: string;
+  value: string;
+  isDefault: boolean;
+  placeholders?: string[];
+  multiline?: boolean;
+  onChange: (v: string) => void;
+  onReset?: () => void;
+}) {
+  const preview = value.includes("{") ? applyCopy(value, SAMPLE) : null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-semibold text-ink-soft">{label}</span>
+        {onReset && !isDefault && (
+          <button
+            onClick={onReset}
+            className="cursor-pointer text-[11px] font-semibold text-muted underline hover:text-ink"
+          >
+            Reset to default
+          </button>
+        )}
+      </div>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="min-h-[96px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-[1.55] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+        />
+      ) : (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+        />
+      )}
+      {placeholders?.length ? (
+        <div className="flex flex-wrap gap-1 text-[10.5px] text-muted">
+          {placeholders.map((p) => (
+            <code key={p} className="rounded bg-[oklch(0.94_0.01_80)] px-1.5 py-[1px]">{`{${p}}`}</code>
+          ))}
+        </div>
+      ) : null}
+      {preview && (
+        <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2 text-[12px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_60)]">
+          {preview}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ClientMessagesEditor({
+  initial,
+  settingsInitial,
+}: {
+  initial: ClientCopy;
+  settingsInitial: SettingsMessages;
+}) {
   const router = useRouter();
   const toast = useToast();
   const [draft, setDraft] = useState<ClientCopy>(initial);
+  const [sDraft, setSDraft] = useState<SettingsMessages>(settingsInitial);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const dirty = CLIENT_COPY_KEYS.some((k) => draft[k] !== initial[k]);
-  const customised = CLIENT_COPY_KEYS.filter((k) => draft[k].trim() !== CLIENT_COPY_DEFAULTS[k].trim()).length;
+  const S_KEYS = Object.keys(settingsInitial) as (keyof SettingsMessages)[];
+  const copyDirty = CLIENT_COPY_KEYS.some((k) => draft[k] !== initial[k]);
+  const settingsDirty = S_KEYS.some((k) => sDraft[k] !== settingsInitial[k]);
+  const dirty = copyDirty || settingsDirty;
 
-  const set = (k: keyof ClientCopy, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  const setCopy = (k: keyof ClientCopy, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+  const setSetting = (k: keyof SettingsMessages, v: string) => setSDraft((d) => ({ ...d, [k]: v }));
 
   async function saveAll() {
     setSaving(true);
     try {
-      // Only send fields that differ from the built-in default — a blank/default
-      // field stays unstored, so future default tweaks still reach it.
+      // Only send clientCopy fields that differ from the built-in default — a
+      // blank/default field stays unstored, so future default tweaks still reach it.
       const clientCopy: Partial<ClientCopy> = {};
       for (const k of CLIENT_COPY_KEYS) {
         if (draft[k].trim() && draft[k].trim() !== CLIENT_COPY_DEFAULTS[k].trim()) clientCopy[k] = draft[k];
       }
-      await api("/api/settings", { method: "PATCH", body: JSON.stringify({ clientCopy }) });
+      // Settings-backed messages are plain columns — send whichever changed.
+      const settingsChanged: Partial<SettingsMessages> = {};
+      for (const k of S_KEYS) {
+        if (sDraft[k] !== settingsInitial[k]) settingsChanged[k] = sDraft[k];
+      }
+      await api("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ ...settingsChanged, clientCopy }),
+      });
       toast("Client messages saved ✓");
       router.refresh();
     } catch (err) {
@@ -112,16 +256,17 @@ export function ClientMessagesEditor({ initial }: { initial: ClientCopy }) {
     <div className="flex flex-col gap-2.5">
       <Card className="flex flex-col gap-2 px-4 py-3.5">
         <div className="text-[12.5px] leading-relaxed text-muted">
-          Every word a client reads, in one place. Open each moment of their journey, check it reads the way you
-          want, and edit anything. Placeholders in {"{ }"} fill in automatically.
-        </div>
-        <div className="text-[11.5px] font-semibold text-clay-text">
-          {customised} of {CLIENT_COPY_KEYS.length} messages customised · the rest use the warm defaults
+          Every word a client reads, in one place — from their welcome email to the review request. Open each
+          moment of their journey, check it reads the way you want, and edit anything. Placeholders in {"{ }"} fill
+          in automatically.
         </div>
       </Card>
 
       {GROUPS.map((g) => {
-        const groupEdited = g.fields.some((f) => draft[f.key].trim() !== CLIENT_COPY_DEFAULTS[f.key].trim());
+        const groupEdited =
+          g.source === "copy"
+            ? g.fields.some((f) => draft[f.key].trim() !== CLIENT_COPY_DEFAULTS[f.key].trim())
+            : g.fields.some((f) => sDraft[f.key] !== settingsInitial[f.key]);
         const isOpen = openGroup === g.title;
         return (
           <div key={g.title} className="flex flex-col gap-2.5">
@@ -143,51 +288,30 @@ export function ClientMessagesEditor({ initial }: { initial: ClientCopy }) {
             {isOpen && (
               <Card className="flex flex-col gap-4 px-4 py-4">
                 <p className="text-[12px] leading-relaxed text-muted">{g.blurb}</p>
-                {g.fields.map((f) => {
-                  const val = draft[f.key];
-                  const isDefault = val.trim() === CLIENT_COPY_DEFAULTS[f.key].trim();
-                  const preview = val.includes("{") ? applyCopy(val, SAMPLE) : null;
-                  return (
-                    <div key={f.key} className="flex flex-col gap-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[12px] font-semibold text-ink-soft">{f.label}</span>
-                        {!isDefault && (
-                          <button
-                            onClick={() => set(f.key, CLIENT_COPY_DEFAULTS[f.key])}
-                            className="cursor-pointer text-[11px] font-semibold text-muted underline hover:text-ink"
-                          >
-                            Reset to default
-                          </button>
-                        )}
-                      </div>
-                      {f.multiline ? (
-                        <textarea
-                          value={val}
-                          onChange={(e) => set(f.key, e.target.value)}
-                          className="min-h-[96px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-[1.55] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-                        />
-                      ) : (
-                        <input
-                          value={val}
-                          onChange={(e) => set(f.key, e.target.value)}
-                          className="w-full rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-                        />
-                      )}
-                      {f.placeholders?.length ? (
-                        <div className="flex flex-wrap gap-1 text-[10.5px] text-muted">
-                          {f.placeholders.map((p) => (
-                            <code key={p} className="rounded bg-[oklch(0.94_0.01_80)] px-1.5 py-[1px]">{`{${p}}`}</code>
-                          ))}
-                        </div>
-                      ) : null}
-                      {preview && (
-                        <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2 text-[12px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_60)]">
-                          {preview}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {g.source === "copy"
+                  ? g.fields.map((f) => (
+                      <FieldEditor
+                        key={f.key}
+                        label={f.label}
+                        value={draft[f.key]}
+                        isDefault={draft[f.key].trim() === CLIENT_COPY_DEFAULTS[f.key].trim()}
+                        placeholders={f.placeholders}
+                        multiline={f.multiline}
+                        onChange={(v) => setCopy(f.key, v)}
+                        onReset={() => setCopy(f.key, CLIENT_COPY_DEFAULTS[f.key])}
+                      />
+                    ))
+                  : g.fields.map((f) => (
+                      <FieldEditor
+                        key={f.key}
+                        label={f.label}
+                        value={sDraft[f.key]}
+                        isDefault={sDraft[f.key] === settingsInitial[f.key]}
+                        placeholders={f.placeholders}
+                        multiline={f.multiline}
+                        onChange={(v) => setSetting(f.key, v)}
+                      />
+                    ))}
               </Card>
             )}
           </div>
@@ -200,7 +324,10 @@ export function ClientMessagesEditor({ initial }: { initial: ClientCopy }) {
             {saving ? "Saving…" : "Save changes"}
           </PrimaryButton>
           <button
-            onClick={() => setDraft(initial)}
+            onClick={() => {
+              setDraft(initial);
+              setSDraft(settingsInitial);
+            }}
             className="cursor-pointer text-[12px] font-semibold text-muted underline hover:text-ink"
           >
             Discard
