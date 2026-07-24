@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { fmtDayLong, fmtTime, londonYMD, londonTime } from "@/lib/time";
-import { api, Card, OutlineButton, PrimaryButton, SectionLabel, TintButton, inputClass, useToast } from "../ui";
+import { api, Card, OutlineButton, PrimaryButton, SectionLabel, TintButton, inputClass, useEscapeKey, useToast } from "../ui";
 import type { SpanSource } from "./layout";
 
 export type EventCalendar = "personal" | "room" | "chalkFarm";
@@ -49,6 +49,7 @@ export function EventComposer({
   onSaved: () => void;
 }) {
   const toast = useToast();
+  useEscapeKey(onClose);
   const available = (["personal", "room", "chalkFarm"] as const).filter((c) => calendars[c]);
   const [calendar, setCalendar] = useState<EventCalendar>(
     (source as EventCalendar) || available[0] || "personal",
@@ -109,7 +110,11 @@ export function EventComposer({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed top-1/2 left-1/2 z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2"
+      >
         <Card className="flex flex-col gap-3 p-5">
           <div>
             <div className="font-serif text-[19px] font-medium">{mode === "create" ? "New event" : "Edit event"}</div>

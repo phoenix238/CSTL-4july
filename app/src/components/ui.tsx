@@ -1,6 +1,20 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+
+/* ---------- shared hooks ---------- */
+
+/** Call `onEscape` when the Escape key is pressed (while `active`). For modals/popovers. */
+export function useEscapeKey(onEscape: () => void, active = true) {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onEscape();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onEscape, active]);
+}
 
 /* ---------- shared atoms, matching the design's card/chip/button styles ---------- */
 

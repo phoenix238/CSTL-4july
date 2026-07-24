@@ -6,7 +6,7 @@
 // the Google-Calendar way: hover to see the 15-min-snapped time, drag empty
 // space to create, drag an event to move it.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
 import { fmtDayShort, fmtTime, londonAddDays, londonMinutes, londonTime, londonYMD } from "@/lib/time";
 import { layoutDayEvents, SPAN_COLORS, type SpanDTO } from "./layout";
@@ -138,39 +138,43 @@ export function TimeGrid({
   const clampMin = (m: number, sh: number, eh: number) => Math.max(sh * 60, Math.min(eh * 60, m));
   const minFromY = (y: number, sh: number) => sh * 60 + Math.floor((y / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
 
-  const onDragMove = useCallback((e: MouseEvent) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const { startHour: sh, endHour: eh } = cfgRef.current;
-    const cur = clampMin(minFromY(e.clientY - d.rectTop, sh), sh, eh);
-    setDragSel({ di: d.di, a: Math.min(d.startMin, cur), b: Math.max(d.startMin, cur) });
-  }, []);
-
-  const onDragUp = useCallback(
-    (e: MouseEvent) => {
-      window.removeEventListener("mousemove", onDragMove);
-      window.removeEventListener("mouseup", onDragUp);
-      const d = dragRef.current;
-      dragRef.current = null;
-      setDragSel(null);
-      if (!d) return;
-      const { startHour: sh, endHour: eh, onSlotClick: click, onRangeSelect: range } = cfgRef.current;
-      const cur = clampMin(minFromY(e.clientY - d.rectTop, sh), sh, eh);
-      const a = Math.min(d.startMin, cur);
-      const b = Math.max(d.startMin, cur);
-      if (b - a >= SNAP_MIN && range) range(slotAt(d.day, a), slotAt(d.day, b));
-      else if (click) click(slotAt(d.day, d.startMin));
-    },
-    [onDragMove],
-  );
-
-  const handleColumnDown = (day: Date, di: number) => (e: React.MouseEvent<HTMLDivElement>) => {
+  // Pointer Events (not mouse) so drag works with a mouse, pen, or touch. On a
+  // touch drag over empty space the browser scrolls and fires pointercancel —
+  // we abort cleanly then, so a scroll never turns into an accidental booking;
+  // a tap (down+up, no move) still books via the click path below.
+  const handleColumnDown = (day: Date, di: number) => (e: React.PointerEvent<HTMLDivElement>) => {
     if (!slotSelectable || e.button !== 0 || e.target !== e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
     dragRef.current = { di, day, rectTop: rect.top, startMin: snapMinFromY(e.clientY - rect.top) };
     setHover(null);
-    window.addEventListener("mousemove", onDragMove);
-    window.addEventListener("mouseup", onDragUp);
+
+    const move = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const { startHour: sh, endHour: eh } = cfgRef.current;
+      const cur = clampMin(minFromY(ev.clientY - d.rectTop, sh), sh, eh);
+      setDragSel({ di: d.di, a: Math.min(d.startMin, cur), b: Math.max(d.startMin, cur) });
+    };
+    const finish = (commit: boolean, ev?: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      const d = dragRef.current;
+      dragRef.current = null;
+      setDragSel(null);
+      if (!commit || !d || !ev) return;
+      const { startHour: sh, endHour: eh, onSlotClick: click, onRangeSelect: range } = cfgRef.current;
+      const cur = clampMin(minFromY(ev.clientY - d.rectTop, sh), sh, eh);
+      const a = Math.min(d.startMin, cur);
+      const b = Math.max(d.startMin, cur);
+      if (b - a >= SNAP_MIN && range) range(slotAt(d.day, a), slotAt(d.day, b));
+      else if (click) click(slotAt(d.day, d.startMin));
+    };
+    const up = (ev: PointerEvent) => finish(true, ev);
+    const cancel = () => finish(false);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
 
   /* ---------- drag an existing event to move it (display) ---------- */
@@ -179,33 +183,7 @@ export function TimeGrid({
   >(null);
   const [evGhost, setEvGhost] = useState<{ di: number; startMin: number; durationMin: number } | null>(null);
 
-  const onEvMove = useCallback((e: MouseEvent) => {
-    const d = evDragRef.current;
-    if (!d) return;
-    const { startHour: sh, endHour: eh } = cfgRef.current;
-    let start = minFromY(e.clientY - d.rectTop, sh) - d.grabOffset;
-    start = Math.max(sh * 60, Math.min(eh * 60 - d.durationMin, start));
-    if (Math.abs(start - londonMinutes(new Date(d.span.start))) >= SNAP_MIN) d.moved = true;
-    d.lastStartMin = start;
-    setEvGhost({ di: d.di, startMin: start, durationMin: d.durationMin });
-  }, []);
-
-  const onEvUp = useCallback(
-    (e: MouseEvent) => {
-      window.removeEventListener("mousemove", onEvMove);
-      window.removeEventListener("mouseup", onEvUp);
-      const d = evDragRef.current;
-      evDragRef.current = null;
-      setEvGhost(null);
-      if (!d) return;
-      const { onEventClick: click, onEventMove: move } = cfgRef.current;
-      if (d.moved && move) move(d.span, slotAt(d.day, d.lastStartMin));
-      else if (click) click(d.span, { x: e.clientX, y: e.clientY });
-    },
-    [onEvMove],
-  );
-
-  const handleEventDown = (span: SpanDTO, di: number, day: Date) => (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleEventDown = (span: SpanDTO, di: number, day: Date) => (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.stopPropagation(); // don't start a column range-drag
     const column = e.currentTarget.parentElement;
@@ -217,8 +195,34 @@ export function TimeGrid({
     const grabOffset = snapMinFromY(e.clientY - rectTop) - origStartMin;
     evDragRef.current = { span, di, day, rectTop, grabOffset, durationMin, lastStartMin: origStartMin, moved: false };
     setEvGhost({ di, startMin: origStartMin, durationMin });
-    window.addEventListener("mousemove", onEvMove);
-    window.addEventListener("mouseup", onEvUp);
+
+    const move = (ev: PointerEvent) => {
+      const d = evDragRef.current;
+      if (!d) return;
+      const { startHour: sh, endHour: eh } = cfgRef.current;
+      let s = minFromY(ev.clientY - d.rectTop, sh) - d.grabOffset;
+      s = Math.max(sh * 60, Math.min(eh * 60 - d.durationMin, s));
+      if (Math.abs(s - londonMinutes(new Date(d.span.start))) >= SNAP_MIN) d.moved = true;
+      d.lastStartMin = s;
+      setEvGhost({ di: d.di, startMin: s, durationMin: d.durationMin });
+    };
+    const finish = (commit: boolean, ev?: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      const d = evDragRef.current;
+      evDragRef.current = null;
+      setEvGhost(null);
+      if (!commit || !d) return;
+      const { onEventClick: click, onEventMove: mv } = cfgRef.current;
+      if (d.moved && mv) mv(d.span, slotAt(d.day, d.lastStartMin));
+      else if (click && ev) click(d.span, { x: ev.clientX, y: ev.clientY });
+    };
+    const up = (ev: PointerEvent) => finish(true, ev);
+    const cancel = () => finish(false);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
 
   /* ---------- hover + picker tap ---------- */
@@ -287,7 +291,7 @@ export function TimeGrid({
             return (
               <div
                 key={day.toISOString()}
-                onMouseDown={slotSelectable ? handleColumnDown(day, di) : undefined}
+                onPointerDown={slotSelectable ? handleColumnDown(day, di) : undefined}
                 onClick={pickerSelectable ? handlePickerTap(day) : undefined}
                 onMouseMove={handleColumnHover(di)}
                 onMouseLeave={() => setHover((h) => (h?.di === di ? null : h))}
@@ -388,7 +392,7 @@ export function TimeGrid({
                   return (
                     <div
                       key={i}
-                      onMouseDown={movable ? handleEventDown(event.span, di, day) : undefined}
+                      onPointerDown={movable ? handleEventDown(event.span, di, day) : undefined}
                       onClick={
                         !movable && clickable
                           ? (e) => {
@@ -410,6 +414,9 @@ export function TimeGrid({
                         color: c.text,
                         opacity: pickerDim ? 0.75 : 1,
                         zIndex: 5,
+                        // Let a touch-drag move the block instead of scrolling the
+                        // page (only on these small targets, so column scroll is kept).
+                        touchAction: movable ? "none" : undefined,
                       }}
                     >
                       <div className="font-semibold tabular-nums">

@@ -12,6 +12,7 @@ import {
   SectionLabel,
   TintButton,
   inputClass,
+  useEscapeKey,
   useToast,
 } from "./ui";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
@@ -112,6 +113,9 @@ export function EnquiryFlow({
 
   const activeClient = saved ?? (ignoreMatch ? null : match);
   const { spans, invalidate } = useWeekSpans(weekStart, 7);
+
+  useEscapeKey(() => setPasteOpen(false), pasteOpen);
+  useEscapeKey(() => setShowWaiting(false), showWaiting);
 
   useEffect(() => {
     if (openEnquiryId) {
@@ -656,7 +660,11 @@ export function EnquiryFlow({
       {pasteOpen && (
         <>
           <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={() => setPasteOpen(false)} />
-          <div className="fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2"
+          >
             <Card className="flex flex-col gap-3 px-5 py-5">
               <SectionLabel>PASTE A MESSAGE</SectionLabel>
               <textarea

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { CLINIC_LABEL } from "@/lib/booking/rules";
-import { OutlineButton, PrimaryButton, TintButton } from "../ui";
+import { OutlineButton, PrimaryButton, TintButton, useEscapeKey } from "../ui";
 import type { SpanDTO } from "./layout";
 
 /**
@@ -26,6 +26,7 @@ export function BookingPopover({
   onCancel: () => void;
   cancelling: boolean;
 }) {
+  useEscapeKey(onClose);
   const start = new Date(span.start);
   const style: React.CSSProperties = {
     position: "fixed",
@@ -38,6 +39,8 @@ export function BookingPopover({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
         style={style}
         className="w-[280px] rounded-2xl border border-line bg-card p-4 shadow-pop"
         onClick={(e) => e.stopPropagation()}

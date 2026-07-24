@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import { api, Card, OutlineButton, PrimaryButton, SectionLabel, inputClass, useToast } from "../ui";
+import { api, Card, OutlineButton, PrimaryButton, SectionLabel, inputClass, useEscapeKey, useToast } from "../ui";
 
 interface ClientHit {
   id: string;
@@ -27,6 +27,7 @@ export function QuickBook({
   onBooked: () => void;
 }) {
   const toast = useToast();
+  useEscapeKey(onClose);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [client, setClient] = useState<ClientHit | null>(null);
@@ -77,7 +78,11 @@ export function QuickBook({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="fixed top-1/2 left-1/2 z-50 w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2"
+      >
         <Card className="flex flex-col gap-3 p-5">
           <div>
             <div className="font-serif text-[19px] font-medium">Book this slot</div>

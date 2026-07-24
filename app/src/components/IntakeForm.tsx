@@ -86,7 +86,14 @@ export function IntakeForm({
         )}
       </header>
 
-      <Card className="flex flex-col gap-4 px-5 py-6">
+      <Card className="px-5 py-6">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+          className="flex flex-col gap-4"
+        >
         <label className="flex flex-col gap-1.5">
           <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
@@ -154,9 +161,10 @@ export function IntakeForm({
           </div>
         </div>
 
-        <PrimaryButton onClick={submit} disabled={saving} className="mt-1 py-3">
+        <PrimaryButton type="submit" disabled={saving} className="mt-1 py-3">
           {saving ? "Sending…" : "Send to Phoenix"}
         </PrimaryButton>
+        </form>
       </Card>
     </div>
   );
