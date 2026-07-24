@@ -51,6 +51,7 @@ interface BookResult {
   whenLabel: string;
   items: string[];
   emailTextForClipboard?: string;
+  emailSent: boolean;
 }
 
 export function EnquiryFlow({
@@ -484,6 +485,11 @@ export function EnquiryFlow({
     }
   }
 
+  // Does this booking have somewhere to email the confirmation? New clients only
+  // have an email if the pasted message gave us one. When there's no email, the
+  // booking still goes through and the message is copied for WhatsApp instead.
+  const bookingHasEmail = activeClient ? !!activeClient.email : !!analysis?.email;
+
   async function confirmBooking() {
     if (!confirmSlot) return;
     setBooking(true);
@@ -491,7 +497,9 @@ export function EnquiryFlow({
       const req: Record<string, unknown> = {
         clinic,
         startISO: confirmSlot.toISOString(),
-        sendEmail: false,
+        // One consistent rule everywhere: booking emails the client the confirmation.
+        // bookSession falls back to clipboard text automatically when there's no email.
+        sendEmail: true,
         sendPayment,
         emailBody: emailBody.trim() || undefined,
         enquiryId,
@@ -502,6 +510,9 @@ export function EnquiryFlow({
       const res = await api<BookResult>("/api/book", { method: "POST", body: JSON.stringify(req) });
       if (res.emailTextForClipboard) {
         await navigator.clipboard?.writeText(res.emailTextForClipboard).catch(() => {});
+        toast(res.emailSent ? "Booked ✓" : "Booked ✓ — no email on record, message copied for WhatsApp");
+      } else {
+        toast(`Booked ✓ — confirmation emailed to ${res.clientName.split(" ")[0]}`);
       }
       setResult(res);
       setIntakeSent(false);
@@ -910,13 +921,10 @@ export function EnquiryFlow({
           )}
           <div className="flex flex-wrap gap-2">
             <PrimaryButton onClick={sendOfferEmail} disabled={sendingOffer || offering}>
-              {sendingOffer ? "Sending…" : "Send offer email"}
+              {sendingOffer ? "Sending…" : "Email these options"}
             </PrimaryButton>
-            <OutlineButton onClick={() => copyAndMarkOffered(true)} disabled={offering || sendingOffer}>
-              {offering ? "Copying…" : "Copy times only & mark as offered"}
-            </OutlineButton>
             <OutlineButton onClick={() => copyAndMarkOffered(false)} disabled={offering || sendingOffer}>
-              Copy full message instead
+              {offering ? "Copying…" : "Copy for WhatsApp instead"}
             </OutlineButton>
           </div>
         </Card>
@@ -973,11 +981,15 @@ export function EnquiryFlow({
               Reset to template
             </button>
           )}
-          <div className="flex flex-wrap gap-2">
-            <OutlineButton onClick={() => setSelected([])}>Change slot</OutlineButton>
+          <div className="flex flex-wrap items-center gap-2">
             <PrimaryButton onClick={confirmBooking} disabled={booking}>
-              {booking ? "Booking…" : "Copy confirmation & book"}
+              {booking
+                ? "Booking…"
+                : bookingHasEmail
+                  ? "Book & email client"
+                  : "Book & copy message for WhatsApp"}
             </PrimaryButton>
+            <span className="text-[11.5px] text-muted">Tap another time above to change the slot.</span>
           </div>
         </Card>
       )}
