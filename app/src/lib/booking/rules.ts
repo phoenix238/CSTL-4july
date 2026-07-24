@@ -27,6 +27,9 @@ export interface PlannedEvent {
   inviteClient: boolean;
   /** clinic address — shown on the invite and turned into a Google Maps link */
   location?: string;
+  /** event body — used on the venue-facing room event to tell the clinic what
+   * they need (session time, a contact line) without exposing the client's name */
+  description?: string;
 }
 
 export const SESSION_MINUTES = 60;
@@ -49,6 +52,9 @@ export function planBookingEvents(
   clientName: string,
   sessionStart: Date,
   address?: string,
+  /** venue-facing note for the room event's description (session time + contact
+   * line); the caller composes it since it needs settings + London-time formatting */
+  venueNote?: string,
 ): PlannedEvent[] {
   const sessionEnd = addMinutes(sessionStart, SESSION_MINUTES);
   if (clinic === "waterloo") {
@@ -67,6 +73,7 @@ export function planBookingEvents(
         start: sessionStart,
         end: sessionEnd,
         inviteClient: false,
+        description: venueNote || undefined,
       },
     ];
   }

@@ -18,6 +18,7 @@ export default async function SettingsPage() {
         paymentDetails: settings.paymentDetails,
         waterlooAddress: settings.waterlooAddress,
         bethnalAddress: settings.bethnalAddress,
+        clinicContactLine: settings.clinicContactLine,
         waterlooArrivalNote: settings.waterlooArrivalNote,
         bethnalArrivalNote: settings.bethnalArrivalNote,
         waterlooLocationUrl: settings.waterlooLocationUrl,

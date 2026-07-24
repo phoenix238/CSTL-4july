@@ -19,6 +19,25 @@ describe("planBookingEvents", () => {
     expect(room.start).toEqual(at(9));
     expect(room.end).toEqual(at(10));
     expect(room.inviteClient).toBe(false);
+    // The room title stays anonymous (no client name).
+    expect(room.summary).not.toContain("Jonah");
+  });
+
+  it("puts the venue note on the room event's description, and nowhere client-facing", () => {
+    const note = "Craniosacral session 09:00–10:00.\nContact Phoenix: 07000 000000";
+    const plan = planBookingEvents("waterloo", "Jonah M", at(9), "1 Rd, London", note);
+
+    const room = plan.find((e) => e.calendar === "room")!;
+    expect(room.description).toBe(note);
+
+    // The client's own (personal) event never carries the venue note.
+    const personal = plan.find((e) => e.calendar === "personal")!;
+    expect(personal.description).toBeUndefined();
+  });
+
+  it("leaves the room description unset when no venue note is given", () => {
+    const room = planBookingEvents("waterloo", "Jonah M", at(9)).find((e) => e.calendar === "room")!;
+    expect(room.description).toBeUndefined();
   });
 
   it("Bethnal Green creates just the 1h personal session — the shared Chalk Farm block is computed separately", () => {

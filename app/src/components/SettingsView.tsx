@@ -18,6 +18,7 @@ export interface SettingsData {
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
+  clinicContactLine: string;
   waterlooArrivalNote: string;
   bethnalArrivalNote: string;
   waterlooLocationUrl: string;
@@ -101,6 +102,8 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
   const [noteDraft, setNoteDraft] = useState("");
   const [editingPayment, setEditingPayment] = useState(false);
   const [paymentDraft, setPaymentDraft] = useState("");
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState("");
   const [editingAddresses, setEditingAddresses] = useState(false);
   const [addressesDraft, setAddressesDraft] = useState({
     waterlooAddress: settings.waterlooAddress,
@@ -205,7 +208,8 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
           <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
             Creates the 1-hour &quot;(Client) — Bethnal Green&quot; personal event, and keeps one shared
             &quot;Phoenix&quot; block on the Chalk Farm calendar in sync — it grows and shrinks to span that
-            day&apos;s sessions, so clients can be booked close together.
+            day&apos;s sessions, so clients can be booked close together. The block&apos;s note tells the venue
+            how many sessions and when, without any client names.
           </div>
         </div>
         <div className="py-[15px]">
@@ -215,10 +219,53 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
           </div>
           <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
             Creates two 1-hour events: &quot;(Client) — Waterloo&quot; on your personal calendar + &quot;R5 -
-            Phoenix&quot; on the room calendar.
+            Phoenix&quot; on the room calendar. The room event&apos;s note carries the session time and your
+            contact line — the client&apos;s name stays off the shared room calendar.
           </div>
         </div>
       </Card>
+
+      <Dropdown
+        label="· CONTACT LINE FOR THE CLINICS — ON THE ROOM / CHALK FARM EVENTS"
+        open={!!open.contact}
+        onToggle={() => toggle("contact")}
+      >
+        <div className="flex items-center justify-end px-0.5">
+          <button
+            onClick={() => {
+              if (!editingContact) setContactDraft(settings.clinicContactLine);
+              setEditingContact(!editingContact);
+            }}
+            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
+          >
+            {editingContact ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {!editingContact ? (
+          <div className="rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.5)] px-[18px] py-3.5 text-[13px] leading-[1.6] whitespace-pre-wrap text-[oklch(0.4_0.06_48)]">
+            {settings.clinicContactLine || "Not set — the venue events show the session times only."}
+          </div>
+        ) : (
+          <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/35 px-4 py-3.5">
+            <input
+              value={contactDraft}
+              onChange={(e) => setContactDraft(e.target.value)}
+              placeholder="e.g. Contact Phoenix: 07000 000000"
+              className="w-full rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+            />
+            <PrimaryButton
+              onClick={() => save({ clinicContactLine: contactDraft }, () => setEditingContact(false), "Contact line updated ✓")}
+              className="self-start px-[18px] py-[9px] text-[13px]"
+            >
+              Save
+            </PrimaryButton>
+          </Card>
+        )}
+        <div className="text-[11.5px] text-muted">
+          Added under the session times on the &quot;R5 - Phoenix&quot; and shared &quot;Phoenix&quot; venue
+          events, so a clinic can reach you if something changes. Leave blank to show just the times.
+        </div>
+      </Dropdown>
 
       <Dropdown label="CLINIC ADDRESSES & ARRIVAL NOTES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
         <div className="flex items-center justify-end px-0.5">

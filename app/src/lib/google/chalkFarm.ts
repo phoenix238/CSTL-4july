@@ -1,7 +1,7 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getCalendarApi, withRetry } from "./client";
 import { EVENT_REMINDERS } from "@/lib/booking/rules";
-import { londonDayStart, londonTime } from "@/lib/time";
+import { fmtTime, londonDayStart, londonTime } from "@/lib/time";
 
 const TZ = "Europe/London";
 
@@ -48,8 +48,25 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
 
   const blockStart = new Date(Math.min(...bookings.map((b) => b.startsAt.getTime())));
   const blockEnd = new Date(Math.max(...bookings.map((b) => b.startsAt.getTime() + 60 * 60_000)));
+
+  // Venue-facing note: how many sessions, when each one starts, when the day
+  // finishes, and how to reach Phoenix — without any client names on the shared
+  // Chalk Farm calendar.
+  const startTimes = bookings
+    .map((b) => b.startsAt.getTime())
+    .sort((a, b) => a - b)
+    .map((t) => fmtTime(new Date(t)));
+  const n = bookings.length;
+  const description = [
+    `${n} session${n === 1 ? "" : "s"}: ${startTimes.join(", ")} · finishes ${fmtTime(blockEnd)}`,
+    settings.clinicContactLine.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const requestBody = {
     summary: "Phoenix",
+    description,
     start: { dateTime: blockStart.toISOString(), timeZone: TZ },
     end: { dateTime: blockEnd.toISOString(), timeZone: TZ },
     reminders: EVENT_REMINDERS,

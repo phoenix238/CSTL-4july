@@ -6,7 +6,7 @@ import {
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
-import { londonDateKey } from "@/lib/time";
+import { fmtTime, londonDateKey } from "@/lib/time";
 
 const TZ = "Europe/London";
 
@@ -24,7 +24,16 @@ export async function createBookingEvents(bookingId: string) {
   const settings = await getSettings();
   const clinic = booking.clinic as Clinic;
   const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-  const plan = planBookingEvents(clinic, booking.client.name, booking.startsAt, address);
+  // Venue-facing note for the room event — what the clinic needs (the session time
+  // and how to reach Phoenix), without the client's name on the shared calendar.
+  const sessionEnd = new Date(booking.startsAt.getTime() + 60 * 60_000);
+  const venueNote = [
+    `Craniosacral session ${fmtTime(booking.startsAt)}–${fmtTime(sessionEnd)}.`,
+    settings.clinicContactLine.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const plan = planBookingEvents(clinic, booking.client.name, booking.startsAt, address, venueNote);
 
   let personalEventId = "";
   let secondaryEventId = "";
@@ -36,6 +45,7 @@ export async function createBookingEvents(bookingId: string) {
         sendUpdates: ev.inviteClient && booking.client.email ? "all" : "none",
         requestBody: {
           summary: ev.summary,
+          description: ev.description || undefined,
           location: ev.location || undefined,
           start: { dateTime: ev.start.toISOString(), timeZone: TZ },
           end: { dateTime: ev.end.toISOString(), timeZone: TZ },

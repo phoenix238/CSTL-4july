@@ -88,7 +88,7 @@ model Booking {
   clinic           String // waterloo | bethnal
   status           String   @default("confirmed") // confirmed | cancelled | done
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
-  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: 2h "Phoenix" Chalk Farm block
+  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
   emailSent        Boolean  @default(false)
   createdAt        DateTime @default(now())
 
@@ -126,6 +126,10 @@ model AppSettings {
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
   waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
   bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
+  // A short line the venues can reach Phoenix on — added to the description of the
+  // room ("R5 - Phoenix") and Chalk Farm ("Phoenix") calendar events, alongside the
+  // day's session count and times. Client names stay off the shared venue calendars.
+  clinicContactLine     String @default("")
   // Short "about this clinic" note shown on the public booking page under the
   // address — parking, what to expect, how to find the door, etc.
   waterlooArrivalNote   String @default("")
@@ -140,7 +144,7 @@ model AppSettings {
   googleRefreshToken    String @default("")
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
-  chalkFarmCalendarId   String @default("") // Bethnal Green 2h blocks
+  chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
   clientsFolderId       String @default("") // Drive › CSTL › Clients
   reflectionsDocId      String @default("") // Drive › CSTL › "Phoenix session reflections" — one Doc, all clients
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
