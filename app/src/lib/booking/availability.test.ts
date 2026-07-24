@@ -47,6 +47,38 @@ describe("subtractInterval", () => {
   });
 });
 
+describe("computeAvailableSlots across the autumn DST fall-back", () => {
+  // Open 09:00–17:00 every weekday, so each day yields slots.
+  const everyDay: WeeklyWindow[] = Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    startMin: 540,
+    endMin: 1020,
+  }));
+  const pastNow = new Date("2020-01-01T00:00:00Z");
+
+  it("produces no duplicate slot instants over the 25-hour Sunday", () => {
+    // Window spans Sat 25 → Mon 27 Oct 2025 (the 26th is the fall-back day).
+    const windowStart = londonDayStart(0, new Date("2025-10-25T12:00:00Z"));
+    const windowEnd = londonDayStart(3, new Date("2025-10-25T12:00:00Z"));
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      windowStart,
+      windowEnd,
+      weeklyHours: everyDay,
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      now: pastNow,
+    });
+    const isos = slots.map((d) => d.toISOString());
+    expect(new Set(isos).size).toBe(isos.length); // no duplicates
+
+    // All three days are present exactly once (15 one-hour slots each on 09–17/30m).
+    const sundaySlots = slots.filter((d) => londonYMD(d).d === 26 && londonYMD(d).m === 10);
+    expect(sundaySlots).toHaveLength(15);
+  });
+});
+
 describe("resolveWeeklyHours", () => {
   it("returns empty (nothing bookable) for null/malformed input", () => {
     expect(resolveWeeklyHours(null)).toEqual({ waterloo: [], bethnal: [] });

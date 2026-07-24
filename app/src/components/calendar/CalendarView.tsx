@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { londonDayStart, londonWeekStart, londonYMD, fmtDate } from "@/lib/time";
+import { londonAddDays, londonDayStart, londonWeekStart, londonYMD, fmtDate } from "@/lib/time";
 import { api, useToast } from "../ui";
 import { BookingPopover } from "./BookingPopover";
 import { BookingsList } from "./BookingsList";
@@ -84,7 +84,7 @@ export function CalendarView() {
 
   const rangeLabel =
     view === "week"
-      ? `${fmtDate(weekStart)} – ${fmtDate(new Date(weekStart.getTime() + 6 * 86_400_000))}`
+      ? `${fmtDate(weekStart)} – ${fmtDate(londonAddDays(weekStart, 6))}`
       : new Intl.DateTimeFormat("en-GB", { timeZone: TZ, month: "long", year: "numeric" }).format(anchor);
 
   function nav(dir: -1 | 0 | 1) {

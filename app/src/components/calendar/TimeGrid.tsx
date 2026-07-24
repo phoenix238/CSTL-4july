@@ -8,7 +8,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
-import { fmtDayShort, fmtTime, londonMinutes, londonYMD } from "@/lib/time";
+import { fmtDayShort, fmtTime, londonAddDays, londonMinutes, londonTime, londonYMD } from "@/lib/time";
 import { layoutDayEvents, SPAN_COLORS, type SpanDTO } from "./layout";
 
 const HOUR_PX = 48;
@@ -50,6 +50,16 @@ const sameLondonDay = (a: Date, b: Date) => {
   return x.y === y.y && x.m === y.m && x.d === y.d;
 };
 
+/**
+ * The exact instant `min` minutes past midnight on `day`'s London date.
+ * Built from the wall-clock date (not `day.getTime() + min*60_000`), so a slot
+ * chosen on a DST-transition day resolves to the right hour, not one off.
+ */
+const slotAt = (day: Date, min: number): Date => {
+  const { y, m, d } = londonYMD(day);
+  return londonTime(y, m, d, Math.floor(min / 60), min % 60);
+};
+
 export function TimeGrid({
   weekStart,
   spans,
@@ -63,7 +73,7 @@ export function TimeGrid({
   picker,
 }: TimeGridProps) {
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => new Date(weekStart.getTime() + i * 86_400_000)),
+    () => Array.from({ length: 7 }, (_, i) => londonAddDays(weekStart, i)),
     [weekStart],
   );
   const gridMinutes = (endHour - startHour) * 60;
@@ -98,7 +108,7 @@ export function TimeGrid({
     () =>
       days.map((day) => {
         const dayStart = day;
-        const dayEnd = new Date(day.getTime() + 86_400_000);
+        const dayEnd = londonAddDays(day, 1);
         return spans
           .filter((s) => new Date(s.start) < dayEnd && new Date(s.end) > dayStart)
           .map((s) => {
@@ -122,7 +132,7 @@ export function TimeGrid({
   cfgRef.current = { startHour, endHour, onSlotClick, onRangeSelect, onEventClick, onEventMove };
 
   /* ---------- drag empty space to create a range (display) ---------- */
-  const dragRef = useRef<{ di: number; dayStart: number; rectTop: number; startMin: number } | null>(null);
+  const dragRef = useRef<{ di: number; day: Date; rectTop: number; startMin: number } | null>(null);
   const [dragSel, setDragSel] = useState<{ di: number; a: number; b: number } | null>(null);
 
   const clampMin = (m: number, sh: number, eh: number) => Math.max(sh * 60, Math.min(eh * 60, m));
@@ -148,8 +158,8 @@ export function TimeGrid({
       const cur = clampMin(minFromY(e.clientY - d.rectTop, sh), sh, eh);
       const a = Math.min(d.startMin, cur);
       const b = Math.max(d.startMin, cur);
-      if (b - a >= SNAP_MIN && range) range(new Date(d.dayStart + a * 60_000), new Date(d.dayStart + b * 60_000));
-      else if (click) click(new Date(d.dayStart + d.startMin * 60_000));
+      if (b - a >= SNAP_MIN && range) range(slotAt(d.day, a), slotAt(d.day, b));
+      else if (click) click(slotAt(d.day, d.startMin));
     },
     [onDragMove],
   );
@@ -157,7 +167,7 @@ export function TimeGrid({
   const handleColumnDown = (day: Date, di: number) => (e: React.MouseEvent<HTMLDivElement>) => {
     if (!slotSelectable || e.button !== 0 || e.target !== e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    dragRef.current = { di, dayStart: day.getTime(), rectTop: rect.top, startMin: snapMinFromY(e.clientY - rect.top) };
+    dragRef.current = { di, day, rectTop: rect.top, startMin: snapMinFromY(e.clientY - rect.top) };
     setHover(null);
     window.addEventListener("mousemove", onDragMove);
     window.addEventListener("mouseup", onDragUp);
@@ -165,7 +175,7 @@ export function TimeGrid({
 
   /* ---------- drag an existing event to move it (display) ---------- */
   const evDragRef = useRef<
-    { span: SpanDTO; di: number; dayStart: number; rectTop: number; grabOffset: number; durationMin: number; lastStartMin: number; moved: boolean } | null
+    { span: SpanDTO; di: number; day: Date; rectTop: number; grabOffset: number; durationMin: number; lastStartMin: number; moved: boolean } | null
   >(null);
   const [evGhost, setEvGhost] = useState<{ di: number; startMin: number; durationMin: number } | null>(null);
 
@@ -189,7 +199,7 @@ export function TimeGrid({
       setEvGhost(null);
       if (!d) return;
       const { onEventClick: click, onEventMove: move } = cfgRef.current;
-      if (d.moved && move) move(d.span, new Date(d.dayStart + d.lastStartMin * 60_000));
+      if (d.moved && move) move(d.span, slotAt(d.day, d.lastStartMin));
       else if (click) click(d.span, { x: e.clientX, y: e.clientY });
     },
     [onEvMove],
@@ -205,7 +215,7 @@ export function TimeGrid({
     const origStartMin = londonMinutes(start);
     const durationMin = Math.max(SNAP_MIN, Math.round((end.getTime() - start.getTime()) / 60_000));
     const grabOffset = snapMinFromY(e.clientY - rectTop) - origStartMin;
-    evDragRef.current = { span, di, dayStart: day.getTime(), rectTop, grabOffset, durationMin, lastStartMin: origStartMin, moved: false };
+    evDragRef.current = { span, di, day, rectTop, grabOffset, durationMin, lastStartMin: origStartMin, moved: false };
     setEvGhost({ di, startMin: origStartMin, durationMin });
     window.addEventListener("mousemove", onEvMove);
     window.addEventListener("mouseup", onEvUp);
@@ -226,7 +236,7 @@ export function TimeGrid({
     if (!pickerSelectable || !picker || e.target !== e.currentTarget) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const min = snapMinFromY(e.clientY - rect.top);
-    const slot = new Date(day.getTime() + min * 60_000);
+    const slot = slotAt(day, min);
     if (slot < now || isBusyAt(picker.clinic, slot)) return; // only free future times
     picker.onToggle(slot);
   };
@@ -271,7 +281,7 @@ export function TimeGrid({
             const isToday = sameLondonDay(day, now);
             const laid = layoutDayEvents(dayEvents[di]);
             // picker hover: is the hovered time free / busy / past?
-            const hoverSlot = hover?.di === di ? new Date(day.getTime() + hover.min * 60_000) : null;
+            const hoverSlot = hover?.di === di ? slotAt(day, hover.min) : null;
             const hoverBlocked =
               pickerSelectable && hoverSlot ? hoverSlot < now || isBusyAt(picker!.clinic, hoverSlot) : false;
             return (
@@ -302,7 +312,7 @@ export function TimeGrid({
                     style={{ top: toY(dragSel.a), height: ((dragSel.b - dragSel.a) / 60) * HOUR_PX }}
                   >
                     <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
-                      {fmtTime(new Date(day.getTime() + dragSel.a * 60_000))}–{fmtTime(new Date(day.getTime() + dragSel.b * 60_000))}
+                      {fmtTime(slotAt(day, dragSel.a))}–{fmtTime(slotAt(day, dragSel.b))}
                     </span>
                   </div>
                 )}
@@ -314,7 +324,7 @@ export function TimeGrid({
                     style={{ top: toY(evGhost.startMin), height: (evGhost.durationMin / 60) * HOUR_PX }}
                   >
                     <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
-                      {fmtTime(new Date(day.getTime() + evGhost.startMin * 60_000))}
+                      {fmtTime(slotAt(day, evGhost.startMin))}
                     </span>
                   </div>
                 )}
@@ -325,7 +335,7 @@ export function TimeGrid({
                     <div className="rounded-md border border-dashed border-clay/60 bg-clay-tint/50" style={{ height: HOUR_PX }} />
                     <div className="absolute -top-[1px] left-0">
                       <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
-                        {fmtTime(new Date(day.getTime() + hover.min * 60_000))}
+                        {fmtTime(slotAt(day, hover.min))}
                       </span>
                     </div>
                   </div>

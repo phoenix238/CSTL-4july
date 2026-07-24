@@ -1,5 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { londonWeekStart, londonYMD, londonMinutes, calcAge, formatDateInput } from "./time";
+import {
+  londonAddDays,
+  londonDayStart,
+  londonWeekStart,
+  londonYMD,
+  londonMinutes,
+  calcAge,
+  formatDateInput,
+} from "./time";
+
+describe("londonAddDays / londonDayStart (DST-safe)", () => {
+  it("advances exactly one London calendar day across the autumn fall-back (25h day)", () => {
+    // Sun 26 Oct 2025 is the 25-hour day; a fixed +24h step would land back on the same date.
+    const sun = londonDayStart(0, new Date("2025-10-26T12:00:00Z"));
+    expect(londonYMD(sun)).toEqual({ y: 2025, m: 10, d: 26 });
+    const next = londonAddDays(sun, 1);
+    expect(londonYMD(next)).toEqual({ y: 2025, m: 10, d: 27 });
+    expect(londonMinutes(next)).toBe(0);
+  });
+
+  it("advances exactly one London calendar day across the spring forward (23h day)", () => {
+    // Sun 30 Mar 2025 is the 23-hour day.
+    const sun = londonDayStart(0, new Date("2025-03-30T12:00:00Z"));
+    expect(londonYMD(sun)).toEqual({ y: 2025, m: 3, d: 30 });
+    const next = londonAddDays(sun, 1);
+    expect(londonYMD(next)).toEqual({ y: 2025, m: 3, d: 31 });
+    expect(londonMinutes(next)).toBe(0);
+  });
+
+  it("londonDayStart offsets land on the right day across a DST boundary", () => {
+    // From Sat 25 Oct 2025, +2 days must be Mon 27 Oct — not Sun again.
+    const sat = new Date("2025-10-25T12:00:00Z");
+    expect(londonYMD(londonDayStart(2, sat))).toEqual({ y: 2025, m: 10, d: 27 });
+    // Negative offsets too: -3 days from Mon 27 Oct is Fri 24 Oct.
+    expect(londonYMD(londonDayStart(-3, new Date("2025-10-27T12:00:00Z")))).toEqual({
+      y: 2025,
+      m: 10,
+      d: 24,
+    });
+  });
+
+  it("stays at 00:00 London and round-trips across a month boundary", () => {
+    const start = londonDayStart(0, new Date("2026-01-31T09:00:00Z"));
+    const next = londonAddDays(start, 1);
+    expect(londonYMD(next)).toEqual({ y: 2026, m: 2, d: 1 });
+    expect(londonMinutes(next)).toBe(0);
+  });
+});
 
 describe("londonWeekStart", () => {
   it("returns the Monday of a mid-week date", () => {

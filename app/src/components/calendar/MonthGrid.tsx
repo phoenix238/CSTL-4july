@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { londonWeekStart, londonYMD } from "@/lib/time";
+import { londonAddDays, londonWeekStart, londonYMD } from "@/lib/time";
 import { SPAN_COLORS, type SpanDTO } from "./layout";
 
 /** Classic month grid: weeks as rows, each day showing its first few events. */
@@ -21,11 +21,11 @@ export function MonthGrid({
     const gridStart = londonWeekStart(first);
     const out: Date[] = [];
     for (let i = 0; i < 42; i++) {
-      const d = new Date(gridStart.getTime() + i * 86_400_000);
+      const d = londonAddDays(gridStart, i);
       out.push(d);
       // stop once a full week past the month's end has been rendered
       if (i % 7 === 6 && i >= 27) {
-        const { m } = londonYMD(new Date(d.getTime() + 86_400_000));
+        const { m } = londonYMD(londonAddDays(d, 1));
         if (m !== curM) break;
       }
     }
@@ -35,11 +35,22 @@ export function MonthGrid({
   const eventsByDay = useMemo(() => {
     const map = new Map<string, SpanDTO[]>();
     for (const s of spans ?? []) {
-      const { y, m, d } = londonYMD(new Date(s.start));
-      const key = `${y}-${m}-${d}`;
-      const arr = map.get(key) ?? [];
-      arr.push(s);
-      map.set(key, arr);
+      const start = new Date(s.start);
+      const end = new Date(s.end);
+      // Bucket the event into every London day it overlaps — a timed event can
+      // cross midnight, and the week grid splits it per day, so the month view
+      // must show it on both days too rather than only its start day.
+      let cursor = start;
+      for (let i = 0; i < 60; i++) {
+        const { y, m, d } = londonYMD(cursor);
+        const key = `${y}-${m}-${d}`;
+        const arr = map.get(key) ?? [];
+        arr.push(s);
+        map.set(key, arr);
+        const nextDay = londonAddDays(cursor, 1);
+        if (nextDay >= end) break;
+        cursor = nextDay;
+      }
     }
     return map;
   }, [spans]);
