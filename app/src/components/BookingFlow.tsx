@@ -134,7 +134,13 @@ export function BookingFlow({
         <BookSlotPicker clinic={clinic} selected={selected} onSelect={setSelected} />
 
         {selected && (
-          <div className="flex flex-col gap-3 border-t border-hairline pt-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+            className="flex flex-col gap-3 border-t border-hairline pt-4"
+          >
             <div className="text-[13px] font-semibold">
               {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
             </div>
@@ -158,10 +164,10 @@ export function BookingFlow({
               aria-hidden="true"
               className="absolute left-[-9999px] h-0 w-0 opacity-0"
             />
-            <PrimaryButton onClick={submit} disabled={submitting} className="mt-1 py-3">
+            <PrimaryButton type="submit" disabled={submitting} className="mt-1 py-3">
               {submitting ? "Booking…" : "Confirm booking"}
             </PrimaryButton>
-          </div>
+          </form>
         )}
       </Card>
     </div>

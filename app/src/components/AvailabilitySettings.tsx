@@ -81,6 +81,20 @@ export function AvailabilitySettings({
   };
 
   async function saveHours() {
+    // Guard against end ≤ start — the server silently drops such windows, so
+    // without this the day would quietly fail to save under a "saved ✓" toast.
+    const invalid: string[] = [];
+    (["waterloo", "bethnal"] as const).forEach((c) => {
+      drafts[c].forEach((d, i) => {
+        if (d.open && timeToMin(d.end) <= timeToMin(d.start)) {
+          invalid.push(`${c === "waterloo" ? "Waterloo" : "Bethnal Green"} ${WEEKDAY_LABELS[i]}`);
+        }
+      });
+    });
+    if (invalid.length) {
+      toast(`End time must be after the start — check ${invalid.join(", ")}`);
+      return;
+    }
     setSavingHours(true);
     try {
       await api("/api/settings", {
