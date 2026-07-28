@@ -95,6 +95,9 @@ export function EnquiryFlow({
   // booking panel
   const [settings, setSettings] = useState<(EmailSettings & { clientCopy?: ClientCopy }) | null>(null);
   const [sendPayment, setSendPayment] = useState(true);
+  // Whether to email the confirmation on booking. Defaults on; untick to book
+  // silently and copy the message for WhatsApp instead — your choice each time.
+  const [sendConfirmEmail, setSendConfirmEmail] = useState(true);
   const [emailBody, setEmailBody] = useState("");
   const [emailDirty, setEmailDirty] = useState(false);
   const [booking, setBooking] = useState(false);
@@ -224,6 +227,7 @@ export function EnquiryFlow({
     setOfferedTimes([]);
     setBookMode("offer");
     setEmailDirty(false);
+    setSendConfirmEmail(true);
     setResult(null);
     setIntakeSent(false);
     setSendingIntake(false);
@@ -497,9 +501,9 @@ export function EnquiryFlow({
       const req: Record<string, unknown> = {
         clinic,
         startISO: confirmSlot.toISOString(),
-        // One consistent rule everywhere: booking emails the client the confirmation.
-        // bookSession falls back to clipboard text automatically when there's no email.
-        sendEmail: true,
+        // Email the confirmation unless you've unticked it for this booking. Either
+        // way bookSession falls back to clipboard text when there's no email on file.
+        sendEmail: sendConfirmEmail,
         sendPayment,
         emailBody: emailBody.trim() || undefined,
         enquiryId,
@@ -981,11 +985,25 @@ export function EnquiryFlow({
               Reset to template
             </button>
           )}
+          {bookingHasEmail ? (
+            <label className="flex items-center gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                checked={sendConfirmEmail}
+                onChange={(e) => setSendConfirmEmail(e.target.checked)}
+              />
+              Email the confirmation now — untick to copy it for WhatsApp instead
+            </label>
+          ) : (
+            <div className="text-[12.5px] text-muted">
+              No email on record — the message will be copied for you to paste into WhatsApp.
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <PrimaryButton onClick={confirmBooking} disabled={booking}>
               {booking
                 ? "Booking…"
-                : bookingHasEmail
+                : sendConfirmEmail && bookingHasEmail
                   ? "Book & email client"
                   : "Book & copy message for WhatsApp"}
             </PrimaryButton>
