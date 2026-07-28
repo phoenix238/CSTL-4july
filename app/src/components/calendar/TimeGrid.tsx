@@ -8,8 +8,8 @@
 
 import { useMemo, useRef, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
-import { fmtDayShort, fmtTime, londonAddDays, londonMinutes, londonTime, londonYMD } from "@/lib/time";
-import { layoutDayEvents, SPAN_COLORS, type SpanDTO } from "./layout";
+import { fmtDayShort, fmtTime, londonAddDays, londonDateKey, londonMinutes, londonTime, londonYMD } from "@/lib/time";
+import { AVAIL_COLORS, layoutDayEvents, SPAN_COLORS, type AvailWindowDTO, type SpanDTO } from "./layout";
 
 const HOUR_PX = 48;
 // Choosing a time snaps to this (Google-Calendar-style 15-min steps).
@@ -29,6 +29,16 @@ export interface TimeGridProps {
   onRangeSelect?: (start: Date, end: Date) => void;
   /** display mode: drag an existing event to a new start (same day, 15-min snap) */
   onEventMove?: (span: SpanDTO, newStart: Date) => void;
+  /**
+   * availability mode: green background windows the practitioner is bookable in.
+   * When set, the drag-to-select ghost reads as "Available" (green), so dragging
+   * marks availability rather than adding an event.
+   */
+  availWindows?: AvailWindowDTO[];
+  /** availability mode: click an editable (open/block) availability window */
+  onAvailabilityClick?: (w: AvailWindowDTO) => void;
+  /** true while the calendar is in availability-editing mode */
+  availabilityMode?: boolean;
   /** picker mode config */
   picker?: {
     clinic: Clinic;
@@ -70,6 +80,9 @@ export function TimeGrid({
   onSlotClick,
   onRangeSelect,
   onEventMove,
+  availWindows,
+  onAvailabilityClick,
+  availabilityMode = false,
   picker,
 }: TimeGridProps) {
   const days = useMemo(
@@ -126,6 +139,21 @@ export function TimeGrid({
       }),
     [days, spans, startHour, endHour],
   );
+
+  // Availability windows split per visible day (by London date key), clamped to
+  // the visible hour window — drawn as a background layer behind events.
+  const dayAvail: AvailWindowDTO[][] = useMemo(() => {
+    if (!availWindows?.length) return days.map(() => []);
+    const lo = startHour * 60;
+    const hi = endHour * 60;
+    return days.map((day) => {
+      const key = londonDateKey(day);
+      return availWindows
+        .filter((w) => w.date === key)
+        .map((w) => ({ ...w, startMin: Math.max(w.startMin, lo), endMin: Math.min(w.endMin, hi) }))
+        .filter((w) => w.endMin > w.startMin);
+    });
+  }, [availWindows, days, startHour, endHour]);
 
   // Latest props/config for the stable window drag handlers (avoids stale closures).
   const cfgRef = useRef({ startHour, endHour, onSlotClick, onRangeSelect, onEventClick, onEventMove });
@@ -309,13 +337,65 @@ export function TimeGrid({
                   />
                 ))}
 
-                {/* drag-to-create selection — the clay range you're sweeping out */}
+                {/* availability layer — green = bookable, red = closed. Weekly
+                    baseline is faint and untouchable; drawn overrides are clickable. */}
+                {dayAvail[di].map((w, wi) => {
+                  const c = AVAIL_COLORS[w.kind];
+                  const editable = w.kind !== "weekly" && !!w.id;
+                  const top = toY(w.startMin);
+                  const height = Math.max(((w.endMin - w.startMin) / 60) * HOUR_PX, 12);
+                  const label =
+                    w.kind === "block"
+                      ? "Unavailable"
+                      : w.kind === "weekly"
+                        ? "Usual hours"
+                        : "Available";
+                  return (
+                    <div
+                      key={`${w.kind}-${w.id ?? wi}`}
+                      onClick={
+                        editable
+                          ? (e) => {
+                              e.stopPropagation();
+                              onAvailabilityClick?.(w);
+                            }
+                          : undefined
+                      }
+                      className={`absolute right-[3px] left-[3px] overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
+                        editable ? "cursor-pointer hover:brightness-[0.97]" : "pointer-events-none"
+                      }`}
+                      style={{
+                        top,
+                        height,
+                        background: c.bg,
+                        border: `1px ${w.kind === "block" ? "solid" : "dashed"} ${c.border}`,
+                        color: c.text,
+                        zIndex: 1,
+                      }}
+                    >
+                      <span className="tabular-nums">
+                        {label} · {fmtTime(slotAt(day, w.startMin))}–{fmtTime(slotAt(day, w.endMin))}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* drag-to-create selection — the range you're sweeping out */}
                 {dragSel?.di === di && dragSel.b > dragSel.a && (
                   <div
-                    className="pointer-events-none absolute right-[3px] left-[3px] z-30 flex items-start justify-start rounded-md border border-clay/70 bg-clay-tint/70 px-1 pt-0.5"
-                    style={{ top: toY(dragSel.a), height: ((dragSel.b - dragSel.a) / 60) * HOUR_PX }}
+                    className="pointer-events-none absolute right-[3px] left-[3px] z-30 flex items-start justify-start rounded-md border px-1 pt-0.5"
+                    style={{
+                      top: toY(dragSel.a),
+                      height: ((dragSel.b - dragSel.a) / 60) * HOUR_PX,
+                      borderColor: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42 / 0.7)",
+                      background: availabilityMode ? AVAIL_COLORS.open.bg : "oklch(0.9 0.05 48 / 0.7)",
+                    }}
                   >
-                    <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
+                    <span
+                      className="rounded-full px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop"
+                      style={{ background: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42)" }}
+                    >
+                      {availabilityMode ? "Available " : ""}
                       {fmtTime(slotAt(day, dragSel.a))}–{fmtTime(slotAt(day, dragSel.b))}
                     </span>
                   </div>
@@ -333,12 +413,23 @@ export function TimeGrid({
                   </div>
                 )}
 
-                {/* display: "book here" clay ghost that follows the cursor (15-min snap) */}
+                {/* display: cursor ghost (15-min snap) — "book here" clay, or green
+                    "drag to mark available" while editing availability */}
                 {slotSelectable && !dragSel && !evGhost && hover?.di === di && hover.min + 60 <= endHour * 60 && (
                   <div className="pointer-events-none absolute right-[3px] left-[3px] z-20" style={{ top: toY(hover.min) }}>
-                    <div className="rounded-md border border-dashed border-clay/60 bg-clay-tint/50" style={{ height: HOUR_PX }} />
+                    <div
+                      className="rounded-md border border-dashed"
+                      style={{
+                        height: HOUR_PX,
+                        borderColor: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42 / 0.6)",
+                        background: availabilityMode ? AVAIL_COLORS.open.bg : "oklch(0.9 0.05 48 / 0.5)",
+                      }}
+                    />
                     <div className="absolute -top-[1px] left-0">
-                      <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
+                      <span
+                        className="rounded-full px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop"
+                        style={{ background: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42)" }}
+                      >
                         {fmtTime(slotAt(day, hover.min))}
                       </span>
                     </div>

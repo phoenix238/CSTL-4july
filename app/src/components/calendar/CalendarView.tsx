@@ -1,8 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { londonAddDays, londonDayStart, londonWeekStart, londonYMD, fmtDate } from "@/lib/time";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  londonAddDays,
+  londonDateKey,
+  londonDayStart,
+  londonMinutes,
+  londonWeekStart,
+  londonWeekdayIndex,
+  londonYMD,
+  fmtDate,
+} from "@/lib/time";
+import type { WeeklyHours } from "@/lib/booking/availability";
 import { api, useToast } from "../ui";
+import { AvailabilityComposer } from "./AvailabilityComposer";
 import { BookingPopover } from "./BookingPopover";
 import { BookingsList } from "./BookingsList";
 import { EventComposer, type EventCalendar } from "./EventComposer";
@@ -10,7 +21,28 @@ import { MonthGrid } from "./MonthGrid";
 import { QuickBook } from "./QuickBook";
 import { TimeGrid } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
-import { SPAN_COLORS, type SpanDTO, type SpanSource } from "./layout";
+import { AVAIL_COLORS, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO, type SpanSource } from "./layout";
+
+interface OverrideDTO {
+  id: string;
+  clinic: string;
+  date: string;
+  kind: string;
+  startMin: number;
+  endMin: number;
+}
+
+interface AvailComposerState {
+  mode: "create" | "edit";
+  clinic: AvailClinic;
+  day: Date;
+  startMin: number;
+  endMin: number;
+  kind?: "open" | "block";
+  id?: string;
+}
+
+const CLINIC_LABEL: Record<AvailClinic, string> = { bethnal: "Bethnal Green", waterloo: "Waterloo" };
 
 interface ComposerState {
   mode: "create" | "edit";
@@ -42,12 +74,32 @@ export function CalendarView() {
   const [cancelling, setCancelling] = useState(false);
   const [hidden, setHidden] = useState<Set<SpanSource>>(new Set());
 
-  // Which calendars are wired up — governs the event composer's calendar picker.
+  // Availability-editing mode: draw the times you're bookable for online booking.
+  const [availMode, setAvailMode] = useState(false);
+  const [availClinic, setAvailClinic] = useState<AvailClinic>("bethnal");
+  const [weeklyHours, setWeeklyHours] = useState<WeeklyHours | null>(null);
+  const [overrides, setOverrides] = useState<OverrideDTO[]>([]);
+  const [availComposer, setAvailComposer] = useState<AvailComposerState | null>(null);
+
+  // Which calendars are wired up + the recurring weekly hours (baseline shown
+  // faintly behind drawn availability).
   useEffect(() => {
-    api<{ calendars: Record<EventCalendar, boolean> }>("/api/settings")
-      .then((s) => s.calendars && setCalendars(s.calendars))
+    api<{ calendars: Record<EventCalendar, boolean>; weeklyHours: WeeklyHours }>("/api/settings")
+      .then((s) => {
+        if (s.calendars) setCalendars(s.calendars);
+        if (s.weeklyHours) setWeeklyHours(s.weeklyHours);
+      })
       .catch(() => {});
   }, []);
+
+  const loadOverrides = useCallback(() => {
+    api<{ overrides: OverrideDTO[] }>("/api/availability-overrides")
+      .then(({ overrides }) => setOverrides(overrides))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadOverrides();
+  }, [loadOverrides]);
 
   // Remember which calendars are toggled off between visits.
   useEffect(() => {
@@ -81,6 +133,42 @@ export function CalendarView() {
 
   const week = useWeekSpans(weekStart, 7);
   const month = useWeekSpans(monthGridStart, 42);
+
+  // The availability windows for the visible week & selected clinic: the
+  // recurring weekly baseline plus any one-off overrides drawn on the grid.
+  const availWindows = useMemo<AvailWindowDTO[]>(() => {
+    if (!availMode) return [];
+    const out: AvailWindowDTO[] = [];
+    for (let i = 0; i < 7; i++) {
+      const day = londonAddDays(weekStart, i);
+      const dateKey = londonDateKey(day);
+      const weekday = londonWeekdayIndex(day);
+      for (const w of weeklyHours?.[availClinic] ?? []) {
+        if (w.weekday === weekday) {
+          out.push({ clinic: availClinic, date: dateKey, kind: "weekly", startMin: w.startMin, endMin: w.endMin });
+        }
+      }
+      for (const o of overrides) {
+        if (o.clinic === availClinic && o.date === dateKey && (o.kind === "open" || o.kind === "block")) {
+          out.push({ id: o.id, clinic: availClinic, date: dateKey, kind: o.kind, startMin: o.startMin, endMin: o.endMin });
+        }
+      }
+    }
+    return out;
+  }, [availMode, availClinic, weeklyHours, overrides, weekStart]);
+
+  function enterAvailability() {
+    setView("week");
+    setReschedule(null);
+    setAvailMode(true);
+  }
+
+  function availabilitySaved() {
+    setAvailComposer(null);
+    loadOverrides();
+    week.invalidate();
+    month.invalidate();
+  }
 
   const rangeLabel =
     view === "week"
@@ -176,24 +264,36 @@ export function CalendarView() {
         <div>
           <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Calendar</h1>
           <div className="mt-[5px] text-[13.5px] text-muted">
-            Tap a booking to manage it, tap a free space to book a client, or drag across the
-            grid to add any event to your calendar.
+            {availMode
+              ? "Drag across the grid to mark when you're available for online booking. Tap a green window to edit or remove it."
+              : "Tap a booking to manage it, tap a free space to book a client, or drag across the grid to add any event to your calendar."}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-            {(["week", "month"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold capitalize select-none ${
-                  view === v ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => (availMode ? setAvailMode(false) : enterAvailability())}
+            className={`cursor-pointer rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+              availMode ? "text-cream" : "border-line bg-card text-ink-soft hover:bg-hoverbg"
+            }`}
+            style={availMode ? { background: AVAIL_COLORS.open.border, borderColor: AVAIL_COLORS.open.border } : undefined}
+          >
+            {availMode ? "Done editing availability" : "Set availability"}
+          </button>
+          {!availMode && (
+            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+              {(["week", "month"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold capitalize select-none ${
+                    view === v ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-1">
             <button
               onClick={() => nav(-1)}
@@ -232,6 +332,32 @@ export function CalendarView() {
         </div>
       )}
 
+      {availMode && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border-[1.5px] border-sage/50 bg-sage-tint px-4 py-2.5 text-[13px]">
+          <span className="font-semibold text-sage-text">Availability for</span>
+          <div className="flex rounded-full border border-line bg-card p-[3px]">
+            {(["bethnal", "waterloo"] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => setAvailClinic(c)}
+                className={`cursor-pointer rounded-full px-3 py-[5px] text-[12px] font-semibold select-none ${
+                  availClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                }`}
+              >
+                {CLINIC_LABEL[c]}
+              </button>
+            ))}
+          </div>
+          <span className="text-muted">
+            Faint green = your usual weekly hours (set in{" "}
+            <a href="/settings" className="font-semibold text-sage-text underline">
+              Settings
+            </a>
+            ). Draw here to open or close specific days.
+          </span>
+        </div>
+      )}
+
       {/* calendar toggles — tap to show/hide each shared calendar */}
       <div className="flex flex-wrap items-center gap-2">
         {CALENDAR_SOURCES.map((s) => {
@@ -267,6 +393,20 @@ export function CalendarView() {
             weekStart={weekStart}
             spans={visible(week.spans) ?? []}
             mode="display"
+            availabilityMode={availMode}
+            availWindows={availMode ? availWindows : undefined}
+            onAvailabilityClick={(w) => {
+              if (!w.id || w.kind === "weekly") return;
+              setAvailComposer({
+                mode: "edit",
+                clinic: availClinic,
+                day: new Date(`${w.date}T12:00:00Z`),
+                startMin: w.startMin,
+                endMin: w.endMin,
+                kind: w.kind,
+                id: w.id,
+              });
+            }}
             onEventClick={(span, a) => {
               // Editable Google events (on your personal calendar) open the
               // composer; bookings + synced blocks open the read/manage popover.
@@ -283,13 +423,35 @@ export function CalendarView() {
                 setOpenSpan({ span, anchor: a });
               }
             }}
-            onSlotClick={handleSlotClick}
-            onRangeSelect={
-              reschedule
-                ? undefined
-                : (start, end) => setComposer({ mode: "create", start, end })
+            onSlotClick={
+              availMode
+                ? (slot) => {
+                    const startMin = londonMinutes(slot);
+                    setAvailComposer({
+                      mode: "create",
+                      clinic: availClinic,
+                      day: slot,
+                      startMin,
+                      endMin: Math.min(startMin + 60, 24 * 60),
+                    });
+                  }
+                : handleSlotClick
             }
-            onEventMove={reschedule ? undefined : handleEventMove}
+            onRangeSelect={
+              availMode
+                ? (start, end) =>
+                    setAvailComposer({
+                      mode: "create",
+                      clinic: availClinic,
+                      day: start,
+                      startMin: londonMinutes(start),
+                      endMin: londonMinutes(end) || 24 * 60,
+                    })
+                : reschedule
+                  ? undefined
+                  : (start, end) => setComposer({ mode: "create", start, end })
+            }
+            onEventMove={availMode || reschedule ? undefined : handleEventMove}
           />
         )
       ) : (
@@ -358,6 +520,20 @@ export function CalendarView() {
             week.invalidate();
             month.invalidate();
           }}
+        />
+      )}
+
+      {availComposer && (
+        <AvailabilityComposer
+          mode={availComposer.mode}
+          clinic={availComposer.clinic}
+          day={availComposer.day}
+          startMin={availComposer.startMin}
+          endMin={availComposer.endMin}
+          kind={availComposer.kind}
+          id={availComposer.id}
+          onClose={() => setAvailComposer(null)}
+          onSaved={availabilitySaved}
         />
       )}
     </div>
