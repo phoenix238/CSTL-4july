@@ -91,7 +91,7 @@ This repo is the app. If you're reading this on GitHub, done — go to step 6.
 3. **Root Directory**: click **Edit** and pick the **`app`** folder. (Important!)
 4. Open **Environment Variables** and add all six, exactly as named:
    `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL`, `ANTHROPIC_API_KEY`.
-5. Click **Deploy**. Two minutes later you get your URL, e.g. `https://cstl-control-tower.vercel.app`.
+5. Click **Deploy**. Two minutes later you get your URL, e.g. `https://cstl-live.vercel.app`.
 
 ## 7. Close the loop (2 min)
 

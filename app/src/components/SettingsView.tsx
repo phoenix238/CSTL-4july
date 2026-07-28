@@ -122,7 +122,7 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
     appUrl: settings.appUrl,
   });
 
-  const baseUrl = (settings.appUrl?.trim() || "https://cstl-4july.vercel.app").replace(/\/+$/, "");
+  const baseUrl = (settings.appUrl?.trim() || "https://cstl-live.vercel.app").replace(/\/+$/, "");
 
   const save = async (data: Record<string, string>, done: () => void, msg: string) => {
     try {
@@ -434,7 +434,7 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
                 ["personalCalendarId", "PERSONAL CALENDAR ID", '"primary" or a calendar\'s ID from Google Calendar settings'],
                 ["roomCalendarId", "R5 ROOM CALENDAR ID", "the room calendar's ID (Waterloo bookings)"],
                 ["chalkFarmCalendarId", "CHALK FARM CALENDAR ID", "the Chalk Farm calendar's ID (Bethnal Green blocks)"],
-                ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-4july.vercel.app"],
+                ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-live.vercel.app"],
               ] as const
             ).map(([key, label, hint]) => (
               <label key={key} className="flex flex-col gap-1">

@@ -5,7 +5,7 @@ into an enquiry on your booking platform, one tap. Follow this top to bottom.
 Budget **10 minutes**. Nothing here needs coding, just copy/paste.
 
 You'll need your booking platform's live URL (the Vercel one from the main
-`SETUP.md`, e.g. `https://cstl-control-tower.vercel.app`) and you'll invent one new
+`SETUP.md`, e.g. `https://cstl-live.vercel.app`) and you'll invent one new
 secret value.
 
 ## 1. Add the secret to the platform (2 min)
@@ -35,7 +35,7 @@ Keep that value handy — you'll paste it again in step 3.
 
 1. ⚙️ **Project Settings** → scroll to **Script Properties** → **Add script property**.
 2. Add `APP_URL` = your platform's URL (no trailing slash), e.g.
-   `https://cstl-control-tower.vercel.app`.
+   `https://cstl-live.vercel.app`.
 3. Add another: `ADDON_SECRET` = the same value you put in `GMAIL_ADDON_SECRET` in step 1.
 
 ## 4. Install it on your own account (3 min)
