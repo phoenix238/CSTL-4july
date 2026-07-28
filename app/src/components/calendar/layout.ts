@@ -51,6 +51,43 @@ export const SPAN_COLORS: Record<
   },
 };
 
+/** Clinic key an availability window belongs to. */
+export type AvailClinic = "waterloo" | "bethnal";
+
+/**
+ * One availability window drawn on the calendar. `weekly` windows come from the
+ * recurring Settings hours (shown as a faint baseline, not editable here);
+ * `open`/`block` windows are one-off date overrides you draw on the grid and can
+ * edit or remove — `id` is their AvailabilityOverride row id.
+ */
+export interface AvailWindowDTO {
+  id?: string;
+  clinic: AvailClinic;
+  date: string; // "YYYY-MM-DD" (London)
+  kind: "open" | "block" | "weekly";
+  startMin: number;
+  endMin: number;
+}
+
+/** Colours for the availability layer — green = bookable, red = closed. */
+export const AVAIL_COLORS = {
+  open: {
+    bg: "oklch(0.92 0.06 148 / 0.55)",
+    border: "oklch(0.6 0.13 148)",
+    text: "oklch(0.4 0.09 148)",
+  },
+  weekly: {
+    bg: "oklch(0.93 0.04 148 / 0.28)",
+    border: "oklch(0.72 0.07 148)",
+    text: "oklch(0.46 0.06 148)",
+  },
+  block: {
+    bg: "oklch(0.94 0.05 25 / 0.5)",
+    border: "oklch(0.62 0.14 25)",
+    text: "oklch(0.45 0.12 25)",
+  },
+} as const;
+
 export interface LaidOutEvent<T> {
   event: T;
   lane: number;
