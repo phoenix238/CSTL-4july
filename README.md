@@ -23,6 +23,10 @@ phone, and updates itself whenever this repo changes.
   - Rebooking an existing client frees their old slot (old events are deleted).
 - **Clients** — search, one record per person, full profile, editable details, session
   notes with real voice dictation + Claude bullet summaries, saved to their Google Doc.
+- **Link an existing Doc** — a client whose case history already lives in a Google Doc
+  (or whose link got broken) can be pointed straight at it from their profile: search
+  your Docs by name or paste the link, and it becomes their record — nothing copied or
+  moved — with the option to pull what's already in it into the profile.
 - **Every client** gets `Drive › CSTL › Clients › (name)` with a Doc; the marketing
   spreadsheet (`Drive › CSTL › Clients › Docs`) tracks email + consent.
 - **Calendar** — the week at a glance, personal + room/block events side by side.
