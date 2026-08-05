@@ -3,6 +3,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { getDriveApi, getDocsApi } from "./client";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+export const DOC_MIME = "application/vnd.google-apps.document";
 
 async function findChild(parentId: string, name: string, mimeType?: string) {
   const drive = await getDriveApi();
@@ -193,6 +194,56 @@ export async function listDriveFolders(parentId = "root", query?: string): Promi
     mimeType: f.mimeType ?? "",
     modifiedTime: f.modifiedTime ?? "",
   }));
+}
+
+/**
+ * Search the user's Google Docs by name, most recently touched first — how you
+ * find an existing case-history Doc to link to a client. No query = the Docs
+ * you've worked on lately.
+ */
+export async function listDriveDocs(query?: string): Promise<DriveEntry[]> {
+  const drive = await getDriveApi();
+  const clauses = [`mimeType = '${DOC_MIME}'`, "trashed = false"];
+  if (query?.trim()) clauses.push(`name contains '${query.trim().replace(/'/g, "\\'")}'`);
+  const res = await drive.files.list({
+    q: clauses.join(" and "),
+    fields: "files(id, name, mimeType, modifiedTime)",
+    orderBy: "modifiedTime desc",
+    pageSize: 30,
+  });
+  return (res.data.files ?? []).map((f) => ({
+    id: f.id!,
+    name: f.name ?? "",
+    mimeType: f.mimeType ?? "",
+    modifiedTime: f.modifiedTime ?? "",
+  }));
+}
+
+/**
+ * Metadata for one Drive file — null when it's gone, never existed, or isn't
+ * visible to this Google account. Used to check a client's linked Doc is still
+ * really there before trusting it.
+ */
+export async function getDriveFileMeta(
+  fileId: string,
+): Promise<(DriveEntry & { trashed: boolean }) | null> {
+  const drive = await getDriveApi();
+  try {
+    const res = await drive.files.get({
+      fileId,
+      fields: "id, name, mimeType, modifiedTime, trashed",
+    });
+    const f = res.data;
+    return {
+      id: f.id!,
+      name: f.name ?? "",
+      mimeType: f.mimeType ?? "",
+      modifiedTime: f.modifiedTime ?? "",
+      trashed: f.trashed ?? false,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** List the (non-folder) files inside a folder. */

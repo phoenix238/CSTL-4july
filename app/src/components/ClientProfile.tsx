@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
 import { ReflectionComposer } from "./ReflectionComposer";
+import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
@@ -89,6 +90,7 @@ export function ClientProfile({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [noteOpen, setNoteOpen] = useState(false);
   const [reflectionOpen, setReflectionOpen] = useState(false);
+  const [linkDocOpen, setLinkDocOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const [movingSlot, setMovingSlot] = useState(false);
@@ -346,6 +348,12 @@ export function ClientProfile({
             </span>
           )}
           <button
+            onClick={() => setLinkDocOpen(!linkDocOpen)}
+            className="cursor-pointer text-center text-[11.5px] font-semibold text-muted hover:text-clay-text"
+          >
+            {linkDocOpen ? "Close" : client.docId ? "Link a different Doc" : "Link an existing Doc"}
+          </button>
+          <button
             onClick={deleteThisClient}
             disabled={deleting}
             className="cursor-pointer rounded-full px-[18px] py-[9px] text-center text-[12px] font-semibold text-faint hover:text-[oklch(0.55_0.15_25)] disabled:cursor-default"
@@ -354,6 +362,17 @@ export function ClientProfile({
           </button>
         </div>
       </Card>
+
+      {linkDocOpen && (
+        <LinkDocPanel
+          clientId={client.id}
+          clientName={client.name}
+          onLinked={() => {
+            setLinkDocOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
 
       {activeOffer && (
         <Card className="flex flex-col gap-2.5 border-[1.5px] border-clay/40 bg-clay-tint/40 px-5 py-4">
