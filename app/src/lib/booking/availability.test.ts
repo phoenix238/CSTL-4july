@@ -218,8 +218,8 @@ describe("computeAvailableSlots", () => {
   });
 
   it("bufferMinutes pads every session's footprint before checking collisions", () => {
-    // A wide window (8-14) so the buffer padding lands well clear of the
-    // window's own edges — isolates the busy-collision effect being tested.
+    // A wide window (8-14) so there's room either side of the busy span for
+    // the collision effect to show up on its own.
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 480, endMin: 840 }];
     const busy = [{ start: at(10, 30), end: at(11) }];
     const withoutBuffer = computeAvailableSlots({
@@ -263,6 +263,36 @@ describe("computeAvailableSlots", () => {
     expect(slots).not.toContainEqual(at(17, 15));
     // 17:30 (a full 30 min clear) is bookable.
     expect(slots).toContainEqual(at(17, 30));
+  });
+
+  it("bufferMinutes never eats into the open window itself — the first and last slot stay bookable", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 660 }]; // 9-11
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      now: at(0),
+      bufferMinutes: 15,
+    });
+    // The buffer is spacing between sessions, not a reason to open late or
+    // close early — 9:00 and 10:00 both still fit the 9-11 window.
+    expect(slots).toEqual([at(9), at(9, 30), at(10)]);
+  });
+
+  it("a window exactly one session long still works with a buffer set (e.g. a 1-hour evening segment)", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 1080, endMin: 1140 }]; // 18-19
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      now: at(0),
+      bufferMinutes: 15,
+    });
+    expect(slots).toEqual([at(18)]);
   });
 
   it("weeklyCap excludes a candidate that would push the week's total past the cap", () => {

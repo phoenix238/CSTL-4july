@@ -166,14 +166,20 @@ function slotFits(
   // Both clinics currently footprint to exactly the session hour (see
   // blockedRange in rules.ts), but this stays generic in case a future
   // clinic rule pads its real calendar footprint beyond the raw session
-  // minute — the whole padded footprint must fit inside the open interval.
+  // minute — that real footprint must fit inside the open interval.
+  //
+  // `bufferMinutes` is deliberately NOT part of this check: it's breathing
+  // room between sessions, not a reason to shrink the working day. Counting
+  // it here would make the first and last slot of every window unbookable,
+  // and would wipe out any window shorter than a session plus two buffers
+  // (e.g. a 1-hour evening segment) entirely.
   const rawFootprint = blockedRange(clinic, candidate);
   const startPadMin = Math.round((candidate.getTime() - rawFootprint.start.getTime()) / 60_000);
   const endPadMin = Math.round(
     (rawFootprint.end.getTime() - (candidate.getTime() + SESSION_MINUTES * 60_000)) / 60_000,
   );
-  const footprintStart = minute - startPadMin - bufferMinutes;
-  const footprintEnd = minute + SESSION_MINUTES + endPadMin + bufferMinutes;
+  const footprintStart = minute - startPadMin;
+  const footprintEnd = minute + SESSION_MINUTES + endPadMin;
   if (!intervals.some((iv) => footprintStart >= iv.start && footprintEnd <= iv.end)) return false;
 
   // Each busy span pads by its own buffer if it has one (e.g. a bigger
