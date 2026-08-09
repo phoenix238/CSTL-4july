@@ -211,6 +211,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           <p className="mt-1.5 text-[12px] leading-relaxed text-clay-text">
             Please use this as the reference on every transfer — it&apos;s how Phoenix matches your payment to you.
           </p>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-clay-text">
+            Payments are checked once a day, so it can take up to 24 hours to show here as confirmed.
+          </p>
         </div>
 
         {view.hasBankDetails && (
