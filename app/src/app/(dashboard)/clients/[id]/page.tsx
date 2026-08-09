@@ -28,6 +28,13 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     orderBy: { startsAt: "asc" },
   });
 
+  // Every booking, for the payments panel. The client's own page computes its
+  // numbers from exactly the same rows, so the two views can't disagree.
+  const allBookings = await prisma.booking.findMany({
+    where: { clientId: id },
+    orderBy: { startsAt: "desc" },
+  });
+
   const offer = await prisma.enquiry.findFirst({
     where: { clientId: id, status: "offered" },
     orderBy: { createdAt: "desc" },
@@ -89,6 +96,19 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       activeOffer={activeOffer}
       reflectionsDocId={reflectionsDocId || null}
       location={location}
+      paymentRef={client.paymentRef}
+      accountBookings={allBookings.map((b) => ({
+        id: b.id,
+        startsAtISO: b.startsAt.toISOString(),
+        clinic: b.clinic,
+        status: b.status,
+        paid: b.paid,
+        amountPence: b.amountPence,
+        goodwillPence: b.goodwillPence,
+        goodwillReason: b.goodwillReason,
+        goodwillSettled: b.goodwillSettled,
+        goodwillWaived: b.goodwillWaived,
+      }))}
     />
   );
 }

@@ -7,6 +7,7 @@ import { NotesComposer } from "./NotesComposer";
 import { ReflectionComposer } from "./ReflectionComposer";
 import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
+import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
@@ -72,6 +73,8 @@ export function ClientProfile({
   activeOffer,
   reflectionsDocId,
   location,
+  accountBookings = [],
+  paymentRef = "",
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
@@ -81,6 +84,8 @@ export function ClientProfile({
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
   reflectionsDocId?: string | null;
   location?: { address: string; url: string; directions: string } | null;
+  accountBookings?: AccountRow[];
+  paymentRef?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -666,6 +671,14 @@ export function ClientProfile({
               Copy location &amp; directions
             </button>
           </div>
+
+          <ClientAccountPanel
+            clientId={client.id}
+            clientName={client.name}
+            hasEmail={Boolean(client.email)}
+            paymentRef={paymentRef}
+            bookings={accountBookings}
+          />
 
           <div className="flex items-center justify-between px-0.5 pt-2">
             <SectionLabel>FROM THE INTAKE FORM</SectionLabel>

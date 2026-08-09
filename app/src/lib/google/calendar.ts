@@ -148,11 +148,18 @@ export async function deleteBookingGoogleEvents(booking: {
   }
 }
 
-/** Cancel a booking: delete both Google events and mark the row cancelled. */
-export async function cancelBookingEvents(bookingId: string) {
+/**
+ * Cancel a booking: delete both Google events and mark the row cancelled.
+ * `by` records who did it — "client" when they cancelled from their own page,
+ * "admin" when Phoenix did, blank when it's an internal replacement (rebooking).
+ */
+export async function cancelBookingEvents(bookingId: string, by = "") {
   const booking = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
   await deleteBookingGoogleEvents(booking);
-  await prisma.booking.update({ where: { id: bookingId }, data: { status: "cancelled" } });
+  await prisma.booking.update({
+    where: { id: bookingId },
+    data: { status: "cancelled", cancelledAt: new Date(), cancelledBy: by },
+  });
   if (booking.clinic === "bethnal") await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
 }
 

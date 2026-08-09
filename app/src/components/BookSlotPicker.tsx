@@ -13,19 +13,29 @@ export function BookSlotPicker({
   clinic,
   selected,
   onSelect,
+  /** Which endpoint to ask for times. The client portal has its own, which also
+   * frees up the slot the client currently holds so they can see around it. */
+  slotsUrl = (c) => `/api/public/slots?clinic=${c}`,
+  emptyMessage = "No times available right now — please check back soon, or get in touch directly.",
 }: {
   clinic: Clinic;
   selected: string | null;
   onSelect: (iso: string) => void;
+  slotsUrl?: (clinic: Clinic) => string;
+  emptyMessage?: string;
 }) {
   const [slots, setSlots] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Depend on the resolved URL, not on `slotsUrl` itself — an inline or defaulted
+  // function is a fresh reference every render, which would refetch in a loop.
+  const url = slotsUrl(clinic);
 
   useEffect(() => {
     let cancelled = false;
     setSlots(null);
     setError(null);
-    api<{ slots: string[] }>(`/api/public/slots?clinic=${clinic}`)
+    api<{ slots: string[] }>(url)
       .then((res) => {
         if (!cancelled) setSlots(res.slots);
       })
@@ -35,17 +45,11 @@ export function BookSlotPicker({
     return () => {
       cancelled = true;
     };
-  }, [clinic]);
+  }, [url]);
 
   if (error) return <div className="text-[13px] text-muted">{error}</div>;
   if (!slots) return <div className="text-[13px] text-muted">Loading availability…</div>;
-  if (!slots.length) {
-    return (
-      <div className="text-[13px] text-muted">
-        No times available right now — please check back soon, or get in touch directly.
-      </div>
-    );
-  }
+  if (!slots.length) return <div className="text-[13px] text-muted">{emptyMessage}</div>;
 
   const groups = new Map<string, Date[]>();
   for (const iso of slots) {

@@ -35,6 +35,15 @@ model Client {
   // another branch (client-message-intake-workflow) — not wired into any code
   // here. Declared so `prisma db push` never proposes dropping this real data.
   calendarInviteSharedAt DateTime?
+  // Client portal (/me/[token]) — a permanent private link the client bookmarks,
+  // where they book their next session, reschedule, and see what they owe.
+  // Deliberately a token rather than a password login: nothing to forget, nothing
+  // to reset, and the portal stays undiscoverable while the practice is private.
+  portalToken   String        @default("")
+  // The reference the client puts on their bank transfer. Derived from their name
+  // so it's memorable ("JONO-4K2"), with a short random suffix so two Jonos never
+  // collide. Assigned once and never changed — it's printed on past emails.
+  paymentRef    String        @default("")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
@@ -45,6 +54,8 @@ model Client {
   @@index([name])
   @@index([email])
   @@index([intakeToken])
+  @@index([portalToken])
+  @@index([paymentRef])
 }
 
 // Cached copy of a session note for instant profile views;
@@ -91,6 +102,34 @@ model Booking {
   secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
   emailSent        Boolean  @default(false)
   createdAt        DateTime @default(now())
+
+  // — Payment —
+  // What this session costs, in pence. Waterloo is a fixed £80; Bethnal Green is a
+  // £30–60 sliding scale, so it stays null until the actual amount is known (set
+  // from the client profile after the session, or when they tell you what they paid).
+  amountPence   Int?
+  paid          Boolean   @default(false)
+  paidAt        DateTime?
+  // Free-text note on the payment — "cash on the day", "bank transfer 12 Aug", etc.
+  paymentNote   String    @default("")
+
+  // — Cancellation / no-show —
+  cancelledAt   DateTime?
+  // "client" when they cancelled it themselves from the portal, "admin" when Phoenix did.
+  cancelledBy   String    @default("")
+  // Suggested goodwill contribution when a session is cancelled at short notice or
+  // missed. Deliberately NOT a charge and never counted as debt — this is a sliding
+  // scale practice, and the ask is an invitation, not an invoice. It's recorded only
+  // so it isn't forgotten by either side.
+  goodwillPence Int       @default(0)
+  goodwillReason String   @default("") // "late_cancel" | "no_show"
+  // Settled = they contributed. Waived = Phoenix decided not to ask at all.
+  goodwillSettled Boolean @default(false)
+  goodwillWaived  Boolean @default(false)
+
+  // How the booking was made, so the inbox and stats can tell them apart.
+  bookedVia       String @default("admin") // admin | online | portal | offer
+  rescheduleCount Int    @default(0)
 
   @@index([startsAt])
   @@index([clientId])
@@ -175,6 +214,36 @@ model AppSettings {
   bookingBufferMinutes Int @default(0)   // extra padding either side of every session's footprint
   chalkFarmBufferMinutes Int @default(30) // safety gap around a studio-mate's booking on the shared Chalk Farm calendar (Bethnal Green)
   bookingNotifyEmail   Boolean @default(true) // email Phoenix when someone books via /book
+
+  // — Client portal (/me/[token]) —
+  portalEnabled      Boolean @default(true) // master switch for the client portal
+  portalNotifyEmail  Boolean @default(true) // email Phoenix on every portal book/reschedule/cancel
+  // How much notice a client needs to move a session themselves.
+  portalNoticeHours  Int     @default(24)
+  // Suggested goodwill contribution when a session is cancelled inside that window.
+  // An invitation, not a charge — set to 0 to stop mentioning it at all.
+  lateCancelGoodwillPence Int @default(1000)
+  // Can clients ask for a receipt from their page?
+  portalReceipts     Boolean @default(true)
+  // Can clients book their next session themselves from the portal? Separate from
+  // the fully-public /book page, which stays unlisted while the practice is private.
+  portalSelfBook     Boolean @default(true)
+
+  // — Bank transfer details, shown on the portal with the client's own reference —
+  bankAccountName   String @default("")
+  bankSortCode      String @default("")
+  bankAccountNumber String @default("")
+  // Anything extra to show under the bank details on the portal.
+  bankPaymentNote   String @default("")
+}
+
+// Single row (id = 1). Hands out the sequential half of a client's bank-transfer
+// reference ("JS-4"). A counter rather than a max()+1 scan so two clients created
+// at the same moment can never be handed the same number — the increment below is
+// atomic in Postgres, and the number is what makes the reference unique.
+model PaymentRefCounter {
+  id   Int @id @default(1)
+  next Int @default(1)
 }
 
 // The single shared "Phoenix" room block on the Chalk Farm calendar for one day.

@@ -45,6 +45,16 @@ export default async function SettingsPage() {
         chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
         bookingNotifyEmail: settings.bookingNotifyEmail,
         clientCopy: resolveClientCopy(settings.clientCopy),
+        portalEnabled: settings.portalEnabled,
+        portalSelfBook: settings.portalSelfBook,
+        portalNotifyEmail: settings.portalNotifyEmail,
+        portalReceipts: settings.portalReceipts,
+        portalNoticeHours: settings.portalNoticeHours,
+        lateCancelGoodwillPence: settings.lateCancelGoodwillPence,
+        bankAccountName: settings.bankAccountName,
+        bankSortCode: settings.bankSortCode,
+        bankAccountNumber: settings.bankAccountNumber,
+        bankPaymentNote: settings.bankPaymentNote,
       }}
     />
   );

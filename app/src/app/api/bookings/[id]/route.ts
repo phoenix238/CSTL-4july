@@ -6,7 +6,7 @@ import { cancelBookingEvents } from "@/lib/google/calendar";
 /** Cancel a booking — deletes its Google events and frees the slot. */
 export const DELETE = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  await cancelBookingEvents(id);
+  await cancelBookingEvents(id, "admin");
   return NextResponse.json({ ok: true });
 });
 

@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
-import { getBusySpans } from "@/lib/google/calendar";
-import { londonDayStart, londonDateKey } from "@/lib/time";
-import { computeAvailableSlots, resolveWeeklyHours } from "@/lib/booking/availability";
 import type { Clinic } from "@/lib/booking/rules";
+import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
 import { findExistingClient } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
@@ -49,34 +47,7 @@ export async function POST(req: Request) {
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
     const settings = await getSettings();
-    const windowStart = londonDayStart(-1, start);
-    const windowEnd = londonDayStart(2, start);
-    const [overrides, busy] = await Promise.all([
-      prisma.availabilityOverride.findMany({
-        where: { clinic, date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
-      }),
-      getBusySpans(windowStart, windowEnd),
-    ]);
-    const slots = computeAvailableSlots({
-      clinic: clinic as Clinic,
-      windowStart,
-      windowEnd,
-      weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic as Clinic],
-      overrides: overrides.map((o) => ({ date: o.date, kind: o.kind as "open" | "block", startMin: o.startMin, endMin: o.endMin })),
-      // Exclude the shared Chalk Farm day block — only real sessions block time.
-      // A studio-mate's real booking on that same calendar gets its own bigger
-      // safety gap (see slots/route.ts).
-      busy: busy
-        .filter((b) => !b.roomBlock)
-        .map((b) => ({ ...b, bufferMinutes: b.source === "chalkFarm" ? settings.chalkFarmBufferMinutes : undefined })),
-      slotMinutes: settings.bookingSlotMinutes,
-      bufferMinutes: settings.bookingBufferMinutes,
-      minNoticeMinutes: settings.bookingMinNoticeMins,
-    });
-    const isReallyAvailable = slots.some((s) => s.getTime() === start.getTime());
-    if (!isReallyAvailable) {
-      return NextResponse.json({ error: "That time isn't available anymore — please pick another." }, { status: 409 });
-    }
+    await assertSlotAvailable({ clinic: clinic as Clinic, start });
 
     const existing = await findExistingClient(cleanName, cleanEmail, cleanPhone);
     const result = await bookSession({
@@ -86,6 +57,7 @@ export async function POST(req: Request) {
       startISO: start.toISOString(),
       sendEmail: true,
       sendPayment: true,
+      bookedVia: "online",
     });
 
     // Let Phoenix know a booking came in — non-fatal: the booking itself has
@@ -128,6 +100,11 @@ export async function POST(req: Request) {
       intakeUrl: result.intakeUrl,
     });
   } catch (err) {
+    // A slot going while they filled the form is normal, not a fault — tell them
+    // plainly so they just pick again.
+    if (err instanceof SlotTakenError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     // Never surface raw internal/Google API error text to a public visitor.
     console.error(err);
     return NextResponse.json(

@@ -10,6 +10,7 @@ import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime, londonDateKey } from "@/lib/time";
 import { composeBookingEmail } from "./email";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
+import { defaultAmountPence } from "@/lib/account";
 import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
 
 export interface BookingRequest {
@@ -25,6 +26,8 @@ export interface BookingRequest {
   /** set when this booking closes out a Gmail-add-on enquiry — the reply lands in that thread */
   gmailThreadId?: string;
   gmailMessageId?: string;
+  /** where the booking came from: admin | online | portal | offer */
+  bookedVia?: string;
 }
 
 export interface BookingResult {
@@ -80,7 +83,16 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   }
 
   const booking = await prisma.booking.create({
-    data: { clientId, clinic: req.clinic, startsAt: start },
+    data: {
+      clientId,
+      clinic: req.clinic,
+      startsAt: start,
+      bookedVia: req.bookedVia ?? "admin",
+      // Waterloo has a fixed price, so it's known the moment the session is booked.
+      // Bethnal Green is a sliding scale the client chooses — left null rather than
+      // guessed, and filled in from the profile once the real amount is known.
+      amountPence: defaultAmountPence(req.clinic),
+    },
   });
   await createBookingEvents(booking.id);
 
@@ -186,7 +198,15 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
   await deleteBookingGoogleEvents(booking);
   await prisma.booking.update({
     where: { id: bookingId },
-    data: { startsAt: start, personalEventId: "", secondaryEventId: "" },
+    // The booking row survives the move, so its payment state travels with it —
+    // a client who has already paid and then reshuffles the time doesn't get
+    // silently marked unpaid.
+    data: {
+      startsAt: start,
+      personalEventId: "",
+      secondaryEventId: "",
+      rescheduleCount: { increment: 1 },
+    },
   });
   await createBookingEvents(bookingId); // re-syncs the new day's Chalk Farm block (Bethnal)
 
@@ -200,5 +220,8 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
   return {
     whenLabel: `${fmtDayLong(start)} · ${fmtTime(start)} · ${CLINIC_LABEL[booking.clinic as Clinic]}`,
     clientName: booking.client.name,
+    previousWhenLabel: `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`,
+    clientId: booking.clientId,
+    clinic: booking.clinic as Clinic,
   };
 }

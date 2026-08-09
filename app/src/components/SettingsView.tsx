@@ -6,6 +6,7 @@ import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./
 import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./AvailabilitySettings";
 import { ClientMessagesEditor } from "./ClientMessagesEditor";
+import { PortalSettings } from "./PortalSettings";
 import { reconnectGoogle } from "@/lib/googleActions";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -45,6 +46,16 @@ export interface SettingsData {
   chalkFarmBufferMinutes: number;
   bookingNotifyEmail: boolean;
   clientCopy: ClientCopy;
+  portalEnabled: boolean;
+  portalSelfBook: boolean;
+  portalNotifyEmail: boolean;
+  portalReceipts: boolean;
+  portalNoticeHours: number;
+  lateCancelGoodwillPence: number;
+  bankAccountName: string;
+  bankSortCode: string;
+  bankAccountNumber: string;
+  bankPaymentNote: string;
 }
 
 /**
@@ -335,6 +346,27 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
+        />
+      </Dropdown>
+
+      <Dropdown
+        label="CLIENT PAGES — PRIVATE LINKS, BANK DETAILS & REFERENCES"
+        open={!!open.portal}
+        onToggle={() => toggle("portal")}
+      >
+        <PortalSettings
+          initial={{
+            portalEnabled: settings.portalEnabled,
+            portalSelfBook: settings.portalSelfBook,
+            portalNotifyEmail: settings.portalNotifyEmail,
+            portalReceipts: settings.portalReceipts,
+            portalNoticeHours: settings.portalNoticeHours,
+            lateCancelGoodwillPence: settings.lateCancelGoodwillPence,
+            bankAccountName: settings.bankAccountName,
+            bankSortCode: settings.bankSortCode,
+            bankAccountNumber: settings.bankAccountNumber,
+            bankPaymentNote: settings.bankPaymentNote,
+          }}
         />
       </Dropdown>
 
