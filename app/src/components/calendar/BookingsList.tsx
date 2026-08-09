@@ -45,38 +45,48 @@ export function BookingsList({
     <div className="flex flex-col gap-2">
       <SectionLabel>BOOKINGS THIS RANGE — {bookings.length}</SectionLabel>
       <Card className="px-4 py-0.5 lg:px-[18px]">
-        {bookings.map((b, i) => (
-          <div
-            key={b.bookingId}
-            className={`flex flex-wrap items-center gap-3 py-2.5 ${
-              i < bookings.length - 1 ? "border-b border-hairline" : ""
-            }`}
-          >
-            <div className="w-[150px] flex-none text-[12.5px] font-semibold tabular-nums">
-              {fmtDayLong(new Date(b.start))} · {fmtTime(new Date(b.start))}
-            </div>
-            {b.clientId ? (
-              <Link
-                href={`/clients/${b.clientId}`}
-                className="min-w-0 flex-1 truncate text-[13.5px] font-semibold hover:text-clay"
-              >
-                {b.title.split(" — ")[0]}
-              </Link>
-            ) : (
-              <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{b.title.split(" — ")[0]}</span>
-            )}
-            <span className="flex-none text-[11.5px] text-muted">
-              {b.clinic ? CLINIC_LABEL[b.clinic as Clinic] : ""}
-            </span>
-            <OutlineButton
-              className="flex-none px-3 py-1 text-[12px]"
-              onClick={() => cancel(b)}
-              disabled={cancellingId === b.bookingId}
+        {bookings.map((b, i) => {
+          // Once a session's start time has passed there's nothing left to
+          // cancel — same "already happened" definition as the popover and
+          // isCompleted in lib/account.ts.
+          const isPast = new Date(b.start).getTime() <= Date.now();
+          return (
+            <div
+              key={b.bookingId}
+              className={`flex flex-wrap items-center gap-3 py-2.5 ${
+                i < bookings.length - 1 ? "border-b border-hairline" : ""
+              }`}
             >
-              {cancellingId === b.bookingId ? "Cancelling…" : "Cancel"}
-            </OutlineButton>
-          </div>
-        ))}
+              <div className="w-[150px] flex-none text-[12.5px] font-semibold tabular-nums">
+                {fmtDayLong(new Date(b.start))} · {fmtTime(new Date(b.start))}
+              </div>
+              {b.clientId ? (
+                <Link
+                  href={`/clients/${b.clientId}`}
+                  className="min-w-0 flex-1 truncate text-[13.5px] font-semibold hover:text-clay"
+                >
+                  {b.title.split(" — ")[0]}
+                </Link>
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{b.title.split(" — ")[0]}</span>
+              )}
+              <span className="flex-none text-[11.5px] text-muted">
+                {b.clinic ? CLINIC_LABEL[b.clinic as Clinic] : ""}
+              </span>
+              {isPast ? (
+                <span className="flex-none text-[11.5px] text-faint">Completed</span>
+              ) : (
+                <OutlineButton
+                  className="flex-none px-3 py-1 text-[12px]"
+                  onClick={() => cancel(b)}
+                  disabled={cancellingId === b.bookingId}
+                >
+                  {cancellingId === b.bookingId ? "Cancelling…" : "Cancel"}
+                </OutlineButton>
+              )}
+            </div>
+          );
+        })}
       </Card>
     </div>
   );

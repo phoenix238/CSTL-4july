@@ -28,6 +28,10 @@ export function BookingPopover({
 }) {
   useEscapeKey(onClose);
   const start = new Date(span.start);
+  // Once a session's start time has passed there's nothing left to reschedule
+  // or cancel — same "already happened" definition used for accounting (see
+  // isCompleted in lib/account.ts).
+  const isPast = start.getTime() <= Date.now();
   const style: React.CSSProperties = {
     position: "fixed",
     left: Math.min(anchor.x, typeof window !== "undefined" ? window.innerWidth - 300 : anchor.x),
@@ -63,13 +67,18 @@ export function BookingPopover({
               <Link href={`/clients/${span.clientId}`}>
                 <PrimaryButton className="px-3.5 py-1.5 text-[12.5px]">Open client</PrimaryButton>
               </Link>
-              <OutlineButton className="px-3 py-1.5 text-[12.5px]" onClick={onReschedule}>
-                Reschedule
-              </OutlineButton>
-              <TintButton className="text-[12.5px]" onClick={onCancel} disabled={cancelling}>
-                {cancelling ? "Cancelling…" : "Cancel booking"}
-              </TintButton>
+              {!isPast && (
+                <>
+                  <OutlineButton className="px-3 py-1.5 text-[12.5px]" onClick={onReschedule}>
+                    Reschedule
+                  </OutlineButton>
+                  <TintButton className="text-[12.5px]" onClick={onCancel} disabled={cancelling}>
+                    {cancelling ? "Cancelling…" : "Cancel booking"}
+                  </TintButton>
+                </>
+              )}
             </div>
+            {isPast && <div className="text-[11.5px] text-faint">This session has already happened.</div>}
           </div>
         ) : (
           <div className="flex flex-col gap-1">

@@ -8,6 +8,7 @@ import { ClientSearch } from "./ClientSearch";
 
 const NAV = [
   { label: "Today", href: "/" },
+  { label: "This week", href: "/week" },
   { label: "Session", href: "/session" },
   { label: "Clients", href: "/clients" },
   { label: "Enquiries", href: "/enquiries" },
