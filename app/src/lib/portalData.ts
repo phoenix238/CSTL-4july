@@ -60,6 +60,7 @@ export interface PortalView {
   selfBookEnabled: boolean;
   receiptsEnabled: boolean;
   hasEmail: boolean;
+  receiptPending: boolean;
   portalLink: string;
 }
 
@@ -148,6 +149,7 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     selfBookEnabled: settings.portalSelfBook,
     receiptsEnabled: settings.portalReceipts,
     hasEmail: Boolean(client.email),
+    receiptPending: client.receiptPending,
     portalLink: portalUrl(settings, client.portalToken),
   };
 }

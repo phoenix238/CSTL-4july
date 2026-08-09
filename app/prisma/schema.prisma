@@ -44,6 +44,9 @@ model Client {
   // so it's memorable ("JONO-4K2"), with a short random suffix so two Jonos never
   // collide. Assigned once and never changed — it's printed on past emails.
   paymentRef    String        @default("")
+  // Set when a client asks for a receipt before anything's confirmed paid yet —
+  // the next booking that gets marked paid sends it automatically, then clears this.
+  receiptPending Boolean      @default(false)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]

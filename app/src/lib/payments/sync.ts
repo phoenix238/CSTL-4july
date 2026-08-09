@@ -3,6 +3,7 @@ import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
 import { fmtDayLong } from "@/lib/time";
 import { fetchIncomingPayments, type BankPayment } from "@/lib/starling";
+import { sendPendingReceiptIfAny } from "@/lib/receipt";
 import { chooseBookingToSettle, matchReference, type RefCandidate } from "./match";
 
 /**
@@ -111,6 +112,7 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
           paymentNote: `Bank transfer ${fmtDayLong(payment.transactedAt)} · ref ${payment.reference || "—"}`,
         },
       });
+      await sendPendingReceiptIfAny(result.clientId);
     }
     await recordTransaction(payment, {
       status: "matched",

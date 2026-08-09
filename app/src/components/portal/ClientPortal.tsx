@@ -81,23 +81,20 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       () => toast("Your session has been cancelled"),
     );
 
+  const receiptToast = (r: { sentTo?: string; pending?: boolean }) =>
+    toast(r.pending ? "Got it — we'll email your receipt as soon as a payment is confirmed." : `Receipt sent to ${r.sentTo}`);
+
   const requestReceipt = () =>
-    run(
-      () => api<{ sentTo: string }>(`/api/portal/${token}/receipt`, { method: "POST" }),
-      (r) => toast(`Receipt sent to ${r.sentTo}`),
-    );
+    run(() => api<{ sentTo?: string; pending?: boolean }>(`/api/portal/${token}/receipt`, { method: "POST" }), receiptToast);
 
   const addEmailAndSendReceipt = () =>
-    run(
-      async () => {
-        await api(`/api/portal/${token}/email`, {
-          method: "POST",
-          body: JSON.stringify({ email: receiptEmail }),
-        });
-        return api<{ sentTo: string }>(`/api/portal/${token}/receipt`, { method: "POST" });
-      },
-      (r) => toast(`Receipt sent to ${r.sentTo}`),
-    );
+    run(async () => {
+      await api(`/api/portal/${token}/email`, {
+        method: "POST",
+        body: JSON.stringify({ email: receiptEmail }),
+      });
+      return api<{ sentTo?: string; pending?: boolean }>(`/api/portal/${token}/receipt`, { method: "POST" });
+    }, receiptToast);
 
   const picker = (
     <div className="flex flex-col gap-3 border-t border-hairline pt-4">
@@ -308,10 +305,17 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
         {view.receiptsEnabled &&
           (view.hasEmail ? (
-            <div>
-              <OutlineButton disabled={busy} onClick={requestReceipt}>
-                Email me a receipt
-              </OutlineButton>
+            <div className="flex flex-col gap-1.5">
+              <div>
+                <OutlineButton disabled={busy} onClick={requestReceipt}>
+                  {view.receiptPending ? "Check for a receipt" : "Email me a receipt"}
+                </OutlineButton>
+              </div>
+              <p className="text-[12px] leading-relaxed text-muted">
+                {view.receiptPending
+                  ? "We'll email it automatically as soon as a payment is confirmed — no need to ask again."
+                  : "You can request this any time, including for a copy of an earlier receipt."}
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { sendPendingReceiptIfAny } from "@/lib/receipt";
 
 /**
  * Record what happened with the money on one booking.
@@ -49,6 +50,8 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   if (!Object.keys(data).length) throw new Error("Nothing to update.");
 
   const booking = await prisma.booking.update({ where: { id }, data });
+  if (data.paid === true) await sendPendingReceiptIfAny(booking.clientId);
+
   return NextResponse.json({
     id: booking.id,
     paid: booking.paid,

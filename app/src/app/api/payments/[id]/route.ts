@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { chooseBookingToSettle } from "@/lib/payments/match";
+import { sendPendingReceiptIfAny } from "@/lib/receipt";
 import { fmtDayLong } from "@/lib/time";
 
 /**
@@ -50,6 +51,7 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
     where: { id },
     data: { status: "matched", clientId, bookingId: target.id },
   });
+  await sendPendingReceiptIfAny(clientId);
 
   return NextResponse.json({ ok: true, status: "matched", bookingId: target.id });
 });
