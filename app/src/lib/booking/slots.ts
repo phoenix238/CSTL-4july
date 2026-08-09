@@ -56,7 +56,9 @@ export async function loadAvailableSlots({
         bufferMinutes: b.source === "chalkFarm" ? settings.chalkFarmBufferMinutes : undefined,
       })),
     slotMinutes: settings.bookingSlotMinutes,
-    bufferMinutes: settings.bookingBufferMinutes,
+    // Waterloo and Bethnal Green don't need the same spacing between Phoenix's
+    // own back-to-back sessions — kept as separate settings per clinic.
+    bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
     minNoticeMinutes: settings.bookingMinNoticeMins,
   });
 }

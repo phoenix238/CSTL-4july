@@ -44,6 +44,7 @@ export interface SettingsData {
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
+  bethnalBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
   bookingNotifyEmail: boolean;
@@ -357,6 +358,7 @@ export function SettingsView({
           bookingMinNoticeMins={settings.bookingMinNoticeMins}
           bookingHorizonDays={settings.bookingHorizonDays}
           bookingBufferMinutes={settings.bookingBufferMinutes}
+          bethnalBufferMinutes={settings.bethnalBufferMinutes}
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}

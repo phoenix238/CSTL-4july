@@ -21,6 +21,7 @@ export const GET = guarded(async () => {
     bookingMinNoticeMins: s.bookingMinNoticeMins,
     bookingHorizonDays: s.bookingHorizonDays,
     bookingBufferMinutes: s.bookingBufferMinutes,
+    bethnalBufferMinutes: s.bethnalBufferMinutes,
     chalkFarmBufferMinutes: s.chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes: s.chalkFarmEdgeBufferMinutes,
     bookingNotifyEmail: s.bookingNotifyEmail,

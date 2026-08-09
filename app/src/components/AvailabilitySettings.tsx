@@ -46,6 +46,7 @@ export function AvailabilitySettings({
   bookingMinNoticeMins,
   bookingHorizonDays,
   bookingBufferMinutes,
+  bethnalBufferMinutes,
   chalkFarmBufferMinutes,
   chalkFarmEdgeBufferMinutes,
   bookingNotifyEmail,
@@ -57,6 +58,7 @@ export function AvailabilitySettings({
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
+  bethnalBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
   bookingNotifyEmail: boolean;
@@ -170,6 +172,7 @@ export function AvailabilitySettings({
     minNoticeHours: Math.round(bookingMinNoticeMins / 60),
     horizonDays: bookingHorizonDays,
     bufferMinutes: bookingBufferMinutes,
+    bethnalBufferMinutes,
     chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes,
     notifyEmail: bookingNotifyEmail,
@@ -187,6 +190,7 @@ export function AvailabilitySettings({
           bookingMinNoticeMins: tuning.minNoticeHours * 60,
           bookingHorizonDays: tuning.horizonDays,
           bookingBufferMinutes: tuning.bufferMinutes,
+          bethnalBufferMinutes: tuning.bethnalBufferMinutes,
           chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
           chalkFarmEdgeBufferMinutes: tuning.chalkFarmEdgeBufferMinutes,
           bookingNotifyEmail: tuning.notifyEmail,
@@ -405,15 +409,28 @@ export function AvailabilitySettings({
           }}
         />
         <TuningSlider
-          label="Gap between your own clients"
+          label="Gap between your own Waterloo clients"
           value={tuning.bufferMinutes}
-          display={tuning.bufferMinutes === 0 ? "None" : `${tuning.bufferMinutes} min`}
+          display={tuning.bufferMinutes === 0 ? "None — back-to-back OK" : `${tuning.bufferMinutes} min`}
           min={0}
           max={30}
           step={5}
-          hint="Minimum breathing room kept before and after every one of YOUR sessions (both clinics), so back-to-back clients can't book closer together than this."
+          hint="Minimum breathing room kept before and after every Waterloo session. Set to None to let clients book back-to-back there."
           onChange={(v) => {
             setTuning((p) => ({ ...p, bufferMinutes: v }));
+            setTuningDirty(true);
+          }}
+        />
+        <TuningSlider
+          label="Gap between your own Bethnal Green clients"
+          value={tuning.bethnalBufferMinutes}
+          display={tuning.bethnalBufferMinutes === 0 ? "None — back-to-back OK" : `${tuning.bethnalBufferMinutes} min`}
+          min={0}
+          max={30}
+          step={5}
+          hint="Minimum breathing room kept before and after every Bethnal Green session — independent of the Waterloo gap above, since the shared Chalk Farm room may need different spacing."
+          onChange={(v) => {
+            setTuning((p) => ({ ...p, bethnalBufferMinutes: v }));
             setTuningDirty(true);
           }}
         />
