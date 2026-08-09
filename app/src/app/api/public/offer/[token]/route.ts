@@ -6,6 +6,7 @@ import { londonDayStart, londonDateKey } from "@/lib/time";
 import { isSlotAvailable, resolveWeeklyHours } from "@/lib/booking/availability";
 import type { Clinic } from "@/lib/booking/rules";
 import { bookSession } from "@/lib/booking/book";
+import { loadBethnalWeeklyCap } from "@/lib/booking/slots";
 import { sendEmail } from "@/lib/google/gmail";
 
 function isClinic(v: string): v is Clinic {
@@ -26,11 +27,12 @@ async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Prom
   const latest = offeredTimes.reduce((a, b) => (a > b ? a : b));
   const windowStart = londonDayStart(-1, earliest);
   const windowEnd = londonDayStart(2, latest);
-  const [overrides, busy] = await Promise.all([
+  const [overrides, busy, weeklyCap] = await Promise.all([
     prisma.availabilityOverride.findMany({
       where: { clinic, date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
     }),
     getBusySpans(windowStart, windowEnd),
+    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd) : Promise.resolve(undefined),
   ]);
   const weeklyHours = resolveWeeklyHours(settings.weeklyHours)[clinic];
   const busySpans = busy
@@ -47,8 +49,9 @@ async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Prom
         endMin: o.endMin,
       })),
       busy: busySpans,
-      bufferMinutes: settings.bookingBufferMinutes,
+      bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,
+      weeklyCap,
     }),
   );
 }

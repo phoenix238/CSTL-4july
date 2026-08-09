@@ -1,8 +1,42 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans } from "@/lib/google/calendar";
-import { londonDayStart, londonDateKey } from "@/lib/time";
-import { computeAvailableSlots, resolveWeeklyHours } from "./availability";
-import type { Clinic } from "./rules";
+import { londonAddDays, londonDayStart, londonDateKey, londonWeekStart } from "@/lib/time";
+import { computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams } from "./availability";
+import { SESSION_MINUTES, type Clinic } from "./rules";
+
+/**
+ * Bethnal Green's weekly Chalk Farm hours cap, as a `computeAvailableSlots`-
+ * ready `weeklyCap` — every *other* confirmed Bethnal session's minutes,
+ * bucketed by the London calendar week (Mon-Sun) it falls in. Shared by
+ * `loadAvailableSlots` and the offer-pick flow (`api/public/offer/[token]`),
+ * which re-verifies a hand-picked time without going through that function.
+ * Queries a week of margin either side of `windowStart`/`windowEnd` so every
+ * week touched by that window is fully counted, not just the sessions that
+ * happen to fall inside it.
+ */
+export async function loadBethnalWeeklyCap(
+  windowStart: Date,
+  windowEnd: Date,
+  excludeBookingId?: string,
+): Promise<AvailabilityParams["weeklyCap"]> {
+  const settings = await getSettings();
+  if (settings.chalkFarmWeeklyCapHours <= 0) return undefined;
+  const weekBookings = await prisma.booking.findMany({
+    where: {
+      clinic: "bethnal",
+      status: "confirmed",
+      startsAt: { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) },
+      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+    },
+    select: { startsAt: true },
+  });
+  const bookedMinutesByWeek: Record<string, number> = {};
+  for (const b of weekBookings) {
+    const key = londonDateKey(londonWeekStart(b.startsAt));
+    bookedMinutesByWeek[key] = (bookedMinutesByWeek[key] ?? 0) + SESSION_MINUTES;
+  }
+  return { capMinutes: settings.chalkFarmWeeklyCapHours * 60, bookedMinutesByWeek };
+}
 
 /**
  * The one place that turns "what's bookable?" into real times.
@@ -27,11 +61,12 @@ export async function loadAvailableSlots({
   excludeBookingId?: string;
 }): Promise<Date[]> {
   const settings = await getSettings();
-  const [overrides, busy] = await Promise.all([
+  const [overrides, busy, weeklyCap] = await Promise.all([
     prisma.availabilityOverride.findMany({
       where: { clinic, date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
     }),
     getBusySpans(windowStart, windowEnd),
+    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
   ]);
 
   return computeAvailableSlots({
@@ -60,6 +95,7 @@ export async function loadAvailableSlots({
     // own back-to-back sessions — kept as separate settings per clinic.
     bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
     minNoticeMinutes: settings.bookingMinNoticeMins,
+    weeklyCap,
   });
 }
 

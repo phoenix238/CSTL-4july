@@ -4,7 +4,15 @@
 // routes) fetch the raw data and pass it in.
 
 import { blockedRange, SESSION_MINUTES, type Clinic } from "./rules";
-import { londonAddDays, londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
+import {
+  londonAddDays,
+  londonDateKey,
+  londonMinutes,
+  londonTime,
+  londonWeekdayIndex,
+  londonWeekStart,
+  londonYMD,
+} from "@/lib/time";
 
 export interface WeeklyWindow {
   weekday: number; // 0=Mon..6=Sun, matches londonWeekdayIndex
@@ -123,6 +131,15 @@ export interface AvailabilityParams {
   bufferMinutes?: number;
   now?: Date;
   minNoticeMinutes?: number;
+  /**
+   * A cap on total booked minutes per London calendar week (Mon-Sun) — used
+   * for Bethnal Green's weekly Chalk Farm hours cap. `bookedMinutesByWeek` is
+   * keyed by `londonDateKey(londonWeekStart(...))` and already reflects every
+   * *other* confirmed session that week (the caller excludes the booking
+   * being rescheduled, if any); a candidate is rejected if adding its session
+   * would push that week's total past `capMinutes`.
+   */
+  weeklyCap?: { capMinutes: number; bookedMinutesByWeek: Record<string, number> };
 }
 
 const pad = (iv: { start: Date; end: Date }, minutes: number) =>
@@ -144,6 +161,7 @@ function slotFits(
   clinic: Clinic,
   busy: AvailabilityParams["busy"],
   bufferMinutes: number,
+  weeklyCap?: AvailabilityParams["weeklyCap"],
 ): boolean {
   // Both clinics currently footprint to exactly the session hour (see
   // blockedRange in rules.ts), but this stays generic in case a future
@@ -161,10 +179,19 @@ function slotFits(
   // Each busy span pads by its own buffer if it has one (e.g. a bigger
   // safety gap around a studio-mate's Chalk Farm booking), else the
   // default bufferMinutes — see the AvailabilityParams.busy doc comment.
-  return !busy.some((b) => {
+  const busyClash = busy.some((b) => {
     const padded = pad(b, b.bufferMinutes ?? bufferMinutes);
     return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
   });
+  if (busyClash) return false;
+
+  if (weeklyCap) {
+    const weekKey = londonDateKey(londonWeekStart(candidate));
+    const already = weeklyCap.bookedMinutesByWeek[weekKey] ?? 0;
+    if (already + SESSION_MINUTES > weeklyCap.capMinutes) return false;
+  }
+
+  return true;
 }
 
 /** Real bookable slot start times: open hours minus busy time, minus past/too-soon. */
@@ -180,6 +207,7 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
     bufferMinutes = 0,
     now = new Date(),
     minNoticeMinutes = 0,
+    weeklyCap,
   } = params;
   const cutoff = new Date(now.getTime() + minNoticeMinutes * 60_000);
   const results: Date[] = [];
@@ -197,7 +225,7 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
       for (let minute = interval.start; minute + SESSION_MINUTES <= interval.end; minute += slotMinutes) {
         const candidate = londonTime(y, m, d, Math.floor(minute / 60), minute % 60);
         if (candidate < cutoff) continue;
-        if (!slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes)) continue;
+        if (!slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap)) continue;
         results.push(candidate);
       }
     }
@@ -217,7 +245,16 @@ export function isSlotAvailable(
   candidate: Date,
   params: Omit<AvailabilityParams, "windowStart" | "windowEnd" | "slotMinutes">,
 ): boolean {
-  const { clinic, weeklyHours, overrides, busy, bufferMinutes = 0, now = new Date(), minNoticeMinutes = 0 } = params;
+  const {
+    clinic,
+    weeklyHours,
+    overrides,
+    busy,
+    bufferMinutes = 0,
+    now = new Date(),
+    minNoticeMinutes = 0,
+    weeklyCap,
+  } = params;
   const cutoff = new Date(now.getTime() + minNoticeMinutes * 60_000);
   if (candidate < cutoff) return false;
 
@@ -227,5 +264,5 @@ export function isSlotAvailable(
   if (!intervals.length) return false;
 
   const minute = londonMinutes(candidate);
-  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes);
+  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap);
 }

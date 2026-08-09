@@ -51,6 +51,7 @@ export default async function SettingsPage() {
         bethnalBufferMinutes: settings.bethnalBufferMinutes,
         chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
         chalkFarmEdgeBufferMinutes: settings.chalkFarmEdgeBufferMinutes,
+        chalkFarmWeeklyCapHours: settings.chalkFarmWeeklyCapHours,
         bookingNotifyEmail: settings.bookingNotifyEmail,
         clientCopy: resolveClientCopy(settings.clientCopy),
         portalEnabled: settings.portalEnabled,

@@ -47,6 +47,7 @@ export interface SettingsData {
   bethnalBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
+  chalkFarmWeeklyCapHours: number;
   bookingNotifyEmail: boolean;
   clientCopy: ClientCopy;
   portalEnabled: boolean;
@@ -361,6 +362,7 @@ export function SettingsView({
           bethnalBufferMinutes={settings.bethnalBufferMinutes}
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
+          chalkFarmWeeklyCapHours={settings.chalkFarmWeeklyCapHours}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
         />

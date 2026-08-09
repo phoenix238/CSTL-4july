@@ -24,6 +24,7 @@ export const GET = guarded(async () => {
     bethnalBufferMinutes: s.bethnalBufferMinutes,
     chalkFarmBufferMinutes: s.chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes: s.chalkFarmEdgeBufferMinutes,
+    chalkFarmWeeklyCapHours: s.chalkFarmWeeklyCapHours,
     bookingNotifyEmail: s.bookingNotifyEmail,
     portalEnabled: s.portalEnabled,
     portalSelfBook: s.portalSelfBook,

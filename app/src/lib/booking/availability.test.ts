@@ -9,7 +9,7 @@ import {
   type OverrideWindow,
   type WeeklyWindow,
 } from "./availability";
-import { londonDayStart, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
+import { londonDateKey, londonDayStart, londonTime, londonWeekdayIndex, londonWeekStart, londonYMD } from "@/lib/time";
 
 // Tue 7 July 2026 and Sun 5 July 2026 (same week, London/BST).
 const TUESDAY = londonDayStart(0, new Date("2026-07-07T12:00:00Z"));
@@ -252,6 +252,53 @@ describe("computeAvailableSlots", () => {
     expect(slots).not.toContainEqual(at(17, 15));
     // 17:30 (a full 30 min clear) is bookable.
     expect(slots).toContainEqual(at(17, 30));
+  });
+
+  it("weeklyCap excludes a candidate that would push the week's total past the cap", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
+    const weekKey = londonDateKey(londonWeekStart(TUESDAY));
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      now: at(0),
+      // Already at the 600-min (10 hr) cap this week — the 60-min candidate would push it over.
+      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [weekKey]: 600 } },
+    });
+    expect(slots).toEqual([]);
+  });
+
+  it("weeklyCap still allows a candidate that exactly fills the remaining cap", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
+    const weekKey = londonDateKey(londonWeekStart(TUESDAY));
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      now: at(0),
+      // 540 min (9 hr) already booked this week — 60 more exactly reaches the 600-min cap.
+      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [weekKey]: 540 } },
+    });
+    expect(slots).toEqual([at(9)]);
+  });
+
+  it("weeklyCap only counts the candidate's own week — a different week's total doesn't block it", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
+    const otherWeekKey = londonDateKey(londonWeekStart(londonDayStart(-7, TUESDAY)));
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      now: at(0),
+      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [otherWeekKey]: 600 } },
+    });
+    expect(slots).toEqual([at(9)]);
   });
 });
 

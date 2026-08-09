@@ -49,6 +49,7 @@ export function AvailabilitySettings({
   bethnalBufferMinutes,
   chalkFarmBufferMinutes,
   chalkFarmEdgeBufferMinutes,
+  chalkFarmWeeklyCapHours,
   bookingNotifyEmail,
   baseUrl,
 }: {
@@ -61,6 +62,7 @@ export function AvailabilitySettings({
   bethnalBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
+  chalkFarmWeeklyCapHours: number;
   bookingNotifyEmail: boolean;
   baseUrl: string;
 }) {
@@ -175,6 +177,7 @@ export function AvailabilitySettings({
     bethnalBufferMinutes,
     chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes,
+    chalkFarmWeeklyCapHours,
     notifyEmail: bookingNotifyEmail,
   });
   const [tuningDirty, setTuningDirty] = useState(false);
@@ -193,6 +196,7 @@ export function AvailabilitySettings({
           bethnalBufferMinutes: tuning.bethnalBufferMinutes,
           chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
           chalkFarmEdgeBufferMinutes: tuning.chalkFarmEdgeBufferMinutes,
+          chalkFarmWeeklyCapHours: tuning.chalkFarmWeeklyCapHours,
           bookingNotifyEmail: tuning.notifyEmail,
         }),
       });
@@ -457,6 +461,19 @@ export function AvailabilitySettings({
           hint="Bethnal Green only, outgoing direction. Your daily 'Phoenix' block on the shared Chalk Farm calendar starts this much before your first client and ends this much after your last, so studio-mates see clearance and don't book right onto the front or back of your day."
           onChange={(v) => {
             setTuning((p) => ({ ...p, chalkFarmEdgeBufferMinutes: v }));
+            setTuningDirty(true);
+          }}
+        />
+        <TuningSlider
+          label="Weekly Chalk Farm hours cap"
+          value={tuning.chalkFarmWeeklyCapHours}
+          display={tuning.chalkFarmWeeklyCapHours === 0 ? "No cap" : `${tuning.chalkFarmWeeklyCapHours} hrs/week`}
+          min={0}
+          max={30}
+          step={1}
+          hint="Bethnal Green only. Once confirmed Bethnal sessions in a Monday-Sunday week reach this many hours, no further Bethnal slots are offered that week on the public page, portal, or offer-pick link. Doesn't stop you booking over it yourself from QuickBook or Enquiries — same as the other gaps above."
+          onChange={(v) => {
+            setTuning((p) => ({ ...p, chalkFarmWeeklyCapHours: v }));
             setTuningDirty(true);
           }}
         />
