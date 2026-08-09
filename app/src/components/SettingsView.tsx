@@ -45,6 +45,7 @@ export interface SettingsData {
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
   chalkFarmBufferMinutes: number;
+  chalkFarmEdgeBufferMinutes: number;
   bookingNotifyEmail: boolean;
   clientCopy: ClientCopy;
   portalEnabled: boolean;
@@ -357,6 +358,7 @@ export function SettingsView({
           bookingHorizonDays={settings.bookingHorizonDays}
           bookingBufferMinutes={settings.bookingBufferMinutes}
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
+          chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
         />

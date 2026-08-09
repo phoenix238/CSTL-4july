@@ -22,6 +22,7 @@ export const GET = guarded(async () => {
     bookingHorizonDays: s.bookingHorizonDays,
     bookingBufferMinutes: s.bookingBufferMinutes,
     chalkFarmBufferMinutes: s.chalkFarmBufferMinutes,
+    chalkFarmEdgeBufferMinutes: s.chalkFarmEdgeBufferMinutes,
     bookingNotifyEmail: s.bookingNotifyEmail,
     portalEnabled: s.portalEnabled,
     portalSelfBook: s.portalSelfBook,

@@ -12,11 +12,29 @@ function isGone(err: unknown): boolean {
 }
 
 /**
+ * The [start, end) the shared Chalk Farm block should span for one day's
+ * confirmed Bethnal session start times: `edgeBufferMinutes` before the
+ * earliest and the same amount after the latest session's end. Pure — split
+ * out from `syncChalkFarmDayBlock` so the edge-padding math is unit-testable
+ * without mocking Prisma/Google.
+ */
+export function chalkFarmBlockRange(sessionStarts: Date[], edgeBufferMinutes: number): { start: Date; end: Date } {
+  const edgeBufferMs = edgeBufferMinutes * 60_000;
+  return {
+    start: new Date(Math.min(...sessionStarts.map((t) => t.getTime())) - edgeBufferMs),
+    end: new Date(Math.max(...sessionStarts.map((t) => t.getTime() + 60 * 60_000)) + edgeBufferMs),
+  };
+}
+
+/**
  * Keep the single shared "Phoenix" Chalk Farm room block for one day in sync
  * with that day's actual confirmed Bethnal Green bookings. The block grows or
- * shrinks to span from the earliest session's start to the latest session's
- * end — no fixed padding — so sessions can sit as close together as the
- * schedule allows. Deletes the block once no Bethnal sessions remain that day.
+ * shrinks to span from `chalkFarmEdgeBufferMinutes` before the earliest
+ * session's start to the same amount after the latest session's end — so
+ * studio-mates on the shared calendar see clearance before the first client
+ * and after the last one, without a fixed gap between sessions in between
+ * (those sit as close together as the schedule allows). Deletes the block
+ * once no Bethnal sessions remain that day.
  */
 export async function syncChalkFarmDayBlock(dateKey: string) {
   const settings = await getSettings();
@@ -46,8 +64,10 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
     return;
   }
 
-  const blockStart = new Date(Math.min(...bookings.map((b) => b.startsAt.getTime())));
-  const blockEnd = new Date(Math.max(...bookings.map((b) => b.startsAt.getTime() + 60 * 60_000)));
+  const { start: blockStart, end: blockEnd } = chalkFarmBlockRange(
+    bookings.map((b) => b.startsAt),
+    settings.chalkFarmEdgeBufferMinutes,
+  );
 
   // Venue-facing note: how many sessions, when each one starts, when the day
   // finishes, and how to reach Phoenix — without any client names on the shared

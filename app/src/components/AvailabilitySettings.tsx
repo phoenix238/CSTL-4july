@@ -47,6 +47,7 @@ export function AvailabilitySettings({
   bookingHorizonDays,
   bookingBufferMinutes,
   chalkFarmBufferMinutes,
+  chalkFarmEdgeBufferMinutes,
   bookingNotifyEmail,
   baseUrl,
 }: {
@@ -57,6 +58,7 @@ export function AvailabilitySettings({
   bookingHorizonDays: number;
   bookingBufferMinutes: number;
   chalkFarmBufferMinutes: number;
+  chalkFarmEdgeBufferMinutes: number;
   bookingNotifyEmail: boolean;
   baseUrl: string;
 }) {
@@ -169,6 +171,7 @@ export function AvailabilitySettings({
     horizonDays: bookingHorizonDays,
     bufferMinutes: bookingBufferMinutes,
     chalkFarmBufferMinutes,
+    chalkFarmEdgeBufferMinutes,
     notifyEmail: bookingNotifyEmail,
   });
   const [tuningDirty, setTuningDirty] = useState(false);
@@ -185,6 +188,7 @@ export function AvailabilitySettings({
           bookingHorizonDays: tuning.horizonDays,
           bookingBufferMinutes: tuning.bufferMinutes,
           chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
+          chalkFarmEdgeBufferMinutes: tuning.chalkFarmEdgeBufferMinutes,
           bookingNotifyEmail: tuning.notifyEmail,
         }),
       });
@@ -401,28 +405,41 @@ export function AvailabilitySettings({
           }}
         />
         <TuningSlider
-          label="Buffer around sessions"
+          label="Gap between your own clients"
           value={tuning.bufferMinutes}
           display={tuning.bufferMinutes === 0 ? "None" : `${tuning.bufferMinutes} min`}
           min={0}
           max={30}
           step={5}
-          hint="Extra padding either side of every session, on top of the calendar footprint — breathing room between clients."
+          hint="Minimum breathing room kept before and after every one of YOUR sessions (both clinics), so back-to-back clients can't book closer together than this."
           onChange={(v) => {
             setTuning((p) => ({ ...p, bufferMinutes: v }));
             setTuningDirty(true);
           }}
         />
         <TuningSlider
-          label="Safety gap around Chalk Farm studio-mates"
+          label="Gap from a Chalk Farm studio-mate's booking"
           value={tuning.chalkFarmBufferMinutes}
           display={tuning.chalkFarmBufferMinutes === 0 ? "None" : `${tuning.chalkFarmBufferMinutes} min`}
           min={0}
           max={60}
           step={5}
-          hint="Bethnal Green only. When someone else has booked the shared Chalk Farm calendar (e.g. Amy), this much clearance is kept either side of their booking — on top of the buffer above — before a client can book with you."
+          hint="Bethnal Green only, incoming direction. When someone else (e.g. Amy) already has the shared Chalk Farm calendar booked, this much clearance is kept either side of THEIR booking before you can book — on top of the gap above."
           onChange={(v) => {
             setTuning((p) => ({ ...p, chalkFarmBufferMinutes: v }));
+            setTuningDirty(true);
+          }}
+        />
+        <TuningSlider
+          label="Chalk Farm block edge padding"
+          value={tuning.chalkFarmEdgeBufferMinutes}
+          display={tuning.chalkFarmEdgeBufferMinutes === 0 ? "None" : `${tuning.chalkFarmEdgeBufferMinutes} min`}
+          min={0}
+          max={30}
+          step={5}
+          hint="Bethnal Green only, outgoing direction. Your daily 'Phoenix' block on the shared Chalk Farm calendar starts this much before your first client and ends this much after your last, so studio-mates see clearance and don't book right onto the front or back of your day."
+          onChange={(v) => {
+            setTuning((p) => ({ ...p, chalkFarmEdgeBufferMinutes: v }));
             setTuningDirty(true);
           }}
         />

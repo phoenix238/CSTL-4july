@@ -49,6 +49,7 @@ export default async function SettingsPage() {
         bookingHorizonDays: settings.bookingHorizonDays,
         bookingBufferMinutes: settings.bookingBufferMinutes,
         chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
+        chalkFarmEdgeBufferMinutes: settings.chalkFarmEdgeBufferMinutes,
         bookingNotifyEmail: settings.bookingNotifyEmail,
         clientCopy: resolveClientCopy(settings.clientCopy),
         portalEnabled: settings.portalEnabled,
