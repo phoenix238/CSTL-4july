@@ -105,6 +105,17 @@ describe("dayOpenIntervals", () => {
       { start: 660, end: 720 },
     ]);
   });
+
+  it("two separate windows on the same weekday (e.g. a day slot and an evening slot) both stay open, with the gap between them closed", () => {
+    const dayAndEvening: WeeklyWindow[] = [
+      { weekday: tueWeekday, startMin: 540, endMin: 780 }, // 9:00-13:00
+      { weekday: tueWeekday, startMin: 1020, endMin: 1260 }, // 17:00-21:00
+    ];
+    expect(dayOpenIntervals(tueWeekday, "2026-07-07", dayAndEvening, [])).toEqual([
+      { start: 540, end: 780 },
+      { start: 1020, end: 1260 },
+    ]);
+  });
 });
 
 describe("computeAvailableSlots", () => {

@@ -24,20 +24,31 @@ const timeToMin = (t: string) => {
   return (h || 0) * 60 + (m || 0);
 };
 
-interface DayDraft {
-  open: boolean;
+interface Segment {
   start: string;
   end: string;
 }
 
+interface DayDraft {
+  open: boolean;
+  // One or more separate windows in the same day — e.g. a day slot and a
+  // separate evening slot, with a closed gap between them.
+  segments: Segment[];
+}
+
 const windowsToDrafts = (windows: WeeklyWindow[]): DayDraft[] =>
   Array.from({ length: 7 }, (_, weekday) => {
-    const w = windows.find((w) => w.weekday === weekday);
-    return w ? { open: true, start: minToTime(w.startMin), end: minToTime(w.endMin) } : { open: false, start: "09:00", end: "17:00" };
+    const segments = windows
+      .filter((w) => w.weekday === weekday)
+      .sort((a, b) => a.startMin - b.startMin)
+      .map((w) => ({ start: minToTime(w.startMin), end: minToTime(w.endMin) }));
+    return segments.length ? { open: true, segments } : { open: false, segments: [{ start: "09:00", end: "17:00" }] };
   });
 
 const draftsToWindows = (drafts: DayDraft[]): WeeklyWindow[] =>
-  drafts.flatMap((d, weekday) => (d.open ? [{ weekday, startMin: timeToMin(d.start), endMin: timeToMin(d.end) }] : []));
+  drafts.flatMap((d, weekday) =>
+    d.open ? d.segments.map((s) => ({ weekday, startMin: timeToMin(s.start), endMin: timeToMin(s.end) })) : [],
+  );
 
 export function AvailabilitySettings({
   weeklyHours,
@@ -78,27 +89,61 @@ export function AvailabilitySettings({
   const [hoursDirty, setHoursDirty] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
 
-  const updateDay = (i: number, patch: Partial<DayDraft>) => {
+  const toggleDayOpen = (i: number, open: boolean) => {
     setDrafts((prev) => ({
       ...prev,
-      [hoursClinic]: prev[hoursClinic].map((d, idx) => (idx === i ? { ...d, ...patch } : d)),
+      [hoursClinic]: prev[hoursClinic].map((d, idx) => (idx === i ? { ...d, open } : d)),
+    }));
+    setHoursDirty(true);
+  };
+
+  const updateSegment = (i: number, segIdx: number, patch: Partial<Segment>) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [hoursClinic]: prev[hoursClinic].map((d, idx) =>
+        idx === i ? { ...d, segments: d.segments.map((s, si) => (si === segIdx ? { ...s, ...patch } : s)) } : d,
+      ),
+    }));
+    setHoursDirty(true);
+  };
+
+  // New segment defaults to an evening slot — the day slot is usually added first.
+  const addSegment = (i: number) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [hoursClinic]: prev[hoursClinic].map((d, idx) =>
+        idx === i ? { ...d, segments: [...d.segments, { start: "17:00", end: "21:00" }] } : d,
+      ),
+    }));
+    setHoursDirty(true);
+  };
+
+  const removeSegment = (i: number, segIdx: number) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [hoursClinic]: prev[hoursClinic].map((d, idx) =>
+        idx === i ? { ...d, segments: d.segments.filter((_, si) => si !== segIdx) } : d,
+      ),
     }));
     setHoursDirty(true);
   };
 
   async function saveHours() {
-    // Guard against end ≤ start — the server silently drops such windows, so
-    // without this the day would quietly fail to save under a "saved ✓" toast.
-    const invalid: string[] = [];
+    // Guard against end ≤ start on any segment — the server silently drops such
+    // windows, so without this the day would quietly fail to save under a "saved ✓" toast.
+    const invalid = new Set<string>();
     (["waterloo", "bethnal"] as const).forEach((c) => {
       drafts[c].forEach((d, i) => {
-        if (d.open && timeToMin(d.end) <= timeToMin(d.start)) {
-          invalid.push(`${c === "waterloo" ? "Waterloo" : "Bethnal Green"} ${WEEKDAY_LABELS[i]}`);
+        if (!d.open) return;
+        for (const s of d.segments) {
+          if (timeToMin(s.end) <= timeToMin(s.start)) {
+            invalid.add(`${c === "waterloo" ? "Waterloo" : "Bethnal Green"} ${WEEKDAY_LABELS[i]}`);
+          }
         }
       });
     });
-    if (invalid.length) {
-      toast(`End time must be after the start — check ${invalid.join(", ")}`);
+    if (invalid.size) {
+      toast(`End time must be after the start — check ${[...invalid].join(", ")}`);
       return;
     }
     setSavingHours(true);
@@ -244,28 +289,51 @@ export function AvailabilitySettings({
         </div>
         <div className="flex flex-col gap-1.5">
           {drafts[hoursClinic].map((d, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2.5 border-b border-hairline py-1.5 last:border-0">
-              <label className="flex w-[80px] cursor-pointer items-center gap-1.5 text-[12.5px] font-medium">
-                <input type="checkbox" checked={d.open} onChange={(e) => updateDay(i, { open: e.target.checked })} />
+            <div key={i} className="flex flex-wrap items-start gap-2.5 border-b border-hairline py-1.5 last:border-0">
+              <label className="flex w-[80px] shrink-0 cursor-pointer items-center gap-1.5 pt-[7px] text-[12.5px] font-medium">
+                <input type="checkbox" checked={d.open} onChange={(e) => toggleDayOpen(i, e.target.checked)} />
                 {WEEKDAY_LABELS[i]}
               </label>
-              <input
-                type="time"
-                step={1800}
-                value={d.start}
-                disabled={!d.open}
-                onChange={(e) => updateDay(i, { start: e.target.value })}
-                className={`${inputClass} w-[110px] disabled:opacity-40`}
-              />
-              <span className="text-[12px] text-muted">to</span>
-              <input
-                type="time"
-                step={1800}
-                value={d.end}
-                disabled={!d.open}
-                onChange={(e) => updateDay(i, { end: e.target.value })}
-                className={`${inputClass} w-[110px] disabled:opacity-40`}
-              />
+              <div className="flex flex-col gap-1.5 py-[3px]">
+                {(d.open ? d.segments : d.segments.slice(0, 1)).map((s, si) => (
+                  <div key={si} className="flex items-center gap-2">
+                    <input
+                      type="time"
+                      step={1800}
+                      value={s.start}
+                      disabled={!d.open}
+                      onChange={(e) => updateSegment(i, si, { start: e.target.value })}
+                      className={`${inputClass} w-[110px] disabled:opacity-40`}
+                    />
+                    <span className="text-[12px] text-muted">to</span>
+                    <input
+                      type="time"
+                      step={1800}
+                      value={s.end}
+                      disabled={!d.open}
+                      onChange={(e) => updateSegment(i, si, { end: e.target.value })}
+                      className={`${inputClass} w-[110px] disabled:opacity-40`}
+                    />
+                    {d.open && d.segments.length > 1 && (
+                      <button
+                        onClick={() => removeSegment(i, si)}
+                        aria-label={`Remove this ${WEEKDAY_LABELS[i]} time`}
+                        className="cursor-pointer text-[14px] font-semibold text-muted hover:text-clay-text"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {d.open && (
+                  <button
+                    onClick={() => addSegment(i)}
+                    className="cursor-pointer self-start text-[11.5px] font-semibold text-clay-text hover:text-clay"
+                  >
+                    + Add another time (e.g. an evening slot)
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
