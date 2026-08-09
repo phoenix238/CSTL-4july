@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Card, OutlineButton, PrimaryButton, SectionLabel, useToast } from "@/components/ui";
+import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
@@ -22,6 +22,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [receiptEmail, setReceiptEmail] = useState("");
 
   const upcoming = view.upcoming;
 
@@ -42,6 +43,15 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       toast(err instanceof Error ? err.message : "Something went wrong — please try again");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyField(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast(`${label} copied ✓`);
+    } catch {
+      toast("Couldn't copy — try again");
     }
   }
 
@@ -74,6 +84,18 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const requestReceipt = () =>
     run(
       () => api<{ sentTo: string }>(`/api/portal/${token}/receipt`, { method: "POST" }),
+      (r) => toast(`Receipt sent to ${r.sentTo}`),
+    );
+
+  const addEmailAndSendReceipt = () =>
+    run(
+      async () => {
+        await api(`/api/portal/${token}/email`, {
+          method: "POST",
+          body: JSON.stringify({ email: receiptEmail }),
+        });
+        return api<{ sentTo: string }>(`/api/portal/${token}/receipt`, { method: "POST" });
+      },
       (r) => toast(`Receipt sent to ${r.sentTo}`),
     );
 
@@ -205,8 +227,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
         <div className="rounded-lg bg-clay-tint px-3.5 py-3">
           <div className="text-[12px] font-semibold text-clay-text">Your payment reference</div>
-          <div className="mt-1 font-mono text-[20px] font-semibold tracking-wide text-clay-text">
-            {view.paymentRef}
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="font-mono text-[20px] font-semibold tracking-wide text-clay-text">
+              {view.paymentRef}
+            </div>
+            <CopyButton onClick={() => copyField("Reference", view.paymentRef)} />
           </div>
           <p className="mt-1.5 text-[12px] leading-relaxed text-clay-text">
             Please use this as the reference on every transfer — it&apos;s how Phoenix matches your payment to you.
@@ -219,21 +244,30 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         {view.hasBankDetails && (
           <dl className="flex flex-col gap-1.5 text-[13px]">
             {view.bank.accountName && (
-              <div className="flex justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted">Account name</dt>
-                <dd className="font-medium">{view.bank.accountName}</dd>
+                <dd className="flex items-center gap-1 font-medium">
+                  {view.bank.accountName}
+                  <CopyButton onClick={() => copyField("Account name", view.bank.accountName)} />
+                </dd>
               </div>
             )}
             {view.bank.sortCode && (
-              <div className="flex justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted">Sort code</dt>
-                <dd className="font-mono font-medium">{view.bank.sortCode}</dd>
+                <dd className="flex items-center gap-1 font-mono font-medium">
+                  {view.bank.sortCode}
+                  <CopyButton onClick={() => copyField("Sort code", view.bank.sortCode)} />
+                </dd>
               </div>
             )}
             {view.bank.accountNumber && (
-              <div className="flex justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
                 <dt className="text-muted">Account number</dt>
-                <dd className="font-mono font-medium">{view.bank.accountNumber}</dd>
+                <dd className="flex items-center gap-1 font-mono font-medium">
+                  {view.bank.accountNumber}
+                  <CopyButton onClick={() => copyField("Account number", view.bank.accountNumber)} />
+                </dd>
               </div>
             )}
           </dl>
@@ -272,13 +306,32 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           )}
         </div>
 
-        {view.receiptsEnabled && (
-          <div>
-            <OutlineButton disabled={busy} onClick={requestReceipt}>
-              Email me a receipt
-            </OutlineButton>
-          </div>
-        )}
+        {view.receiptsEnabled &&
+          (view.hasEmail ? (
+            <div>
+              <OutlineButton disabled={busy} onClick={requestReceipt}>
+                Email me a receipt
+              </OutlineButton>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-[12.5px] leading-relaxed text-muted">
+                No email on file yet — add one to get a receipt sent to you.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={receiptEmail}
+                  onChange={(e) => setReceiptEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className={`${inputClass} min-w-0 flex-1`}
+                />
+                <OutlineButton disabled={busy || !receiptEmail.trim()} onClick={addEmailAndSendReceipt}>
+                  Send receipt
+                </OutlineButton>
+              </div>
+            </div>
+          ))}
       </Card>
 
       {/* ---------- history ---------- */}

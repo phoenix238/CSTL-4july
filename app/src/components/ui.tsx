@@ -98,6 +98,18 @@ export function OutlineButton({
   );
 }
 
+export function CopyButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`shrink-0 cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold text-clay-text/70 hover:text-clay-text hover:underline ${className}`}
+    >
+      Copy
+    </button>
+  );
+}
+
 export const inputClass =
   "w-full box-border rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]";
 

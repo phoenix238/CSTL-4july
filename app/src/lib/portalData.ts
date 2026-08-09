@@ -59,6 +59,7 @@ export interface PortalView {
   lateCancelGoodwillPence: number;
   selfBookEnabled: boolean;
   receiptsEnabled: boolean;
+  hasEmail: boolean;
   portalLink: string;
 }
 
@@ -146,6 +147,7 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     lateCancelGoodwillPence: settings.lateCancelGoodwillPence,
     selfBookEnabled: settings.portalSelfBook,
     receiptsEnabled: settings.portalReceipts,
+    hasEmail: Boolean(client.email),
     portalLink: portalUrl(settings, client.portalToken),
   };
 }
