@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, Card, OutlineButton, PrimaryButton, SectionLabel, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
-import { formatPence } from "@/lib/account";
+import { formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { PortalView } from "@/lib/portalData";
 
@@ -163,8 +163,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                 {upcoming.cancelGoodwillPence > 0 && (
                   <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12.5px] leading-relaxed text-clay-text">
                     This is inside {view.noticeHours} hours, so the room is already paid for. If you&apos;re able to, a{" "}
-                    {formatPence(upcoming.cancelGoodwillPence)} contribution towards it is a real help — but it&apos;s
-                    entirely up to you, it isn&apos;t owed, and cancelling is absolutely fine either way.
+                    {formatPence(upcoming.cancelGoodwillPence)} contribution towards it is a real help. This is a
+                    donation-based clinic though, so if that&apos;s too much right now, please don&apos;t pay it —
+                    that&apos;s completely okay and nothing is owed either way.
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -295,7 +296,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                       ? "Cancelled"
                       : s.paid
                         ? `Paid${s.amountPence != null ? ` · ${formatPence(s.amountPence)}` : ""}`
-                        : "Unpaid"}
+                        : sessionPriceLabel(s.clinic, s.amountPence)}
                   </span>
                 </li>
               );

@@ -88,9 +88,10 @@ export async function confirmToClient(input: NotifyInput): Promise<void> {
     if (input.goodwillPence) {
       lines.push(
         "",
-        `Because it was short notice the room was already paid for, so if you're able to, a ${formatPence(input.goodwillPence)} contribution helps cover it — but it's entirely up to you, and it isn't owed.`,
+        `Because it was short notice the room was already paid for, so if you're able to, a ${formatPence(input.goodwillPence)} contribution helps cover it.`,
+        "This is a donation-based clinic though — if that's too much right now, please don't pay it. That's completely okay, and nothing is owed either way.",
       );
-      if (input.paymentRef) lines.push(`If you'd like to, the reference is ${input.paymentRef}.`);
+      if (input.paymentRef) lines.push("", `If you'd like to, the reference is ${input.paymentRef}.`);
     }
     if (input.portalLink) {
       lines.push("", "Whenever you're ready to book again, your page is here:", input.portalLink);

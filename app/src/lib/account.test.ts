@@ -5,6 +5,7 @@ import {
   formatPence,
   goodwillOpenPence,
   hoursUntil,
+  sessionPriceLabel,
   suggestedGoodwillPence,
   summariseAccount,
   type AccountBooking,
@@ -147,6 +148,26 @@ describe("suggestedGoodwillPence", () => {
 
   it("suggests nothing when the amount is switched off", () => {
     expect(suggestedGoodwillPence(hoursFromNow(3), 24, 0, NOW)).toBe(0);
+  });
+});
+
+describe("sessionPriceLabel", () => {
+  it("shows Waterloo's fixed price", () => {
+    expect(sessionPriceLabel("waterloo", null)).toBe("£80");
+  });
+
+  it("shows Bethnal's scale rather than naming an amount", () => {
+    expect(sessionPriceLabel("bethnal", null)).toBe("£30–60 sliding scale");
+  });
+
+  it("prefers what was actually recorded", () => {
+    expect(sessionPriceLabel("bethnal", 4500)).toBe("£45");
+    expect(sessionPriceLabel("waterloo", 6000)).toBe("£60");
+  });
+
+  it("shows a recorded zero as £0, not as the standard price", () => {
+    // Someone who genuinely paid nothing is not someone who owes £80.
+    expect(sessionPriceLabel("waterloo", 0)).toBe("£0");
   });
 });
 

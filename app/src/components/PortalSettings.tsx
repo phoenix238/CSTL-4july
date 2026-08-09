@@ -172,8 +172,9 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
             />
           </div>
           <span className="text-[11.5px] leading-[1.5] text-muted">
-            Offered as a contribution towards the room, never charged and never counted as owing — the wording on
-            their page makes that explicit. Set to 0 to stop mentioning it at all.
+            Asked for as a contribution towards the room, never charged and never counted as owing. The wording on
+            their page says plainly that this is a donation-based clinic and that it&apos;s completely okay not to pay
+            it if that&apos;s too much right now. Set to 0 to stop mentioning it at all.
           </span>
         </label>
       </Card>

@@ -108,6 +108,19 @@ export function formatPence(pence: number): string {
 }
 
 /**
+ * What to show a client against one session.
+ *
+ * A recorded amount always wins — that's what actually changed hands. Otherwise
+ * Waterloo shows its fixed £80, and Bethnal Green shows the sliding scale itself
+ * rather than a number, because on a donation basis the amount is the client's
+ * to decide and naming one would quietly turn a scale into a price.
+ */
+export function sessionPriceLabel(clinic: Clinic | string, amountPence: number | null): string {
+  if (amountPence != null) return formatPence(amountPence);
+  return clinic === "waterloo" ? "£80" : "£30–60 sliding scale";
+}
+
+/**
  * Hours of notice between now and a session. Negative once it's started.
  * Fractional on purpose — a session 23.5h away is inside a 24h window.
  */

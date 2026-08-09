@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, SectionLabel, useToast } from "./ui";
-import { formatPence, summariseAccount, type AccountBooking } from "@/lib/account";
+import { formatPence, sessionPriceLabel, summariseAccount, type AccountBooking } from "@/lib/account";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { fmtDate } from "@/lib/time";
 
@@ -45,6 +45,7 @@ export function ClientAccountPanel({
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [sendingReceipt, setSendingReceipt] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
   const account = summariseAccount(
@@ -85,6 +86,20 @@ export function ClientAccountPanel({
       toast(err instanceof Error ? err.message : "Couldn't send that");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function emailReceipt() {
+    setSendingReceipt(true);
+    try {
+      const { sentTo, count } = await api<{ sentTo: string; count: number }>(`/api/clients/${clientId}/receipt`, {
+        method: "POST",
+      });
+      toast(`Receipt for ${count} ${count === 1 ? "session" : "sessions"} sent to ${sentTo} ✓`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't send that");
+    } finally {
+      setSendingReceipt(false);
     }
   }
 
@@ -148,6 +163,21 @@ export function ClientAccountPanel({
             className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text disabled:cursor-default disabled:opacity-50"
           >
             {sending ? "Sending…" : `Email page to ${first}`}
+          </button>
+          {/* Always a deliberate action — nothing is receipted automatically. */}
+          <button
+            onClick={emailReceipt}
+            disabled={sendingReceipt || !hasEmail || account.paidCount === 0}
+            title={
+              account.paidCount === 0
+                ? "No sessions marked as paid yet"
+                : hasEmail
+                  ? undefined
+                  : "No email address on this client's record yet"
+            }
+            className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
+          >
+            {sendingReceipt ? "Sending…" : "Email receipt"}
           </button>
         </div>
 

@@ -64,11 +64,14 @@ async function nextRefNumber(): Promise<number> {
 /**
  * Ensure the client has a bank-transfer reference, creating one on first use.
  *
- * Shape is initials + a sequential number — "JS-4". The number comes from a
- * single shared counter starting at 1, so it's unique on its own; two clients
- * with the same initials simply get different numbers, and there's no collision
- * case to handle. The initials just make the reference recognisable when it
- * appears on a statement.
+ * Shape is initials then a sequential number, run together — "JS4". No dash and
+ * no spaces: some banking apps strip punctuation from a reference, so a format
+ * that survives that is a format that always matches on the statement.
+ *
+ * The number comes from a single shared counter starting at 1, so it's unique on
+ * its own; two clients with the same initials simply get different numbers, and
+ * there's no collision case to handle. The initials just make the reference
+ * recognisable at a glance.
  *
  * Assigned once and never changed — by the time a client uses it, it's printed
  * on an email and possibly saved as a payee on their banking app.
@@ -77,7 +80,7 @@ export async function getOrCreatePaymentRef(clientId: string): Promise<string> {
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
   if (client.paymentRef) return client.paymentRef;
 
-  const ref = `${initialsFor(client.name)}-${await nextRefNumber()}`;
+  const ref = `${initialsFor(client.name)}${await nextRefNumber()}`;
   await prisma.client.update({ where: { id: clientId }, data: { paymentRef: ref } });
   return ref;
 }

@@ -30,7 +30,15 @@ describe("initialsFor", () => {
   });
 
   it("gives two people the same initials — the number is what disambiguates", () => {
-    // Deliberate: JS-4 and JS-9 are both fine, and never collide.
+    // Deliberate: JS4 and JS9 are both fine, and never collide.
     expect(initialsFor("Jono Smith")).toBe(initialsFor("Jane Sharma"));
+  });
+
+  it("produces nothing a bank would strip — letters only, no punctuation", () => {
+    // References get normalised by some banking apps, so anything that isn't a
+    // letter here would risk the statement not matching what the client was shown.
+    for (const name of ["Anna-Marie de Vries", "jono o'smith", "  J  ", "123"]) {
+      expect(initialsFor(name)).toMatch(/^[A-Z]{2}$/);
+    }
   });
 });
