@@ -7,10 +7,16 @@ import { resolveClientCopy } from "@/lib/clientCopy";
 export default async function SettingsPage() {
   const settings = await getSettings();
   const overrides = await prisma.availabilityOverride.findMany({ orderBy: { date: "asc" } });
+  // For assigning a payment the matcher couldn't place.
+  const clients = await prisma.client.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, paymentRef: true },
+  });
 
   return (
     <SettingsView
       overrides={overrides}
+      clients={clients}
       settings={{
         accessNote: settings.accessNote,
         emailTemplateWaterloo: settings.emailTemplateWaterloo,
@@ -55,6 +61,10 @@ export default async function SettingsPage() {
         bankSortCode: settings.bankSortCode,
         bankAccountNumber: settings.bankAccountNumber,
         bankPaymentNote: settings.bankPaymentNote,
+        starlingEnabled: settings.starlingEnabled,
+        starlingAutoMark: settings.starlingAutoMark,
+        starlingNotifyEmail: settings.starlingNotifyEmail,
+        starlingLastSyncAt: settings.starlingLastSyncAt?.toISOString() ?? null,
       }}
     />
   );

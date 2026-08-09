@@ -7,6 +7,7 @@ import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./AvailabilitySettings";
 import { ClientMessagesEditor } from "./ClientMessagesEditor";
 import { PortalSettings } from "./PortalSettings";
+import { PaymentMatching } from "./PaymentMatching";
 import { reconnectGoogle } from "@/lib/googleActions";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -56,6 +57,10 @@ export interface SettingsData {
   bankSortCode: string;
   bankAccountNumber: string;
   bankPaymentNote: string;
+  starlingEnabled: boolean;
+  starlingAutoMark: boolean;
+  starlingNotifyEmail: boolean;
+  starlingLastSyncAt: string | null;
 }
 
 /**
@@ -102,7 +107,15 @@ function Dropdown({
   );
 }
 
-export function SettingsView({ settings, overrides }: { settings: SettingsData; overrides: AvailabilityOverrideDTO[] }) {
+export function SettingsView({
+  settings,
+  overrides,
+  clients = [],
+}: {
+  settings: SettingsData;
+  overrides: AvailabilityOverrideDTO[];
+  clients?: Array<{ id: string; name: string; paymentRef: string }>;
+}) {
   const router = useRouter();
   const toast = useToast();
 
@@ -367,6 +380,22 @@ export function SettingsView({ settings, overrides }: { settings: SettingsData; 
             bankAccountNumber: settings.bankAccountNumber,
             bankPaymentNote: settings.bankPaymentNote,
           }}
+        />
+      </Dropdown>
+
+      <Dropdown
+        label="PAYMENTS — MATCH BANK TRANSFERS TO SESSIONS"
+        open={!!open.payments}
+        onToggle={() => toggle("payments")}
+      >
+        <PaymentMatching
+          initial={{
+            starlingEnabled: settings.starlingEnabled,
+            starlingAutoMark: settings.starlingAutoMark,
+            starlingNotifyEmail: settings.starlingNotifyEmail,
+            starlingLastSyncAt: settings.starlingLastSyncAt,
+          }}
+          clients={clients}
         />
       </Dropdown>
 

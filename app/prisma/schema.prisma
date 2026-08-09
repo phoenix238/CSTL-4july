@@ -235,6 +235,40 @@ model AppSettings {
   bankAccountNumber String @default("")
   // Anything extra to show under the bank details on the portal.
   bankPaymentNote   String @default("")
+
+  // — Starling payment matching —
+  // Off until switched on, so nothing touches payment state unexpectedly.
+  starlingEnabled    Boolean   @default(false)
+  // Mark the session paid automatically on a confident match. Off means payments
+  // are still collected and matched, but wait for a tap to be applied.
+  starlingAutoMark   Boolean   @default(true)
+  starlingNotifyEmail Boolean  @default(true)
+  // How far back to look on the first sync, and the watermark thereafter.
+  starlingLookbackDays Int     @default(30)
+  starlingLastSyncAt DateTime?
+}
+
+// One incoming bank payment seen on the Starling feed.
+//
+// Every payment is recorded here whether or not it matched a client, so the
+// unmatched ones are visible and fixable rather than silently dropped. The
+// feedItemUid is Starling's own id and is unique, which is what makes the sync
+// safe to re-run: a payment already seen is skipped, never applied twice.
+model BankTransaction {
+  id           String   @id @default(cuid())
+  feedItemUid  String   @unique
+  transactedAt DateTime
+  amountPence  Int
+  reference    String   @default("") // as the payer typed it
+  counterParty String   @default("") // sender's name — for eyeballing, never for matching
+  // matched | unmatched | ambiguous | ignored
+  status       String   @default("unmatched")
+  clientId     String?
+  bookingId    String? // the session this settled, when one was chosen
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+  @@index([transactedAt])
 }
 
 // Single row (id = 1). Hands out the sequential half of a client's bank-transfer
