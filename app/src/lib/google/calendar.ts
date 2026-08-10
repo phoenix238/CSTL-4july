@@ -163,6 +163,96 @@ export async function cancelBookingEvents(bookingId: string, by = "") {
   if (booking.clinic === "bethnal") await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
 }
 
+/** Page a calendar's events for a window until Google runs out of pages. */
+async function listCalendarEvents(
+  calendar: Awaited<ReturnType<typeof getCalendarApi>>,
+  calId: string,
+  windowStart: Date,
+  windowEnd: Date,
+) {
+  const items: Array<{
+    id?: string | null;
+    status?: string | null;
+    summary?: string | null;
+    transparency?: string | null;
+    start?: { dateTime?: string | null; date?: string | null } | null;
+    end?: { dateTime?: string | null; date?: string | null } | null;
+  }> = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await calendar.events.list({
+      calendarId: calId,
+      timeMin: windowStart.toISOString(),
+      timeMax: windowEnd.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+      maxResults: 250,
+      pageToken,
+    });
+    items.push(...(res.data.items ?? []));
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return items;
+}
+
+/**
+ * Two-way sync with the personal calendar: if Phoenix deletes or moves a
+ * session's event directly in Google Calendar (rather than through this app),
+ * that change is mirrored back onto the Booking row — Google Calendar is the
+ * source of truth for whether/when a session actually happens.
+ *
+ * `personalItems` is whatever the personal calendar returned for the window
+ * being viewed — a booking whose event isn't in there either moved outside
+ * the window or was deleted; either way it needs a direct lookup by id to
+ * tell the two apart (a plain list only proves "not in this window").
+ */
+async function reconcileBookingsWithCalendar(
+  calendar: Awaited<ReturnType<typeof getCalendarApi>>,
+  bookings: Array<{ id: string; clinic: string; personalEventId: string; startsAt: Date }>,
+  personalItems: Awaited<ReturnType<typeof listCalendarEvents>>,
+): Promise<{ removedIds: Set<string>; movedStarts: Map<string, Date> }> {
+  const removedIds = new Set<string>();
+  const movedStarts = new Map<string, Date>();
+  const seen = new Map(personalItems.filter((e) => e.id).map((e) => [e.id as string, e]));
+
+  for (const booking of bookings) {
+    if (!booking.personalEventId) continue;
+    const ev = seen.get(booking.personalEventId);
+    const evStart = ev?.start?.dateTime ? new Date(ev.start.dateTime) : null;
+    if (ev && ev.status !== "cancelled" && evStart && evStart.getTime() === booking.startsAt.getTime()) {
+      continue; // matches what we have — nothing to reconcile
+    }
+    const calId = await calendarId("personal");
+    try {
+      const res = await withRetry(() => calendar.events.get({ calendarId: calId, eventId: booking.personalEventId }));
+      if (res.data.status === "cancelled") throw { status: 410 };
+      const newStartISO = res.data.start?.dateTime;
+      if (newStartISO) {
+        const newStart = new Date(newStartISO);
+        if (newStart.getTime() !== booking.startsAt.getTime()) {
+          await prisma.booking.update({ where: { id: booking.id }, data: { startsAt: newStart } });
+          movedStarts.set(booking.id, newStart);
+          if (booking.clinic === "bethnal") {
+            await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
+            await syncChalkFarmDayBlock(londonDateKey(newStart));
+          }
+        }
+      }
+    } catch (err) {
+      const status = (err as { status?: number; code?: number }).status ?? (err as { code?: number }).code;
+      if (status === 404 || status === 410) {
+        // Deleted straight from Google Calendar — free the slot here too, and
+        // tidy up the paired room/Chalk Farm event (tolerates it being gone already).
+        await cancelBookingEvents(booking.id, "calendar");
+        removedIds.add(booking.id);
+      } else {
+        console.error("Calendar reconciliation failed for booking", booking.id, err);
+      }
+    }
+  }
+  return { removedIds, movedStarts };
+}
+
 export type SpanSource = "booking" | "room" | "chalkFarm" | "personal";
 
 export interface BusySpan {
@@ -204,7 +294,7 @@ export interface BusySpan {
 export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<BusySpan[]> {
   // These three are independent — fetch our confirmed bookings, the Chalk Farm
   // day blocks, and the Google client together rather than back to back.
-  const [bookings, chalkFarmBlocks, calendar] = await Promise.all([
+  const [rawBookings, chalkFarmBlocks, calendar] = await Promise.all([
     prisma.booking.findMany({
       where: { status: "confirmed", startsAt: { gte: new Date(windowStart.getTime() - 2 * 3600_000), lt: windowEnd } },
       include: { client: true },
@@ -214,6 +304,25 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     }),
     getCalendarApi(),
   ]);
+
+  const personalCalId = await calendarId("personal");
+  // Fetched once, used both to reconcile our bookings against reality and (below)
+  // to build the personal-calendar spans, rather than listing it twice.
+  let personalItems: Awaited<ReturnType<typeof listCalendarEvents>> = [];
+  try {
+    personalItems = await listCalendarEvents(calendar, personalCalId, windowStart, windowEnd);
+  } catch (err) {
+    console.error("Couldn't list the personal calendar — skipping calendar reconciliation this view", err);
+  }
+
+  // Mirror anything Phoenix deleted or moved straight in Google Calendar onto
+  // our own records before building spans from them, so this view reflects
+  // what's actually on the calendar rather than what we last knew.
+  const { removedIds, movedStarts } = await reconcileBookingsWithCalendar(calendar, rawBookings, personalItems);
+  const bookings = rawBookings
+    .filter((b) => !removedIds.has(b.id))
+    .map((b) => (movedStarts.has(b.id) ? { ...b, startsAt: movedStarts.get(b.id)! } : b));
+
   // The booking span is the 1-hour session itself. The paired room / Chalk Farm
   // event stays visible (see below) so it renders side by side with the session.
   const known: BusySpan[] = bookings.map((b) => {
@@ -245,9 +354,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
   // every collision check below can ignore them (only real sessions count).
   const chalkFarmBlockEventIds = new Set(chalkFarmBlocks.map((b) => b.eventId));
 
-  const sources: Array<{ id: string; source: SpanSource }> = [
-    { id: await calendarId("personal"), source: "personal" },
-  ];
+  const sources: Array<{ id: string; source: SpanSource }> = [];
   // Room/Chalk Farm calendars are optional until configured in Settings.
   for (const key of ["room", "chalkFarm"] as const) {
     try {
@@ -266,21 +373,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
         // Page until Google runs out. A single 250-event page silently dropped
         // everything past the 250th event in the window — on a busy shared room
         // calendar that made genuinely taken time look bookable.
-        const items = [];
-        let pageToken: string | undefined;
-        do {
-          const res = await calendar.events.list({
-            calendarId: id,
-            timeMin: windowStart.toISOString(),
-            timeMax: windowEnd.toISOString(),
-            singleEvents: true,
-            orderBy: "startTime",
-            maxResults: 250,
-            pageToken,
-          });
-          items.push(...(res.data.items ?? []));
-          pageToken = res.data.nextPageToken ?? undefined;
-        } while (pageToken);
+        const items = await listCalendarEvents(calendar, id, windowStart, windowEnd);
         const spans: BusySpan[] = [];
         for (const ev of items) {
           if (!ev.id || ownEventIds.has(ev.id)) continue;
@@ -330,6 +423,27 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     }),
   );
 
-  const google = perSource.flat();
+  // Personal-calendar spans reuse the items already fetched above (for
+  // reconciliation) rather than listing that calendar a second time.
+  const personalSpans: BusySpan[] = [];
+  for (const ev of personalItems) {
+    if (!ev.id || ownEventIds.has(ev.id)) continue;
+    if (ev.transparency === "transparent" || ev.status === "cancelled") continue;
+    const startISO = ev.start?.dateTime ?? (ev.start?.date ? `${ev.start.date}T00:00:00Z` : null);
+    const endISO = ev.end?.dateTime ?? (ev.end?.date ? `${ev.end.date}T00:00:00Z` : null);
+    if (!startISO || !endISO || !ev.start?.dateTime) continue; // skip all-day events
+    personalSpans.push({
+      start: new Date(startISO),
+      end: new Date(endISO),
+      title: ev.summary || "Busy",
+      known: false,
+      source: "personal",
+      googleEventId: ev.id,
+      ownBookingId: bookingIdBySecondaryEventId.get(ev.id),
+      roomBlock: false,
+    });
+  }
+
+  const google = [...personalSpans, ...perSource.flat()];
   return [...known, ...google].sort((a, b) => a.start.getTime() - b.start.getTime());
 }
