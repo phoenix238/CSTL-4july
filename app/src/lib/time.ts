@@ -40,6 +40,25 @@ export function londonTime(y: number, m: number, d: number, hour: number, minute
 }
 
 /**
+ * The instant for a London wall-clock time, or `null` when that time doesn't
+ * exist.
+ *
+ * On the spring-forward Sunday the clocks jump 01:00 → 02:00, so 01:00–01:59
+ * never happens. `londonTime` above still has to return *something* and snaps
+ * forward into the real timeline — fine for a composer where the user picked a
+ * time and any sane instant will do, wrong for generating bookable slots: the
+ * scan would offer "01:00", the instant would actually be 02:00, and the two
+ * candidates either side of the gap would collapse onto the same moment.
+ *
+ * Expects a real calendar date (no day overflow); the check is on the
+ * wall-clock time, which is the only part the clock change can move.
+ */
+export function londonTimeExact(y: number, m: number, d: number, hour: number, minute = 0): Date | null {
+  const at = londonTime(y, m, d, hour, minute);
+  return londonMinutes(at) === hour * 60 + minute ? at : null;
+}
+
+/**
  * The London day `n` calendar days after `from`, at 00:00 London — DST-safe.
  * Works off the wall-clock date (not a fixed 24 h step), so it never drifts an
  * hour or lands on the wrong day across the spring/autumn clock changes.

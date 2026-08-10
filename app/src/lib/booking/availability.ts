@@ -8,7 +8,7 @@ import {
   londonAddDays,
   londonDateKey,
   londonMinutes,
-  londonTime,
+  londonTimeExact,
   londonWeekdayIndex,
   londonWeekStart,
   londonYMD,
@@ -215,7 +215,7 @@ export interface DayTrace {
   candidates: number;
   bookable: number;
   /** why the rest were dropped */
-  dropped: { past: number; hours: number; busy: number; cap: number };
+  dropped: { past: number; hours: number; busy: number; cap: number; clockChange: number };
 }
 
 /**
@@ -256,15 +256,20 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
       openMinutes: intervals.reduce((sum, iv) => sum + (iv.end - iv.start), 0),
       candidates: 0,
       bookable: 0,
-      dropped: { past: 0, hours: 0, busy: 0, cap: 0 },
+      dropped: { past: 0, hours: 0, busy: 0, cap: 0, clockChange: 0 },
     };
     days.push(trace);
     if (!intervals.length) continue;
 
     for (const interval of intervals) {
       for (let minute = interval.start; minute + SESSION_MINUTES <= interval.end; minute += slotMinutes) {
-        const candidate = londonTime(y, m, d, Math.floor(minute / 60), minute % 60);
+        // Null on the spring-forward Sunday, for the hour that doesn't happen.
+        const candidate = londonTimeExact(y, m, d, Math.floor(minute / 60), minute % 60);
         trace.candidates++;
+        if (!candidate) {
+          trace.dropped.clockChange++;
+          continue;
+        }
         if (candidate < cutoff) {
           trace.dropped.past++;
           continue;
@@ -297,13 +302,14 @@ export function explainEmptyDay(trace: DayTrace): string {
   if (trace.bookable > 0) return "";
   if (trace.openMinutes === 0) return "No hours set for this day";
   if (trace.candidates === 0) return "The hours set are shorter than one session";
-  const { past, hours, busy, cap } = trace.dropped;
+  const { past, hours, busy, cap, clockChange } = trace.dropped;
   // Reported worst-first: the cap and a full diary are the surprising answers,
   // the notice window and short hours are the expected ones.
   if (cap > 0 && cap >= busy) return "Weekly Chalk Farm hours cap reached for this week";
   if (busy > 0 && busy >= past) return "Everything's taken — busy time on your calendar, or gaps too small";
   if (past > 0) return "Too soon to book — inside your minimum-notice window";
   if (hours > 0) return "The hours set don't leave room for a full session";
+  if (clockChange > 0) return "The clocks change on this day — those hours don't exist";
   return "Nothing bookable";
 }
 

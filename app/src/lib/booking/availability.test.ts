@@ -11,7 +11,7 @@ import {
   type OverrideWindow,
   type WeeklyWindow,
 } from "./availability";
-import { londonDateKey, londonDayStart, londonTime, londonWeekdayIndex, londonWeekStart, londonYMD } from "@/lib/time";
+import { fmtTime, londonDateKey, londonDayStart, londonTime, londonWeekdayIndex, londonWeekStart, londonYMD } from "@/lib/time";
 
 // Tue 7 July 2026 and Sun 5 July 2026 (same week, London/BST).
 const TUESDAY = londonDayStart(0, new Date("2026-07-07T12:00:00Z"));
@@ -79,6 +79,82 @@ describe("computeAvailableSlots across the autumn DST fall-back", () => {
     const sundaySlots = slots.filter((d) => londonYMD(d).d === 26 && londonYMD(d).m === 10);
     expect(sundaySlots).toHaveLength(15);
   });
+});
+
+describe("computeAvailableSlots across the spring DST jump", () => {
+  // Sun 29 March 2026: the clocks go forward at 01:00 GMT, so 01:00–01:59
+  // London never happens that day. Hours are set right across the gap.
+  const SPRING = londonDayStart(0, new Date("2026-03-29T12:00:00Z"));
+  const springWeekday = londonWeekdayIndex(SPRING);
+  const overnight: WeeklyWindow[] = [{ weekday: springWeekday, startMin: 0, endMin: 300 }]; // 00:00–05:00
+  const pastNow = new Date("2020-01-01T00:00:00Z");
+
+  const run = () =>
+    computeAvailability({
+      clinic: "waterloo",
+      windowStart: SPRING,
+      windowEnd: londonDayStart(1, SPRING),
+      weeklyHours: overnight,
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      now: pastNow,
+    });
+
+  it("never offers a time that doesn't exist", () => {
+    // Every slot must report back the wall-clock time it claims to be.
+    for (const slot of run().slots) {
+      const label = fmtTime(slot);
+      expect(label).not.toBe("01:00");
+      expect(label).not.toBe("01:30");
+    }
+  });
+
+  it("produces no duplicate instants across the gap", () => {
+    // Before the fix, 01:00 and 02:00 both resolved to the same moment.
+    const isos = run().slots.map((d) => d.toISOString());
+    expect(new Set(isos).size).toBe(isos.length);
+  });
+
+  it("still offers the hours either side of the jump", () => {
+    const labels = run().slots.map(fmtTime);
+    expect(labels).toContain("00:00");
+    expect(labels).toContain("02:00");
+    expect(labels).toContain("03:00");
+  });
+
+  it("counts the skipped hour rather than losing track of it", () => {
+    const day = run().days[0];
+    const { past, hours, busy, cap, clockChange } = day.dropped;
+    expect(clockChange).toBe(2); // 01:00 and 01:30
+    expect(day.bookable + past + hours + busy + cap + clockChange).toBe(day.candidates);
+  });
+});
+
+describe("computeAvailableSlots on ordinary times on DST days", () => {
+  // The change must not disturb the times a session actually happens at.
+  const pastNow = new Date("2020-01-01T00:00:00Z");
+  for (const [label, iso] of [
+    ["spring forward", "2026-03-29T12:00:00Z"],
+    ["autumn fall back", "2026-10-25T12:00:00Z"],
+  ] as const) {
+    it(`keeps working hours intact on the ${label} day`, () => {
+      const day = londonDayStart(0, new Date(iso));
+      const slots = computeAvailableSlots({
+        clinic: "waterloo",
+        windowStart: day,
+        windowEnd: londonDayStart(1, day),
+        weeklyHours: [{ weekday: londonWeekdayIndex(day), startMin: 540, endMin: 1020 }], // 9-5
+        overrides: [],
+        busy: [],
+        slotMinutes: 30,
+        now: pastNow,
+      });
+      expect(slots.map(fmtTime)).toContain("09:00");
+      expect(slots.map(fmtTime)).toContain("16:00");
+      expect(slots).toHaveLength(15);
+    });
+  }
 });
 
 describe("resolveWeeklyHours", () => {
@@ -164,8 +240,8 @@ describe("computeAvailability", () => {
       now: at(10),
       minNoticeMinutes: 120,
     }).days[0];
-    const { past, hours, busy, cap } = day.dropped;
-    expect(day.bookable + past + hours + busy + cap).toBe(day.candidates);
+    const { past, hours, busy, cap, clockChange } = day.dropped;
+    expect(day.bookable + past + hours + busy + cap + clockChange).toBe(day.candidates);
   });
 });
 
