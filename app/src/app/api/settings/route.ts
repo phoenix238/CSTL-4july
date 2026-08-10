@@ -16,6 +16,13 @@ export const GET = guarded(async () => {
     bethnalAddress: s.bethnalAddress,
     waterlooArrivalNote: s.waterlooArrivalNote,
     bethnalArrivalNote: s.bethnalArrivalNote,
+    // The email preview composes the real thing in the browser — without these
+    // it would show a generated Maps search link where the sent email uses the
+    // pin, and omit the directions entirely.
+    waterlooLocationUrl: s.waterlooLocationUrl,
+    bethnalLocationUrl: s.bethnalLocationUrl,
+    waterlooDirections: s.waterlooDirections,
+    bethnalDirections: s.bethnalDirections,
     weeklyHours: resolveWeeklyHours(s.weeklyHours),
     bookingSlotMinutes: s.bookingSlotMinutes,
     bookingMinNoticeMins: s.bookingMinNoticeMins,

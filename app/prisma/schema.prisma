@@ -167,8 +167,8 @@ model Enquiry {
 model AppSettings {
   id                    Int    @id @default(1)
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
-  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nWhen you have a moment, please fill in your short intake form — it takes a couple of minutes and goes straight into your confidential record:\n{intakeLink}\n\nSee you soon,\nPhoenix")
-  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nWhen you have a moment, please fill in your short intake form — it takes a couple of minutes and goes straight into your confidential record:\n{intakeLink}\n\nSee you soon,\nPhoenix")
+  emailTemplateWaterloo String @default("Hi {name},\n\nYou're booked in for {when} at Waterloo — 60 minutes, £80, payable on the day by card or bank transfer.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
+  emailTemplateBethnal  String @default("Hi {name},\n\nYou're booked in for {when} at Bethnal Green — 60 minutes on a £30–60 sliding scale, pay what feels fair on the day.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
   waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
   bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
