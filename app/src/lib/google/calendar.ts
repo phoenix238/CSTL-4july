@@ -178,6 +178,14 @@ export interface BusySpan {
   clientId?: string;
   /** set on our own bookings — enables cancel/reschedule */
   bookingId?: string;
+  /**
+   * The booking this span belongs to, including the paired room / Chalk Farm
+   * event — which `bookingId` deliberately doesn't carry, since that one drives
+   * the calendar's cancel/reschedule affordances and would double them up.
+   * Availability uses this to drop *every* trace of a booking being rescheduled,
+   * so a client moving their session can see the time they currently hold.
+   */
+  ownBookingId?: string;
   clinic?: Clinic;
   /** Google's event id — set on real Google events (not our bookings / opaque
    * free-busy blocks); enables editing/deleting the event in place. */
@@ -220,12 +228,18 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
       source: "booking" as const,
       clientId: b.clientId,
       bookingId: b.id,
+      ownBookingId: b.id,
       clinic,
     };
   });
   // Only the personal-calendar event is suppressed — the booking span already
   // represents it. The room / Chalk Farm event is kept so it shows alongside.
   const ownEventIds = new Set(bookings.map((b) => b.personalEventId).filter(Boolean));
+  // …but availability still needs to know which booking that kept event belongs
+  // to, so excluding a booking excludes its room event too.
+  const bookingIdBySecondaryEventId = new Map(
+    bookings.filter((b) => b.secondaryEventId).map((b) => [b.secondaryEventId, b.id] as const),
+  );
 
   // The shared Chalk Farm day block(s) in this window — tagged `roomBlock` so
   // every collision check below can ignore them (only real sessions count).
@@ -249,16 +263,26 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
   const perSource = await Promise.all(
     sources.map(async ({ id, source }): Promise<BusySpan[]> => {
       try {
-        const res = await calendar.events.list({
-          calendarId: id,
-          timeMin: windowStart.toISOString(),
-          timeMax: windowEnd.toISOString(),
-          singleEvents: true,
-          orderBy: "startTime",
-          maxResults: 250,
-        });
+        // Page until Google runs out. A single 250-event page silently dropped
+        // everything past the 250th event in the window — on a busy shared room
+        // calendar that made genuinely taken time look bookable.
+        const items = [];
+        let pageToken: string | undefined;
+        do {
+          const res = await calendar.events.list({
+            calendarId: id,
+            timeMin: windowStart.toISOString(),
+            timeMax: windowEnd.toISOString(),
+            singleEvents: true,
+            orderBy: "startTime",
+            maxResults: 250,
+            pageToken,
+          });
+          items.push(...(res.data.items ?? []));
+          pageToken = res.data.nextPageToken ?? undefined;
+        } while (pageToken);
         const spans: BusySpan[] = [];
-        for (const ev of res.data.items ?? []) {
+        for (const ev of items) {
           if (!ev.id || ownEventIds.has(ev.id)) continue;
           if (ev.transparency === "transparent" || ev.status === "cancelled") continue;
           const startISO = ev.start?.dateTime ?? (ev.start?.date ? `${ev.start.date}T00:00:00Z` : null);
@@ -271,6 +295,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
             known: false,
             source,
             googleEventId: ev.id,
+            ownBookingId: bookingIdBySecondaryEventId.get(ev.id),
             roomBlock: source === "chalkFarm" && chalkFarmBlockEventIds.has(ev.id),
           });
         }

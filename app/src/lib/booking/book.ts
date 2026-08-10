@@ -11,7 +11,8 @@ import { fmtDayLong, fmtTime, londonDateKey } from "@/lib/time";
 import { composeBookingEmail } from "./email";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { defaultAmountPence } from "@/lib/account";
-import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
+import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
+import { SlotTakenError } from "./slots";
 
 export interface BookingRequest {
   /** existing client id — or absent with newClient set */
@@ -28,6 +29,17 @@ export interface BookingRequest {
   gmailMessageId?: string;
   /** where the booking came from: admin | online | portal | offer */
   bookedVia?: string;
+  /**
+   * Treat this as a move rather than an addition: cancel the client's existing
+   * upcoming session and free its slot.
+   *
+   * True for the flows Phoenix drives — rebooking someone from the enquiry panel
+   * means moving them, and he can see what it replaced. False everywhere a
+   * client acts alone, where "book a session" means exactly that: a returning
+   * client arranging their next appointment must not silently lose the one they
+   * already have.
+   */
+  replaceUpcoming?: boolean;
 }
 
 export interface BookingResult {
@@ -43,6 +55,71 @@ export interface BookingResult {
   intakeUrl: string;
   /** false if the confirmation email couldn't be sent (booking still stands) */
   emailSent: boolean;
+}
+
+/** Retry a Gmail send through the usual transient failures before giving up. */
+async function withEmailRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Create the booking row, refusing to put two sessions on top of each other.
+ *
+ * Availability has already been checked by this point, but checking and writing
+ * were two separate steps with a gap between them — long enough for two people
+ * on the public page to both be told a slot was free and both be booked into
+ * it. A Postgres advisory lock, held for the length of the transaction and
+ * keyed on the London day, serialises everything touching that day: the second
+ * request waits, re-reads, sees the first booking and is turned away with the
+ * SlotTakenError the routes already render as a friendly "pick another".
+ *
+ * The overlap check spans both clinics deliberately — whatever the room
+ * situation, Phoenix can only be in one session at a time. It's a floor under
+ * the real availability rules, not a replacement for them.
+ */
+async function createBookingRow({
+  clientId,
+  clinic,
+  start,
+  bookedVia,
+}: {
+  clientId: string;
+  clinic: Clinic;
+  start: Date;
+  bookedVia: string;
+}) {
+  const end = new Date(start.getTime() + SESSION_MINUTES * 60_000);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${londonDateKey(start)}`}))`;
+    const clash = await tx.booking.findFirst({
+      where: {
+        status: "confirmed",
+        startsAt: { gt: new Date(start.getTime() - SESSION_MINUTES * 60_000), lt: end },
+      },
+    });
+    if (clash) throw new SlotTakenError();
+    return tx.booking.create({
+      data: {
+        clientId,
+        clinic,
+        startsAt: start,
+        bookedVia,
+        // Waterloo has a fixed price, so it's known the moment the session is booked.
+        // Bethnal Green is a sliding scale the client chooses — left null rather than
+        // guessed, and filled in from the profile once the real amount is known.
+        amountPence: defaultAmountPence(clinic),
+      },
+    });
+  });
 }
 
 /**
@@ -72,27 +149,24 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   }
 
   // Reschedule rule: an existing client's upcoming booking is replaced —
-  // the old events are deleted so the old slot is genuinely free again.
-  const upcoming = await prisma.booking.findFirst({
-    where: { clientId, status: "confirmed", startsAt: { gte: new Date() } },
-  });
+  // the old events are deleted so the old slot is genuinely free again. Only
+  // when the caller actually means "move them" (see BookingRequest.replaceUpcoming).
   let replacedLabel: string | null = null;
-  if (upcoming) {
-    await cancelBookingEvents(upcoming.id);
-    replacedLabel = `${fmtDayLong(upcoming.startsAt)} · ${fmtTime(upcoming.startsAt)}`;
+  if (req.replaceUpcoming ?? true) {
+    const upcoming = await prisma.booking.findFirst({
+      where: { clientId, status: "confirmed", startsAt: { gte: new Date() } },
+    });
+    if (upcoming) {
+      await cancelBookingEvents(upcoming.id);
+      replacedLabel = `${fmtDayLong(upcoming.startsAt)} · ${fmtTime(upcoming.startsAt)}`;
+    }
   }
 
-  const booking = await prisma.booking.create({
-    data: {
-      clientId,
-      clinic: req.clinic,
-      startsAt: start,
-      bookedVia: req.bookedVia ?? "admin",
-      // Waterloo has a fixed price, so it's known the moment the session is booked.
-      // Bethnal Green is a sliding scale the client chooses — left null rather than
-      // guessed, and filled in from the profile once the real amount is known.
-      amountPence: defaultAmountPence(req.clinic),
-    },
+  const booking = await createBookingRow({
+    clientId,
+    clinic: req.clinic,
+    start,
+    bookedVia: req.bookedVia ?? "admin",
   });
   await createBookingEvents(booking.id);
 
@@ -125,11 +199,16 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     // scare the client into thinking they don't have a slot. Fall back to the
     // clipboard text so it's not lost, and let Phoenix know to follow up.
     try {
-      await sendEmail(
-        client.email,
-        email.subject,
-        body,
-        req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
+      // Retried, because this is the client's only written record that their
+      // session exists — the confirmation screen is gone the moment they close
+      // the tab. A transient Gmail hiccup shouldn't cost them that.
+      await withEmailRetry(() =>
+        sendEmail(
+          client.email,
+          email.subject,
+          body,
+          req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
+        ),
       );
       emailSent = true;
       firstContactMade = true;
@@ -142,6 +221,13 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     } catch (err) {
       console.error("Booking confirmed but the confirmation email failed to send", err);
       emailTextForClipboard = body;
+      // The booking stands and the client has nothing in writing. Record that
+      // plainly on the row so it can be found and resent, rather than living
+      // only in a server log nobody reads.
+      await prisma.booking.update({
+        where: { id: booking.id },
+        data: { confirmationFailedAt: new Date() },
+      });
       items.push("Booked, but the confirmation email couldn't be sent — please follow up with them directly");
     }
   } else if (req.sendEmail && !client.email) {

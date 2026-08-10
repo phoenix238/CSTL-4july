@@ -4,8 +4,28 @@ import { upsertMarketingRow } from "@/lib/google/sheets";
 import { cancelBookingEvents } from "@/lib/google/calendar";
 
 /**
+ * Match a stranger typing into the public booking form to an existing record —
+ * on their email address and nothing else.
+ *
+ * The fuzzy matching in `findExistingClient` below is right when Phoenix is in
+ * the loop and can see who it picked. Unsupervised it is dangerous: "Sarah"
+ * matches "Sarah Kimani" on the first-name rule, and the booking that follows
+ * would take over her record and cancel her upcoming session. Email is the only
+ * identifier a visitor supplies that is actually theirs.
+ */
+export async function findClientByEmail(email: string) {
+  const trimmed = email.trim();
+  if (!trimmed) return null;
+  return prisma.client.findFirst({ where: { email: { equals: trimmed, mode: "insensitive" } } });
+}
+
+/**
  * Single source of truth: before creating a client, look for an existing one
  * by email, phone, or (fuzzy) name — one client, one record.
+ *
+ * Fuzzy on purpose, for the flows Phoenix drives himself (enquiries, imports),
+ * where he sees and can override the match. Never call this from a public route
+ * — use `findClientByEmail`.
  */
 export async function findExistingClient(name: string, email?: string, phone?: string) {
   if (email) {

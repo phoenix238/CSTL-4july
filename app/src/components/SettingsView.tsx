@@ -48,6 +48,7 @@ export interface SettingsData {
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
   chalkFarmWeeklyCapHours: number;
+  crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
   clientCopy: ClientCopy;
   portalEnabled: boolean;
@@ -363,6 +364,7 @@ export function SettingsView({
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
           chalkFarmWeeklyCapHours={settings.chalkFarmWeeklyCapHours}
+          crossClinicGapMinutes={settings.crossClinicGapMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
         />

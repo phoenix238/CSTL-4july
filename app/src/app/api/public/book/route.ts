@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
-import { findExistingClient } from "@/lib/clients";
+import { findClientByEmail } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
 import { sendEmail } from "@/lib/google/gmail";
@@ -49,7 +49,8 @@ export async function POST(req: Request) {
     const settings = await getSettings();
     await assertSlotAvailable({ clinic: clinic as Clinic, start });
 
-    const existing = await findExistingClient(cleanName, cleanEmail, cleanPhone);
+    // Email only — never the fuzzy name/phone match. See findClientByEmail.
+    const existing = await findClientByEmail(cleanEmail);
     const result = await bookSession({
       clientId: existing?.id,
       newClient: existing ? undefined : { name: cleanName, email: cleanEmail, phone: cleanPhone },
@@ -58,6 +59,9 @@ export async function POST(req: Request) {
       sendEmail: true,
       sendPayment: true,
       bookedVia: "online",
+      // A returning client booking here is arranging another session, not moving
+      // the one they already have. Moving is what the portal's reschedule is for.
+      replaceUpcoming: false,
     });
 
     // Let Phoenix know a booking came in — non-fatal: the booking itself has

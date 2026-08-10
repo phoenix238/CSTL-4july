@@ -172,8 +172,12 @@ function slotFits(
   const endPadMin = Math.round(
     (rawFootprint.end.getTime() - (candidate.getTime() + SESSION_MINUTES * 60_000)) / 60_000,
   );
-  const footprintStart = minute - startPadMin - bufferMinutes;
-  const footprintEnd = minute + SESSION_MINUTES + endPadMin + bufferMinutes;
+  // Deliberately NOT padded by `bufferMinutes`. The buffer is breathing room
+  // between Phoenix and *other bookings* — it is not clearance he needs from the
+  // edge of his own working day. Padding it here cost an hour a day: hours of
+  // 09:00–17:00 with a 15-min buffer offered nothing before 09:30 or after 15:30.
+  const footprintStart = minute - startPadMin;
+  const footprintEnd = minute + SESSION_MINUTES + endPadMin;
   if (!intervals.some((iv) => footprintStart >= iv.start && footprintEnd <= iv.end)) return false;
 
   // Each busy span pads by its own buffer if it has one (e.g. a bigger

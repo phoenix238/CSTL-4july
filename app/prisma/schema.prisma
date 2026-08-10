@@ -104,6 +104,10 @@ model Booking {
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
   secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
   emailSent        Boolean  @default(false)
+  // Set when the booking succeeded but its confirmation email didn't go out, so
+  // a client left with nothing in writing is findable and can be followed up —
+  // rather than the failure existing only in a server log.
+  confirmationFailedAt DateTime?
   createdAt        DateTime @default(now())
 
   // — Payment —
@@ -219,6 +223,11 @@ model AppSettings {
   chalkFarmBufferMinutes Int @default(30) // safety gap around a studio-mate's booking on the shared Chalk Farm calendar (Bethnal Green)
   chalkFarmEdgeBufferMinutes Int @default(15) // padding added before the day's first and after the day's last Bethnal session on the shared "Phoenix" Chalk Farm block, so studio-mates don't book right up against it
   chalkFarmWeeklyCapHours Int @default(10) // Bethnal Green: max total hours of Phoenix's own confirmed sessions bookable in one London calendar week (Mon-Sun); 0 = no cap
+  // Travel time between the two clinics. Working a Waterloo morning and a Bethnal
+  // Green evening on the same day is fine and deliberate — this is the clearance
+  // kept around a session at the *other* site so the two can't be booked so close
+  // together that the journey is impossible.
+  crossClinicGapMinutes Int @default(90)
   bookingNotifyEmail   Boolean @default(true) // email Phoenix when someone books via /book
 
   // — Client portal (/me/[token]) —

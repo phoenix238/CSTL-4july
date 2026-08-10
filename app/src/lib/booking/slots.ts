@@ -1,5 +1,5 @@
 import { prisma, getSettings } from "@/lib/db";
-import { getBusySpans } from "@/lib/google/calendar";
+import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonWeekStart } from "@/lib/time";
 import { computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
@@ -36,6 +36,61 @@ export async function loadBethnalWeeklyCap(
     bookedMinutesByWeek[key] = (bookedMinutesByWeek[key] ?? 0) + SESSION_MINUTES;
   }
   return { capMinutes: settings.chalkFarmWeeklyCapHours * 60, bookedMinutesByWeek };
+}
+
+/**
+ * Does this busy span actually stop Phoenix working at `clinic`?
+ *
+ * The room calendars are shared with other practitioners, so their events mean
+ * "this *room* is taken", not "Phoenix is taken" — and a room at one site says
+ * nothing about the other. Phoenix's own time (his personal calendar, his own
+ * bookings) always counts, wherever it is.
+ */
+function appliesToClinic(span: BusySpan, clinic: Clinic): boolean {
+  if (span.source === "chalkFarm") return clinic === "bethnal";
+  if (span.source === "room") return clinic === "waterloo";
+  return true;
+}
+
+/**
+ * The clearance to keep either side of one busy span.
+ *
+ * Three different gaps, because they're three different problems: getting across
+ * London between the two clinics, not booking right onto a studio-mate's Chalk
+ * Farm session, and simple breathing room between Phoenix's own back-to-back
+ * clients. `undefined` means "use the clinic's own default".
+ */
+function spanBuffer(
+  span: BusySpan,
+  clinic: Clinic,
+  settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
+): number | undefined {
+  // A confirmed session at the *other* clinic — Phoenix has to physically get
+  // there. This is what makes a Waterloo morning and a Bethnal Green evening
+  // safe on the same day: the two are allowed to coexist, just not back to back.
+  if (span.clinic && span.clinic !== clinic) return settings.crossClinicGapMinutes;
+  if (span.source === "chalkFarm") return settings.chalkFarmBufferMinutes;
+  return undefined;
+}
+
+/**
+ * Turn raw busy spans into the ones that actually constrain `clinic`, each
+ * carrying the right clearance. Shared by `loadAvailableSlots` and the
+ * offer-pick route, which checks a hand-picked time without going through it —
+ * the two drifting apart is exactly how a slot comes to look free on one
+ * surface and refuse the booking on another.
+ */
+export function filterBusyForClinic(
+  busy: BusySpan[],
+  clinic: Clinic,
+  settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
+  excludeBookingId?: string,
+): Array<BusySpan & { bufferMinutes?: number }> {
+  return busy
+    .filter((b) => !b.roomBlock)
+    .filter((b) => !excludeBookingId || b.ownBookingId !== excludeBookingId)
+    .filter((b) => appliesToClinic(b, clinic))
+    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, clinic, settings) }));
 }
 
 /**
@@ -80,16 +135,7 @@ export async function loadAvailableSlots({
       startMin: o.startMin,
       endMin: o.endMin,
     })),
-    // The shared Chalk Farm room block spans the whole day's Bethnal sessions —
-    // exclude it or a free gap between two sessions would look busy. A studio-mate's
-    // real booking on that same calendar gets its own bigger safety gap instead.
-    busy: busy
-      .filter((b) => !b.roomBlock)
-      .filter((b) => !excludeBookingId || b.bookingId !== excludeBookingId)
-      .map((b) => ({
-        ...b,
-        bufferMinutes: b.source === "chalkFarm" ? settings.chalkFarmBufferMinutes : undefined,
-      })),
+    busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId),
     slotMinutes: settings.bookingSlotMinutes,
     // Waterloo and Bethnal Green don't need the same spacing between Phoenix's
     // own back-to-back sessions — kept as separate settings per clinic.

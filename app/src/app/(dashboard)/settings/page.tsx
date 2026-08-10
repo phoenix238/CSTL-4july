@@ -52,6 +52,7 @@ export default async function SettingsPage() {
         chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
         chalkFarmEdgeBufferMinutes: settings.chalkFarmEdgeBufferMinutes,
         chalkFarmWeeklyCapHours: settings.chalkFarmWeeklyCapHours,
+        crossClinicGapMinutes: settings.crossClinicGapMinutes,
         bookingNotifyEmail: settings.bookingNotifyEmail,
         clientCopy: resolveClientCopy(settings.clientCopy),
         portalEnabled: settings.portalEnabled,

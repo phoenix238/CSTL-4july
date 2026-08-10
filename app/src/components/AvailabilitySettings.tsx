@@ -61,6 +61,7 @@ export function AvailabilitySettings({
   chalkFarmBufferMinutes,
   chalkFarmEdgeBufferMinutes,
   chalkFarmWeeklyCapHours,
+  crossClinicGapMinutes,
   bookingNotifyEmail,
   baseUrl,
 }: {
@@ -74,6 +75,7 @@ export function AvailabilitySettings({
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
   chalkFarmWeeklyCapHours: number;
+  crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
   baseUrl: string;
 }) {
@@ -223,6 +225,7 @@ export function AvailabilitySettings({
     chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes,
     chalkFarmWeeklyCapHours,
+    crossClinicGapMinutes,
     notifyEmail: bookingNotifyEmail,
   });
   const [tuningDirty, setTuningDirty] = useState(false);
@@ -242,6 +245,7 @@ export function AvailabilitySettings({
           chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
           chalkFarmEdgeBufferMinutes: tuning.chalkFarmEdgeBufferMinutes,
           chalkFarmWeeklyCapHours: tuning.chalkFarmWeeklyCapHours,
+          crossClinicGapMinutes: tuning.crossClinicGapMinutes,
           bookingNotifyEmail: tuning.notifyEmail,
         }),
       });
@@ -503,6 +507,19 @@ export function AvailabilitySettings({
           hint="Minimum breathing room kept before and after every Bethnal Green session — independent of the Waterloo gap above, since the shared Chalk Farm room may need different spacing."
           onChange={(v) => {
             setTuning((p) => ({ ...p, bethnalBufferMinutes: v }));
+            setTuningDirty(true);
+          }}
+        />
+        <TuningSlider
+          label="Travel time between the two clinics"
+          value={tuning.crossClinicGapMinutes}
+          display={tuning.crossClinicGapMinutes === 0 ? "None" : `${tuning.crossClinicGapMinutes} min`}
+          min={0}
+          max={180}
+          step={15}
+          hint="Working a morning at one clinic and an evening at the other is fine — this is the clearance kept around a session at the other site, so nobody can book the two so close together that you can't make the journey."
+          onChange={(v) => {
+            setTuning((p) => ({ ...p, crossClinicGapMinutes: v }));
             setTuningDirty(true);
           }}
         />

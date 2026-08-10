@@ -24,13 +24,10 @@ export const POST = portalRoute(async (req, client) => {
     throw new PortalRuleError("Please pick a time in the future.");
   }
 
-  // Their current upcoming session doesn't block them — bookSession replaces it.
-  const own = await prisma.booking.findFirst({
-    where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
-    orderBy: { startsAt: "asc" },
-    select: { id: true },
-  });
-  await assertSlotAvailable({ clinic: clinic as Clinic, start, excludeBookingId: own?.id });
+  // This route adds a session; it doesn't move one. So the client's existing
+  // booking is real busy time here and blocks normally — moving is what
+  // /reschedule is for, and that route excludes the booking being moved.
+  await assertSlotAvailable({ clinic: clinic as Clinic, start });
 
   // bookSession sends the client their own confirmation (calendar invite, address,
   // payment details), so there's no separate confirmToClient here — one email, not two.
@@ -41,6 +38,9 @@ export const POST = portalRoute(async (req, client) => {
     sendEmail: true,
     sendPayment: true,
     bookedVia: "portal",
+    // Booking a next session must never quietly delete the session they already
+    // have — /reschedule is the route that moves one.
+    replaceUpcoming: false,
   });
 
   await notifyPhoenix({

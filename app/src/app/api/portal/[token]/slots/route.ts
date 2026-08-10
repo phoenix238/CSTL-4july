@@ -14,15 +14,19 @@ export const GET = portalRoute(async (req, client) => {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }
 
-  // Their own upcoming session shouldn't block them: rescheduling means moving
-  // off it, and booking a new one replaces it. Derived here rather than accepted
-  // from the request — a booking id supplied by the caller would be a way to
-  // punch a hole in *someone else's* slot.
-  const own = await prisma.booking.findFirst({
-    where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
-    orderBy: { startsAt: "asc" },
-    select: { id: true },
-  });
+  // When they're moving a session, their own booking shouldn't block them —
+  // rescheduling means moving off it, so it and its paired room event are
+  // excluded. When they're adding one, it's ordinary busy time and stays.
+  // Derived here rather than accepted from the request: a booking id supplied by
+  // the caller would be a way to punch a hole in *someone else's* slot.
+  const moving = new URL(req.url).searchParams.get("moving") === "1";
+  const own = moving
+    ? await prisma.booking.findFirst({
+        where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
+        orderBy: { startsAt: "asc" },
+        select: { id: true },
+      })
+    : null;
 
   const { windowStart, windowEnd } = await defaultSlotWindow();
   const slots = await loadAvailableSlots({

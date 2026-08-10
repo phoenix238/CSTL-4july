@@ -245,6 +245,46 @@ describe("computeAvailableSlots", () => {
     expect(withBuffer).not.toContainEqual(at(9, 30));
   });
 
+  it("the buffer doesn't eat the edges of the working day — a full day's hours stay fully bookable", () => {
+    // 09:00-17:00 with a 15-min gap between clients. The gap is breathing room
+    // from *other bookings*, not clearance Phoenix needs from 9am itself, so an
+    // empty day must offer the very first and very last session the hours allow.
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }];
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    });
+    expect(slots).toContainEqual(at(9)); // 09:00-10:00, flush with the start
+    expect(slots).toContainEqual(at(16)); // 16:00-17:00, flush with the end
+    expect(slots).not.toContainEqual(at(16, 30)); // would run past 17:00
+  });
+
+  it("still keeps the buffer between two of Phoenix's own sessions", () => {
+    // The other half of the rule above: dropping the edge padding must not have
+    // dropped the gap that actually matters.
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }];
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [{ start: at(12), end: at(13) }],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    });
+    expect(slots).not.toContainEqual(at(11)); // 11:00-12:00 leaves no gap before
+    expect(slots).not.toContainEqual(at(13)); // 13:00-14:00 leaves no gap after
+    expect(slots).toContainEqual(at(10, 30)); // ends 11:30, a clear hour before
+    expect(slots).toContainEqual(at(13, 30)); // starts a clear 30 min after
+  });
+
   it("a busy span's own bufferMinutes overrides the default — e.g. a bigger gap around a studio-mate's booking", () => {
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 480, endMin: 1200 }]; // 8-20
     // A studio-mate's Chalk Farm booking 16:00-17:00, needing a 30-min gap either side.
