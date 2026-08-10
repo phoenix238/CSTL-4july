@@ -6,6 +6,7 @@ import { useState } from "react";
 import { NotesComposer } from "./NotesComposer";
 import { ReflectionComposer } from "./ReflectionComposer";
 import { LinkDocPanel } from "./LinkDocPanel";
+import { CaseHistoryPanel } from "./CaseHistoryPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
@@ -66,6 +67,7 @@ const EDIT_FIELDS: Array<[keyof ProfileClient & string, string]> = [
 
 export function ClientProfile({
   client,
+  caseHistory = {},
   notes,
   recordings,
   nextSession,
@@ -77,6 +79,8 @@ export function ClientProfile({
   paymentRef = "",
 }: {
   client: ProfileClient;
+  /** the case history sheet, keyed by entry key — see caseHistoryLayout.ts */
+  caseHistory?: Record<string, string>;
   notes: ProfileNote[];
   recordings: ProfileRecording[];
   nextSession: string | null;
@@ -401,6 +405,8 @@ export function ClientProfile({
 
       <div className="flex flex-col items-start gap-5 lg:flex-row">
         <section className="flex w-full min-w-0 flex-1 flex-col gap-2.5">
+          <CaseHistoryPanel clientId={client.id} entries={caseHistory} />
+
           <div className="flex items-center justify-between px-0.5">
             <SectionLabel>SESSION NOTES</SectionLabel>
             <TintButton onClick={() => setNoteOpen(!noteOpen)} className="px-3.5 py-1.5 text-xs">

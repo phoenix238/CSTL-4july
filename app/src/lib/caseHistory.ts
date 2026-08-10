@@ -1,22 +1,12 @@
 /**
- * The standard CSTL case history layout.
+ * Reading and writing a client's case history — the record in the database, and
+ * the Google Doc that renders it.
  *
- * Every client's Google Doc is a *rendering* of this: a fixed set of numbered
- * headers, in the same order, for every client — so any Doc can be read at a
- * glance and nothing has to be hunted for.
- *
- *   CASE HISTORY — <name>
- *   AT A GLANCE
- *   1.  INTAKE FORM              ← the form as they submitted it, verbatim, at the top
- *   2.  PRESENTING ISSUE         ← seeded from intake
- *   …
- *   13. SESSION LOG              ← notes append in here, newest first
- *   14. CONSENT & DATA
- *   ORIGINAL RECORD              ← only on reformatted Docs: the old text, kept whole
- *
- * The narrative sections (2–12) live on `Client.caseHistory` and the Doc is
- * written from them, which is what lets an old free-text Doc be rebuilt into
- * this shape — and rebuilt again later — without re-reading it every time.
+ * The layout itself (which headers, in which order, with which boxes) lives in
+ * caseHistoryLayout.ts. The Doc is a *rendering* of `Client.caseHistory` plus
+ * their session notes, which is what lets an old free-text Doc be rebuilt into
+ * the standard shape — and rebuilt again later — and what lets the history be
+ * edited in the app rather than only in Drive.
  */
 
 import { prisma } from "@/lib/db";
@@ -32,96 +22,21 @@ import {
 } from "@/lib/google/drive";
 import { CONSENT_PARAGRAPHS } from "@/lib/intakeQuestions";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import {
+  allEntryKeys,
+  CASE_HISTORY_SECTIONS,
+  CASE_HISTORY_TITLE_PREFIX,
+  CONSENT_HEADING,
+  entryKey,
+  INTAKE_HEADING,
+  isEntryKey,
+  ORIGINAL_RECORD_HEADING,
+  ORIGINAL_RECORD_HINT,
+  sectionHeading,
+  SESSION_LOG_HEADING,
+} from "@/lib/caseHistoryLayout";
 
-/* ---------- the layout ---------- */
-
-/** Sections 2–12: the clinical narrative, one free-text block each. */
-export const NARRATIVE_SECTIONS = [
-  {
-    key: "presenting",
-    heading: "PRESENTING ISSUE",
-    hint: "What they've come with, in their own words where possible.",
-  },
-  {
-    key: "historyOfPresenting",
-    heading: "HISTORY OF PRESENTING ISSUE",
-    hint: "When it started, what's changed since, what makes it better or worse.",
-  },
-  {
-    key: "medical",
-    heading: "MEDICAL HISTORY",
-    hint: "Diagnoses, conditions, ongoing care.",
-  },
-  {
-    key: "medications",
-    heading: "MEDICATIONS & SUPPLEMENTS",
-    hint: "Anything they take regularly, and what for.",
-  },
-  {
-    key: "previousTreatment",
-    heading: "PREVIOUS TREATMENT / THERAPIES",
-    hint: "Other bodywork, talking therapy, physio — what helped and what didn't.",
-  },
-  {
-    key: "lifestyle",
-    heading: "LIFESTYLE, WORK & STRESSORS",
-    hint: "Work and posture, sleep, exercise, what's loading them at the moment.",
-  },
-  {
-    key: "birthDevelopment",
-    heading: "BIRTH & DEVELOPMENTAL HISTORY",
-    hint: "Birth, early years, anything developmental worth holding in mind.",
-  },
-  {
-    key: "injuries",
-    heading: "INJURIES, ACCIDENTS & SURGERY",
-    hint: "Falls, whiplash, dental work, operations — with rough dates.",
-  },
-  {
-    key: "redFlags",
-    heading: "RED FLAGS / CAUTIONS",
-    hint: "Anything to work around, refer on, or keep an eye on.",
-  },
-  {
-    key: "goals",
-    heading: "GOALS — WHAT THEY WANT FROM THE WORK",
-    hint: "What a good outcome looks like to them.",
-  },
-  {
-    key: "plan",
-    heading: "TREATMENT PLAN",
-    hint: "Frequency, approach, what to review and when.",
-  },
-] as const;
-
-export type NarrativeKey = (typeof NARRATIVE_SECTIONS)[number]["key"];
-
-export const NARRATIVE_KEYS = NARRATIVE_SECTIONS.map((s) => s.key) as NarrativeKey[];
-
-/** Numbering: 1 is the intake form, 2–12 the narrative, then the log and consent. */
-const FIRST_NARRATIVE_NUMBER = 2;
-const SESSION_LOG_NUMBER = FIRST_NARRATIVE_NUMBER + NARRATIVE_SECTIONS.length; // 13
-const CONSENT_NUMBER = SESSION_LOG_NUMBER + 1; // 14
-
-export const CASE_HISTORY_TITLE_PREFIX = "CASE HISTORY — ";
-export const INTAKE_HEADING = "1. INTAKE FORM";
-export const SESSION_LOG_HEADING = `${SESSION_LOG_NUMBER}. SESSION LOG`;
-export const CONSENT_HEADING = `${CONSENT_NUMBER}. CONSENT & DATA`;
-
-/**
- * Marks the untouched copy of a Doc's contents from before it was reformatted.
- * Also how a re-run recognises the tail it must carry through rather than
- * fold into itself again.
- */
-export const ORIGINAL_RECORD_HEADING = "ORIGINAL RECORD — BEFORE REFORMATTING";
-
-const ORIGINAL_RECORD_HINT =
-  "Everything this Doc held before it was reformatted, kept word for word. Nothing above replaces it — delete this section once you're happy the record above is complete.";
-
-export function narrativeHeading(key: NarrativeKey): string {
-  const index = NARRATIVE_SECTIONS.findIndex((s) => s.key === key);
-  return `${FIRST_NARRATIVE_NUMBER + index}. ${NARRATIVE_SECTIONS[index].heading}`;
-}
+export * from "@/lib/caseHistoryLayout";
 
 /* ---------- stored shapes ---------- */
 
@@ -130,6 +45,9 @@ export interface IntakeItem {
   label: string;
   value: string;
   group: "details" | "health" | "custom" | "caseHistory";
+  /** The case history box this answer feeds, captured at submission time so the
+   *  mapping survives the question later being reworded or removed. */
+  caseKey?: string;
 }
 
 export interface IntakeSnapshot {
@@ -143,21 +61,43 @@ export interface PriorSession {
   text: string;
 }
 
-export type CaseHistory = Partial<Record<NarrativeKey, string>> & {
+export interface CaseHistory {
+  /** Keyed by entry key: "diet", "family.mother". Only non-empty boxes are kept. */
+  entries: Record<string, string>;
   priorSessions?: PriorSession[];
-};
+}
+
+/** A session as the Doc shows it — the four things recorded each time. */
+export interface SessionEntry {
+  date: Date;
+  clinic: string;
+  bullets: string[];
+  /** how they'd been since the last session */
+  between: string;
+  /** the session note itself */
+  raw: string;
+  /** Phoenix's reflections on the session */
+  reflections: string;
+  /** thoughts for next time */
+  nextSession: string;
+}
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 
 /** Validate whatever is on `Client.caseHistory` — it's Json, so trust nothing. */
 export function resolveCaseHistory(raw: unknown): CaseHistory {
-  if (!raw || typeof raw !== "object") return {};
+  const empty: CaseHistory = { entries: {} };
+  if (!raw || typeof raw !== "object") return empty;
   const input = raw as Record<string, unknown>;
-  const out: CaseHistory = {};
-  for (const key of NARRATIVE_KEYS) {
-    const value = str(input[key]);
-    if (value) out[key] = value;
+
+  const entries: Record<string, string> = {};
+  const source = (input.entries && typeof input.entries === "object" ? input.entries : {}) as Record<string, unknown>;
+  for (const [key, value] of Object.entries(source)) {
+    const text = str(value);
+    if (text && isEntryKey(key)) entries[key] = text;
   }
+
+  const out: CaseHistory = { entries };
   if (Array.isArray(input.priorSessions)) {
     const sessions = input.priorSessions
       .filter((s): s is Record<string, unknown> => !!s && typeof s === "object")
@@ -176,68 +116,90 @@ export function resolveIntakeSnapshot(raw: unknown): IntakeSnapshot | null {
   const groups = new Set(["details", "health", "custom", "caseHistory"]);
   const items: IntakeItem[] = input.items
     .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
-    .map((i) => ({
-      label: str(i.label),
-      value: str(i.value),
-      group: (groups.has(String(i.group)) ? i.group : "custom") as IntakeItem["group"],
-    }))
+    .map((i) => {
+      const caseKey = str(i.caseKey);
+      return {
+        label: str(i.label),
+        value: str(i.value),
+        group: (groups.has(String(i.group)) ? i.group : "custom") as IntakeItem["group"],
+        ...(caseKey && isEntryKey(caseKey) ? { caseKey } : {}),
+      };
+    })
     .filter((i) => i.label);
   if (!items.length) return null;
   return { items, consent: typeof input.consent === "boolean" ? input.consent : null };
 }
 
-/**
- * Parts of the intake inform the case history: an answer the client has already
- * given shouldn't have to be typed again. Each seeded section is attributed, so
- * it's obvious what came from the form and what Phoenix has since written — and
- * a section that already has something in it is never overwritten.
- */
-export function seedFromIntake(existing: CaseHistory, snapshot: IntakeSnapshot, submitted: Date): CaseHistory {
-  const from = `[From the intake form, ${fmtDate(submitted)}]`;
-  const answer = (match: RegExp, group?: IntakeItem["group"]) =>
-    snapshot.items.find((i) => (group ? i.group === group : true) && match.test(i.label))?.value ?? "";
-
-  const seeds: Array<[NarrativeKey, string]> = [
-    ["presenting", snapshot.items.find((i) => i.group === "caseHistory")?.value ?? ""],
-    ["medical", answer(/condition|injur|health/i, "health")],
-    ["medications", answer(/medicat|supplement|drug/i, "health")],
-    ["lifestyle", answer(/occupation|work|job/i, "details")],
-  ];
-
-  const out: CaseHistory = { ...existing };
-  for (const [key, value] of seeds) {
-    if (!value.trim() || out[key]?.trim()) continue;
-    out[key] = `${from}\n${value.trim()}`;
-  }
-  return out;
+/** Has anything been written into the case history yet? */
+export function hasHistory(history: CaseHistory): boolean {
+  return Object.keys(history.entries).length > 0;
 }
 
-/** Has anything been recorded in the clinical sections yet? */
-export function hasNarrative(history: CaseHistory): boolean {
-  return NARRATIVE_KEYS.some((key) => !!history[key]?.trim());
+/**
+ * Only keep boxes that exist and have something in them — how an edit from the
+ * app is cleaned before it's stored, so a renamed section can't leave orphans
+ * behind and a cleared box disappears rather than lingering as "".
+ */
+export function cleanEntries(input: Record<string, unknown>): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (const key of allEntryKeys()) {
+    const value = str(input[key]);
+    if (value) entries[key] = value;
+  }
+  return entries;
+}
+
+/**
+ * The intake form informs the case history: an answer already given seeds the
+ * box it answers, attributed to the form so it's clear what came from the
+ * client and what Phoenix has since written. A box already filled is never
+ * written over.
+ *
+ * The mapping is carried on the questions themselves (`caseKey`), not guessed
+ * from their wording, so re-wording a question in Settings can't silently
+ * detach it from the section it feeds.
+ */
+export function seedFromIntake(
+  existing: CaseHistory,
+  snapshot: IntakeSnapshot,
+  submitted: Date,
+): CaseHistory {
+  const from = `[From the intake form, ${fmtDate(submitted)}]`;
+  const entries = { ...existing.entries };
+
+  for (const item of snapshot.items) {
+    const key = item.caseKey;
+    const value = str(item.value);
+    if (!key || !value || !isEntryKey(key) || entries[key]?.trim()) continue;
+    entries[key] = `${from}\n${value}`;
+  }
+
+  return { ...existing, entries };
 }
 
 /**
  * Fold what was read out of an old Doc into the case history, filling only the
- * sections that are still empty. Anything already recorded — typed by hand, or
- * seeded from the intake form — wins over a re-read of the old text.
- * Returns the merged history and the section headings it actually filled.
+ * boxes that are still empty. Anything already recorded wins over a re-read.
+ * Returns the merged history and the headings it actually filled.
  */
 export function applyExtract(
   existing: CaseHistory,
-  extract: Partial<Record<NarrativeKey, string>> & { priorSessions?: PriorSession[] },
+  extract: { entries?: Record<string, unknown>; priorSessions?: PriorSession[] },
 ): { history: CaseHistory; filled: string[] } {
-  const history: CaseHistory = { ...existing };
+  const entries = { ...existing.entries };
   const filled: string[] = [];
 
-  for (const key of NARRATIVE_KEYS) {
-    const value = str(extract[key]);
-    if (!value || history[key]?.trim()) continue;
-    history[key] = value;
-    filled.push(narrativeHeading(key));
+  for (const [key, raw] of Object.entries(extract.entries ?? {})) {
+    const value = str(raw);
+    if (!value || !isEntryKey(key) || entries[key]?.trim()) continue;
+    entries[key] = value;
+    filled.push(key);
   }
 
-  const prior = (extract.priorSessions ?? []).map((s) => ({ date: str(s.date), text: str(s.text) })).filter((s) => s.text);
+  const history: CaseHistory = { ...existing, entries };
+  const prior = (extract.priorSessions ?? [])
+    .map((s) => ({ date: str(s.date), text: str(s.text) }))
+    .filter((s) => s.text);
   if (prior.length && !history.priorSessions?.length) history.priorSessions = prior;
 
   return { history, filled };
@@ -263,7 +225,7 @@ export interface CaseHistoryInput {
   };
   history: CaseHistory;
   intake: { snapshot: IntakeSnapshot | null; submittedAt: Date | null };
-  sessions: Array<{ date: Date; clinic: string; bullets: string[]; raw: string }>;
+  sessions: SessionEntry[];
   firstSeen: Date | null;
   sessionCount: number;
   /** The Doc's contents from before a reformat, kept whole at the bottom. */
@@ -328,9 +290,8 @@ function intakeSection(input: CaseHistoryInput): DocSection {
   };
 
   block("1.1 Client details", "details", false);
-  block("1.2 Health information", "health", true);
-  // The question itself is the subheading here — no need to print it twice.
-  block("1.3 What brings them to therapy", "caseHistory", true, false);
+  block("1.2 Their history, in their words", "caseHistory", true);
+  block("1.3 Health information", "health", true);
   block("1.4 Additional questions", "custom", true);
 
   lines.push({ kind: "subheading", value: "1.5 Consent" });
@@ -344,36 +305,64 @@ function intakeSection(input: CaseHistoryInput): DocSection {
   return { heading, lines };
 }
 
-/** Sections 2–12, each either the recorded narrative or its prompt. */
-function narrativeSections(history: CaseHistory): DocSection[] {
-  return NARRATIVE_SECTIONS.map((section, i) => {
-    const value = history[section.key]?.trim();
+/** Sections 2–12: an open box, or the section's named boxes. */
+function historySections(history: CaseHistory): DocSection[] {
+  return CASE_HISTORY_SECTIONS.map((section) => {
+    const heading = sectionHeading(section.key);
+
+    if (!section.fields) {
+      const value = history.entries[entryKey(section.key)]?.trim();
+      return { heading, lines: [value ? { kind: "paragraph", value } : { kind: "hint", value: section.hint }] };
+    }
+
+    const written = section.fields.filter((f) => history.entries[entryKey(section.key, f.key)]?.trim());
+    if (!written.length) {
+      return { heading, lines: [{ kind: "hint", value: section.hint }] };
+    }
+    // Only the boxes with something in them — an empty "Wife:" on every record
+    // is noise, and the box is still there in the app when it's needed.
     return {
-      heading: `${FIRST_NARRATIVE_NUMBER + i}. ${section.heading}`,
-      lines: [value ? { kind: "paragraph", value } : { kind: "hint", value: section.hint }] as DocLine[],
+      heading,
+      lines: written.map((f) => ({
+        kind: "paragraph" as const,
+        label: f.label,
+        value: history.entries[entryKey(section.key, f.key)],
+      })),
     };
   });
 }
 
 /** One entry in the session log — also what gets spliced in when a note is saved. */
-export function sessionEntry(note: { date: Date; clinic: string; bullets: string[]; raw: string }): DocSection {
-  return {
-    heading: `${fmtDate(note.date)} · ${clinicLabel(note.clinic)}`,
-    lines: [
-      ...(note.bullets.length ? [{ kind: "bullets" as const, label: "Summary", items: note.bullets }] : []),
-      { kind: "paragraph" as const, label: "Note", value: note.raw },
-    ],
-  };
+export function sessionEntry(note: SessionEntry): DocSection {
+  const lines: DocLine[] = [];
+  if (note.bullets.length) lines.push({ kind: "bullets", label: "Summary", items: note.bullets });
+  if (note.between.trim()) {
+    lines.push({ kind: "paragraph", label: "How they'd been between sessions", value: note.between });
+  }
+  lines.push({ kind: "paragraph", label: "Session notes", value: note.raw });
+  if (note.reflections.trim()) {
+    lines.push({ kind: "paragraph", label: "Session reflections", value: note.reflections });
+  }
+  if (note.nextSession.trim()) {
+    lines.push({ kind: "paragraph", label: "Thoughts for next session", value: note.nextSession });
+  }
+
+  return { heading: `${fmtDate(note.date)} · ${clinicLabel(note.clinic)}`, lines };
 }
 
 function sessionLogSection(input: CaseHistoryInput): DocSection {
-  const lines: DocLine[] = [];
-  if (!input.sessions.length && !input.history.priorSessions?.length) {
-    lines.push({ kind: "hint", value: "No sessions recorded yet. New notes are added here, newest first." });
-  } else {
-    lines.push({ kind: "hint", value: "Newest first." });
-  }
-  return { heading: SESSION_LOG_HEADING, lines };
+  const empty = !input.sessions.length && !input.history.priorSessions?.length;
+  return {
+    heading: SESSION_LOG_HEADING,
+    lines: [
+      {
+        kind: "hint",
+        value: empty
+          ? "No sessions recorded yet. New notes are added here, newest first."
+          : "Newest first.",
+      },
+    ],
+  };
 }
 
 /** Sessions render as their own sections so each one is an outline entry. */
@@ -392,8 +381,7 @@ function sessionSections(input: CaseHistoryInput): DocSection[] {
 
 function consentSection(input: CaseHistoryInput): DocSection {
   const c = input.client;
-  const snapshotConsent = input.intake.snapshot?.consent;
-  const consent = typeof c.consentGiven === "boolean" ? c.consentGiven : snapshotConsent;
+  const consent = typeof c.consentGiven === "boolean" ? c.consentGiven : input.intake.snapshot?.consent;
   return {
     heading: CONSENT_HEADING,
     lines: [
@@ -414,11 +402,14 @@ function consentSection(input: CaseHistoryInput): DocSection {
 }
 
 /** The whole Doc: title, then every section in the standard order. */
-export function buildCaseHistoryDoc(input: CaseHistoryInput): { title: { text: string; subtitle: string }; sections: DocSection[] } {
+export function buildCaseHistoryDoc(input: CaseHistoryInput): {
+  title: { text: string; subtitle: string };
+  sections: DocSection[];
+} {
   const sections: DocSection[] = [
     atAGlance(input),
     intakeSection(input),
-    ...narrativeSections(input.history),
+    ...historySections(input.history),
     sessionLogSection(input),
     ...sessionSections(input),
     consentSection(input),
@@ -468,7 +459,15 @@ export async function loadCaseHistoryInput(
       snapshot: resolveIntakeSnapshot(client.intakeAnswers),
       submittedAt: client.intakeSubmittedAt,
     },
-    sessions: notes.map((n) => ({ date: n.date, clinic: n.clinic, bullets: n.bullets, raw: n.raw })),
+    sessions: notes.map((n) => ({
+      date: n.date,
+      clinic: n.clinic,
+      bullets: n.bullets,
+      between: n.between,
+      raw: n.raw,
+      reflections: n.reflections,
+      nextSession: n.nextSession,
+    })),
     firstSeen: firstBooking?.startsAt ?? (notes.length ? notes[notes.length - 1].date : null),
     sessionCount,
     originalRecord,
@@ -480,7 +479,8 @@ export async function loadCaseHistoryInput(
  *
  * Destructive by design — it's how a Doc is brought onto the layout and kept on
  * it — so callers either own the Doc's contents already (a Doc we just created)
- * or have captured what was there into `originalRecord` first.
+ * or have captured what was there into `originalRecord` first. Prefer
+ * `refreshCaseHistoryDoc`, which captures for you.
  */
 export async function renderCaseHistoryDoc(clientId: string, docId: string, originalRecord?: string) {
   const input = await loadCaseHistoryInput(clientId, originalRecord);
@@ -489,17 +489,12 @@ export async function renderCaseHistoryDoc(clientId: string, docId: string, orig
 }
 
 /**
- * Add a session note to the Doc. Lands at the top of the session log on a Doc
- * that's on the layout; falls back to appending at the end on one that isn't,
- * so a note is never lost to an un-reformatted Doc.
+ * Add a session to the Doc. Lands at the top of the session log on a Doc that's
+ * on the layout; falls back to appending at the end on one that isn't, so a
+ * note is never lost to an un-reformatted Doc.
  */
-export async function addSessionToDoc(
-  docId: string,
-  note: { date: Date; clinic: string; bullets: string[]; raw: string },
-) {
-  const section = sessionEntry(note);
-  const placed = await insertSectionsUnderHeading(docId, SESSION_LOG_HEADING, [section]);
-  if (!placed) await appendFormattedSections(docId, null, [section]);
+export async function addSessionToDoc(docId: string, note: SessionEntry) {
+  await addSectionToSessionLog(docId, sessionEntry(note));
 }
 
 /** Add any pre-built block to the session log — used by the Clean Language save. */

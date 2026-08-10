@@ -65,12 +65,34 @@ model Client {
   notes         SessionNote[]
   recordings    SessionRecording[]
   enquiries     Enquiry[]
+  reflections   Reflection[]
 
   @@index([name])
   @@index([email])
   @@index([intakeToken])
   @@index([portalToken])
   @@index([paymentRef])
+}
+
+// Phoenix's own writing — hers, not the client's record. Some reflections are
+// about a session, some are just thinking, and the Personal tab is where both
+// are written and read back. Also appended to the "Phoenix session reflections"
+// Doc in Drive; this table is what makes them readable in the app at all.
+model Reflection {
+  id         String   @id @default(cuid())
+  // Null = not about anyone in particular, just her own reflection.
+  clientId   String?
+  client     Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // The name as it was when written, so a deleted client doesn't leave the
+  // reflection unattributed.
+  clientName String   @default("")
+  date       DateTime @default(now())
+  text       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date])
+  @@index([clientId])
 }
 
 // Cached copy of a session note for instant profile views;
@@ -83,6 +105,11 @@ model SessionNote {
   clinic    String
   raw       String
   bullets   String[]
+  // The rest of what's recorded each session, alongside the note itself. All
+  // optional in practice — a quick note is still just `raw`.
+  between     String @default("") // how they'd been since the last session
+  reflections String @default("") // Phoenix's reflections on this session
+  nextSession String @default("") // thoughts to pick up next time
   createdAt DateTime @default(now())
 
   @@index([clientId, date])

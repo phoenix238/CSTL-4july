@@ -21,24 +21,38 @@ phone, and updates itself whenever this repo changes.
     access note and optional payment details; returning clients just get the invite.
     "Copy text & register — no email" books without emailing.
   - Rebooking an existing client frees their old slot (old events are deleted).
-- **Clients** — search, one record per person, full profile, editable details, session
-  notes with real voice dictation + Claude bullet summaries, saved to their Google Doc.
+- **Clients** — search, one record per person, full profile, editable details, the case
+  history sheet, and session notes with real voice dictation + Claude bullet summaries,
+  saved to their Google Doc.
 - **Link an existing Doc** — a client whose case history already lives in a Google Doc
   (or whose link got broken) can be pointed straight at it from their profile: search
   your Docs by name or paste the link, and it becomes their record — nothing copied or
   moved — with the option to pull what's already in it into the profile.
 - **Every client** gets `Drive › CSTL › Clients › (name)` with a Doc; the marketing
   spreadsheet (`Drive › CSTL › Clients › Docs`) tracks email + consent.
-- **Case history layout** — every client Doc carries the same headers, in the same order:
-  *at a glance*, then **1. the intake form as they submitted it**, the clinical sections
-  (presenting issue, history of it, medical, medications, previous treatment, lifestyle,
-  birth & development, injuries, red flags, goals, plan), **13. session log** — newest
-  first, where new notes land — and **14. consent & data**. Intake answers seed the
-  sections they already answer, so nothing is asked for twice. New Docs are created on
-  the layout; the **Case history** screen brings existing ones onto it, one client at a
-  time or all of them, sorting each Doc's current text into the sections and keeping the
-  whole of it underneath as *Original record*. Nothing is deleted, and Doc links don't
-  change.
+- **Case history** — every client Doc carries the same headers, in the same order, off
+  Phoenix's own sheet: *at a glance*, **1. the intake form as they submitted it**, then
+  reasons for coming / symptoms · history · accidents and injuries (old/new) · surgery,
+  illness, hospital, trauma, stress (old/new) · family (mother, father, husband, wife,
+  children, siblings) · drugs (present, past, smoking, alcohol) · diet · birth ·
+  dentistry · body language · additional information, then **13. session log** — newest
+  first — and **14. consent & data**. Take it or add to it from the client's profile;
+  saving rewrites their Doc from it.
+- **The intake form fills the case history in advance** — that's the point of it. Each
+  question is mapped to the box it feeds, so what a client sends back is already in the
+  sheet, tagged with where it came from, and doesn't have to be asked again in the room.
+  The mapping is shown in Settings and survives re-wording a question.
+- **Every session** records four things — how they'd been between sessions, the note
+  itself, your reflections, and thoughts for next time — and lands at the top of the
+  Doc's session log.
+- **Reformatting old Docs** — new Docs are created on the layout; the **Case history**
+  screen brings existing ones onto it, one client at a time or all of them, sorting each
+  Doc's current text into the sections and keeping the whole of it underneath as
+  *Original record*. Nothing is deleted, and Doc links don't change.
+- **Personal** — Phoenix's own writing, in one place: reflections on a session tagged
+  with the client, or just thinking, tagged with nobody. Dictate or type, search back
+  through them, filter by client, edit or delete. Everything is also appended to the
+  "Phoenix session reflections" Doc in Drive, linked from the tab.
 - **Calendar** — the week at a glance, personal + room/block events side by side.
 - **Import** — drop old files; Claude extracts client records, duplicates are merged,
   originals stored in each client's folder, legacy notes written into their Doc under

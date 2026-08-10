@@ -141,17 +141,7 @@ export async function extractHighlights(recent: string, existing: string[]): Pro
 }
 
 const caseHistoryExtractSchema = z.object({
-  presenting: z.string(),
-  historyOfPresenting: z.string(),
-  medical: z.string(),
-  medications: z.string(),
-  previousTreatment: z.string(),
-  lifestyle: z.string(),
-  birthDevelopment: z.string(),
-  injuries: z.string(),
-  redFlags: z.string(),
-  goals: z.string(),
-  plan: z.string(),
+  entries: z.record(z.string(), z.string()),
   priorSessions: z.array(z.object({ date: z.string(), text: z.string() })),
 });
 
@@ -172,29 +162,45 @@ export async function extractCaseHistory(
   docText: string,
 ): Promise<CaseHistoryExtract> {
   const text = await chat(
-    `You reorganise a craniosacral therapist's existing client record into a standard case-history layout.
+    `You reorganise a craniosacral therapist's existing client record into her standard case-history sheet.
 
 You are SORTING text, not rewriting it. Copy the client's and therapist's own words across as they were written — keep clinical vocabulary (stillpoint, occipital base, sacrum, unwinding), keep the client's own phrases and metaphors. Do not summarise, do not paraphrase, do not smooth out the wording.
 
-NEVER invent. If the record doesn't cover a section, return an empty string for it. Do not write "none known", "not stated" or similar — an empty string means empty.
+NEVER invent. Leave a box out of "entries" entirely when the record doesn't cover it. Do not write "none known", "not stated" or similar — a missing box means the record is silent on it, which is itself useful to see.
 
 Reply with ONLY a JSON object, no other text:
 {
-  "presenting": "what they came with",
-  "historyOfPresenting": "when it started, how it's changed, what helps or aggravates",
-  "medical": "diagnoses, conditions, ongoing medical care",
-  "medications": "medications and supplements",
-  "previousTreatment": "other bodywork/therapies tried, and how they went",
-  "lifestyle": "work, posture, sleep, exercise, current stressors",
-  "birthDevelopment": "birth and early developmental history",
-  "injuries": "injuries, accidents, falls, dental work, surgery",
-  "redFlags": "cautions, contraindications, anything to refer on or watch",
-  "goals": "what the client wants from the work",
-  "plan": "treatment plan, frequency, approach",
+  "entries": {
+    "reasons": "why they came, their symptoms",
+    "history": "the story of the complaint — when it began, what's happened since, what helps or aggravates",
+    "accidents.old": "older accidents and injuries — falls, whiplash, sports injuries, breaks",
+    "accidents.new": "recent accidents and injuries",
+    "surgery.old": "older surgery, illness, hospital stays, trauma or periods of stress",
+    "surgery.new": "recent surgery, illness, hospital stays, trauma or stress",
+    "family.mother": "the mother's health and history",
+    "family.father": "the father's health and history",
+    "family.husband": "husband or partner",
+    "family.wife": "wife or partner",
+    "family.children": "children",
+    "family.siblings": "siblings",
+    "drugs.present": "medication and supplements taken now",
+    "drugs.past": "medication taken in the past",
+    "drugs.smoking": "smoking",
+    "drugs.alcohol": "alcohol",
+    "diet": "how they eat and drink, anything avoided",
+    "birth": "the client's OWN birth — how it went, interventions",
+    "dentistry": "extractions, braces, implants, jaw work",
+    "bodyLanguage": "observations of how they hold themselves, sit, breathe, move",
+    "additional": "anything else, and what they want from the work"
+  },
   "priorSessions": [{ "date": "the date as written in the record, or empty string", "text": "that session's notes, verbatim" }]
 }
 
-"priorSessions" is for dated session notes already written into the record — list them oldest first, verbatim. Return [] when the record has none. Text that is intake/history rather than a session belongs in the sections above, not here.`,
+Use ONLY those keys. Omit any you have nothing for — an entries object with two keys in it is a perfectly good answer for a thin record.
+
+"birth" is the client's own birth, not their children's — a note about giving birth belongs in "surgery.old" or "family.children".
+
+"priorSessions" is for dated session notes already written into the record — list them oldest first, verbatim. Return [] when the record has none. Text that is history rather than a session belongs in "entries", not here.`,
     `Client: ${clientName}\n\nTheir existing record:\n\n${docText.slice(0, 40_000)}`,
     8000,
   );

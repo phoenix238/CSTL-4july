@@ -99,7 +99,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     // order it was asked. Section 1 of the case history is this, verbatim, so it
     // has to survive the question set being edited in Settings afterwards.
     const groupOf = (q: IntakeQuestion): IntakeItem["group"] =>
-      q.key === "caseHistory" ? "caseHistory"
+      q.caseKey ? "caseHistory"
       : HEALTH_KEYS.has(q.key) ? "health"
       : DETAIL_KEYS.has(q.key) ? "details"
       : "custom";
@@ -108,14 +108,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       items: [
         { label: "Full name", value: finalName, group: "details" },
         ...(finalEmail ? [{ label: "Email", value: finalEmail, group: "details" as const }] : []),
-        ...questions.map((q) => ({ label: q.label, value: str(a[q.key]), group: groupOf(q) })),
+        ...questions.map((q) => ({
+          label: q.label,
+          value: str(a[q.key]),
+          group: groupOf(q),
+          ...(q.caseKey ? { caseKey: q.caseKey } : {}),
+        })),
       ],
       consent: typeof consent === "boolean" ? consent : null,
     };
     const submittedAt = new Date();
 
-    // Parts of the intake inform the case history: answers already given seed
-    // the matching clinical sections rather than being asked for twice.
+    // Parts of the intake inform the case history: each answer seeds the box its
+    // question is mapped to, so nothing has to be asked for a second time in the
+    // room. Boxes already written into are left alone.
     const history = seedFromIntake(resolveCaseHistory(client.caseHistory), snapshot, submittedAt);
 
     await prisma.client.update({
@@ -123,7 +129,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       data: {
         intakeAnswers: snapshot as unknown as Prisma.InputJsonValue,
         intakeSubmittedAt: submittedAt,
-        caseHistory: history as Prisma.InputJsonValue,
+        caseHistory: history as unknown as Prisma.InputJsonValue,
       },
     });
 

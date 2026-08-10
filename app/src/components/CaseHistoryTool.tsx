@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Card, Chip, OutlineButton, PrimaryButton, SectionLabel, useToast } from "./ui";
+import {
+  CASE_HISTORY_SECTIONS,
+  CONSENT_HEADING,
+  sectionHeading,
+  SESSION_LOG_HEADING,
+} from "@/lib/caseHistoryLayout";
 
 interface Row {
   id: string;
@@ -9,7 +15,7 @@ interface Row {
   docId: string;
   formattedAt: string | null;
   intakeDone: boolean;
-  hasNarrative: boolean;
+  hasHistory: boolean;
   sessions: number;
 }
 
@@ -33,19 +39,9 @@ type RowState =
 const LAYOUT = [
   "AT A GLANCE",
   "1. INTAKE FORM — as they submitted it",
-  "2. PRESENTING ISSUE",
-  "3. HISTORY OF PRESENTING ISSUE",
-  "4. MEDICAL HISTORY",
-  "5. MEDICATIONS & SUPPLEMENTS",
-  "6. PREVIOUS TREATMENT / THERAPIES",
-  "7. LIFESTYLE, WORK & STRESSORS",
-  "8. BIRTH & DEVELOPMENTAL HISTORY",
-  "9. INJURIES, ACCIDENTS & SURGERY",
-  "10. RED FLAGS / CAUTIONS",
-  "11. GOALS — WHAT THEY WANT FROM THE WORK",
-  "12. TREATMENT PLAN",
-  "13. SESSION LOG — newest first",
-  "14. CONSENT & DATA",
+  ...CASE_HISTORY_SECTIONS.map((s) => sectionHeading(s.key)),
+  `${SESSION_LOG_HEADING} — newest first`,
+  CONSENT_HEADING,
 ];
 
 const fmtWhen = (iso: string) =>
@@ -280,8 +276,9 @@ export function CaseHistoryTool() {
             ))}
           </ol>
           <p className="mt-3 border-t border-line pt-3 text-[11.5px] leading-[1.5] text-muted">
-            Sections 2–12 are seeded from the intake form where it answers them, and are yours to
-            write into. Section 13 is where every new note lands, newest first.
+            Sections 2–12 are filled from the intake form where it answers them, and are yours to add
+            to from the client&apos;s profile. Section 13 is where every new session lands, newest
+            first.
           </p>
         </Card>
       </div>

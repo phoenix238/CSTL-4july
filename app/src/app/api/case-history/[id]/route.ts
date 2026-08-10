@@ -7,7 +7,8 @@ import { ensureClientFolderAndDoc } from "@/lib/google/drive";
 import {
   applyExtract,
   captureOriginalRecord,
-  hasNarrative,
+  entryLabel,
+  hasHistory,
   renderCaseHistoryDoc,
   resolveCaseHistory,
   resolveIntakeSnapshot,
@@ -45,12 +46,12 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
 
   // Reading the old text is the part that can fail (it's a model call) — when it
   // does, the Doc still gets its headers and still keeps every word it had.
-  if (original && (reread || !hasNarrative(history))) {
+  if (original && (reread || !hasHistory(history))) {
     try {
       const extract = await extractCaseHistory(client.name, original);
       const merged = applyExtract(history, extract);
       history = merged.history;
-      filled = merged.filled;
+      filled = merged.filled.map(entryLabel);
       recoveredSessions = history.priorSessions?.length ?? 0;
     } catch (err) {
       readError = err instanceof Error ? err.message : "couldn't read the old text";
@@ -66,7 +67,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
 
   await prisma.client.update({
     where: { id },
-    data: { caseHistory: history as Prisma.InputJsonValue },
+    data: { caseHistory: history as unknown as Prisma.InputJsonValue },
   });
 
   await renderCaseHistoryDoc(id, docId, original);

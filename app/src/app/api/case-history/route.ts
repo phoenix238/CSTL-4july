@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
-import { hasNarrative, resolveCaseHistory } from "@/lib/caseHistory";
+import { hasHistory, resolveCaseHistory } from "@/lib/caseHistory";
 
 export interface CaseHistoryRow {
   id: string;
@@ -10,8 +10,8 @@ export interface CaseHistoryRow {
   /** already rebuilt onto the standard layout */
   formattedAt: string | null;
   intakeDone: boolean;
-  /** the clinical sections have something in them */
-  hasNarrative: boolean;
+  /** the case history sections have something in them */
+  hasHistory: boolean;
   sessions: number;
 }
 
@@ -36,7 +36,7 @@ export const GET = guarded(async () => {
     docId: c.docId,
     formattedAt: c.caseHistoryFormattedAt?.toISOString() ?? null,
     intakeDone: c.intakeDone,
-    hasNarrative: hasNarrative(resolveCaseHistory(c.caseHistory)),
+    hasHistory: hasHistory(resolveCaseHistory(c.caseHistory)),
     sessions: c._count.notes,
   }));
 

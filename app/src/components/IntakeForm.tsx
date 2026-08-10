@@ -112,7 +112,15 @@ export function IntakeForm({
         </label>
 
         {questions.map((q) => (
-          <label key={q.key} className="flex flex-col gap-1.5">
+          <div key={q.key} className="flex flex-col gap-1.5">
+            {/* The form covers the whole case history now, so it's grouped —
+                otherwise it reads as one very long undifferentiated list. */}
+            {q.groupLabel && (
+              <div className="mt-3 border-t border-line pt-4 font-serif text-[17px] leading-tight first:mt-0 first:border-0 first:pt-0">
+                {q.groupLabel}
+              </div>
+            )}
+            <label className="flex flex-col gap-1.5">
             <span className="text-[12.5px] font-semibold text-ink-soft">{q.label}</span>
             {q.type === "long" ? (
               <textarea
@@ -130,7 +138,8 @@ export function IntakeForm({
                 className={inputClass}
               />
             )}
-          </label>
+            </label>
+          </div>
         ))}
 
         <div className="flex flex-col gap-2 rounded-[10px] bg-inputbg px-3.5 py-3.5">
