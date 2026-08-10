@@ -6,7 +6,7 @@ import { londonDayStart, londonDateKey } from "@/lib/time";
 import { isSlotAvailable, resolveWeeklyHours } from "@/lib/booking/availability";
 import type { Clinic } from "@/lib/booking/rules";
 import { bookSession } from "@/lib/booking/book";
-import { loadBethnalWeeklyCap } from "@/lib/booking/slots";
+import { filterBusyForClinic, loadBethnalWeeklyCap } from "@/lib/booking/slots";
 import { sendEmail } from "@/lib/google/gmail";
 
 function isClinic(v: string): v is Clinic {
@@ -35,9 +35,7 @@ async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Prom
     clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd) : Promise.resolve(undefined),
   ]);
   const weeklyHours = resolveWeeklyHours(settings.weeklyHours)[clinic];
-  const busySpans = busy
-    .filter((b) => !b.roomBlock)
-    .map((b) => ({ ...b, bufferMinutes: b.source === "chalkFarm" ? settings.chalkFarmBufferMinutes : undefined }));
+  const busySpans = filterBusyForClinic(busy, clinic, settings);
   return offeredTimes.filter((t) =>
     isSlotAvailable(t, {
       clinic,

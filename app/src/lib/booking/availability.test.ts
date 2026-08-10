@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeAvailability,
   computeAvailableSlots,
   dayOpenIntervals,
+  explainEmptyDay,
   isSlotAvailable,
   mergeIntervals,
   resolveWeeklyHours,
@@ -9,7 +11,7 @@ import {
   type OverrideWindow,
   type WeeklyWindow,
 } from "./availability";
-import { londonDateKey, londonDayStart, londonTime, londonWeekdayIndex, londonWeekStart, londonYMD } from "@/lib/time";
+import { fmtTime, londonDateKey, londonDayStart, londonTime, londonWeekdayIndex, londonWeekStart, londonYMD } from "@/lib/time";
 
 // Tue 7 July 2026 and Sun 5 July 2026 (same week, London/BST).
 const TUESDAY = londonDayStart(0, new Date("2026-07-07T12:00:00Z"));
@@ -79,6 +81,82 @@ describe("computeAvailableSlots across the autumn DST fall-back", () => {
   });
 });
 
+describe("computeAvailableSlots across the spring DST jump", () => {
+  // Sun 29 March 2026: the clocks go forward at 01:00 GMT, so 01:00–01:59
+  // London never happens that day. Hours are set right across the gap.
+  const SPRING = londonDayStart(0, new Date("2026-03-29T12:00:00Z"));
+  const springWeekday = londonWeekdayIndex(SPRING);
+  const overnight: WeeklyWindow[] = [{ weekday: springWeekday, startMin: 0, endMin: 300 }]; // 00:00–05:00
+  const pastNow = new Date("2020-01-01T00:00:00Z");
+
+  const run = () =>
+    computeAvailability({
+      clinic: "waterloo",
+      windowStart: SPRING,
+      windowEnd: londonDayStart(1, SPRING),
+      weeklyHours: overnight,
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      now: pastNow,
+    });
+
+  it("never offers a time that doesn't exist", () => {
+    // Every slot must report back the wall-clock time it claims to be.
+    for (const slot of run().slots) {
+      const label = fmtTime(slot);
+      expect(label).not.toBe("01:00");
+      expect(label).not.toBe("01:30");
+    }
+  });
+
+  it("produces no duplicate instants across the gap", () => {
+    // Before the fix, 01:00 and 02:00 both resolved to the same moment.
+    const isos = run().slots.map((d) => d.toISOString());
+    expect(new Set(isos).size).toBe(isos.length);
+  });
+
+  it("still offers the hours either side of the jump", () => {
+    const labels = run().slots.map(fmtTime);
+    expect(labels).toContain("00:00");
+    expect(labels).toContain("02:00");
+    expect(labels).toContain("03:00");
+  });
+
+  it("counts the skipped hour rather than losing track of it", () => {
+    const day = run().days[0];
+    const { past, hours, busy, cap, clockChange } = day.dropped;
+    expect(clockChange).toBe(2); // 01:00 and 01:30
+    expect(day.bookable + past + hours + busy + cap + clockChange).toBe(day.candidates);
+  });
+});
+
+describe("computeAvailableSlots on ordinary times on DST days", () => {
+  // The change must not disturb the times a session actually happens at.
+  const pastNow = new Date("2020-01-01T00:00:00Z");
+  for (const [label, iso] of [
+    ["spring forward", "2026-03-29T12:00:00Z"],
+    ["autumn fall back", "2026-10-25T12:00:00Z"],
+  ] as const) {
+    it(`keeps working hours intact on the ${label} day`, () => {
+      const day = londonDayStart(0, new Date(iso));
+      const slots = computeAvailableSlots({
+        clinic: "waterloo",
+        windowStart: day,
+        windowEnd: londonDayStart(1, day),
+        weeklyHours: [{ weekday: londonWeekdayIndex(day), startMin: 540, endMin: 1020 }], // 9-5
+        overrides: [],
+        busy: [],
+        slotMinutes: 30,
+        now: pastNow,
+      });
+      expect(slots.map(fmtTime)).toContain("09:00");
+      expect(slots.map(fmtTime)).toContain("16:00");
+      expect(slots).toHaveLength(15);
+    });
+  }
+});
+
 describe("resolveWeeklyHours", () => {
   it("returns empty (nothing bookable) for null/malformed input", () => {
     expect(resolveWeeklyHours(null)).toEqual({ waterloo: [], bethnal: [] });
@@ -87,6 +165,83 @@ describe("resolveWeeklyHours", () => {
   it("drops malformed windows but keeps valid ones", () => {
     const raw = { waterloo: [{ weekday: 1, startMin: 540, endMin: 1020 }, { weekday: 9, startMin: 0, endMin: 60 }] };
     expect(resolveWeeklyHours(raw).waterloo).toEqual([{ weekday: 1, startMin: 540, endMin: 1020 }]);
+  });
+});
+
+describe("explainEmptyDay", () => {
+  const run = (params: Partial<Parameters<typeof computeAvailability>[0]> = {}) =>
+    computeAvailability({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }], // 9-5
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      now: at(0),
+      ...params,
+    }).days[0];
+
+  it("says nothing at all when the day has bookable time", () => {
+    expect(explainEmptyDay(run())).toBe("");
+  });
+
+  it("names the weekly cap — the reason that costs the most time to work out by hand", () => {
+    const trace = run({
+      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 } },
+    });
+    expect(trace.bookable).toBe(0);
+    expect(explainEmptyDay(trace)).toMatch(/cap/i);
+  });
+
+  it("says when no hours are set for the day", () => {
+    expect(explainEmptyDay(run({ weeklyHours: [] }))).toMatch(/no hours/i);
+  });
+
+  it("says when a full diary is what's blocking it", () => {
+    const trace = run({ busy: [{ start: at(9), end: at(17) }] });
+    expect(explainEmptyDay(trace)).toMatch(/taken/i);
+  });
+
+  it("says when it's the minimum-notice window", () => {
+    // "Now" is late in the day, so every slot on it is already past the cutoff.
+    const trace = run({ now: at(16, 30) });
+    expect(explainEmptyDay(trace)).toMatch(/too soon/i);
+  });
+
+  it("says when the hours are too short to hold a session", () => {
+    const trace = run({ weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 570 }] }); // 30 min
+    expect(explainEmptyDay(trace)).toMatch(/shorter than one session/i);
+  });
+});
+
+describe("computeAvailability", () => {
+  it("returns exactly what computeAvailableSlots does — the calendar and /book can't disagree", () => {
+    const params = {
+      clinic: "bethnal" as const,
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }],
+      overrides: [],
+      busy: [{ start: at(11), end: at(12) }],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    };
+    expect(computeAvailability(params).slots).toEqual(computeAvailableSlots(params));
+  });
+
+  it("accounts for every candidate — bookable plus dropped equals the total considered", () => {
+    const day = computeAvailability({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }],
+      overrides: [],
+      busy: [{ start: at(11), end: at(12) }],
+      slotMinutes: 30,
+      now: at(10),
+      minNoticeMinutes: 120,
+    }).days[0];
+    const { past, hours, busy, cap, clockChange } = day.dropped;
+    expect(day.bookable + past + hours + busy + cap + clockChange).toBe(day.candidates);
   });
 });
 
@@ -243,6 +398,46 @@ describe("computeAvailableSlots", () => {
     // a 30-min buffer either side pads its footprint out to 9:00-11:00, which does.
     expect(withoutBuffer).toContainEqual(at(9, 30));
     expect(withBuffer).not.toContainEqual(at(9, 30));
+  });
+
+  it("the buffer doesn't eat the edges of the working day — a full day's hours stay fully bookable", () => {
+    // 09:00-17:00 with a 15-min gap between clients. The gap is breathing room
+    // from *other bookings*, not clearance Phoenix needs from 9am itself, so an
+    // empty day must offer the very first and very last session the hours allow.
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }];
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    });
+    expect(slots).toContainEqual(at(9)); // 09:00-10:00, flush with the start
+    expect(slots).toContainEqual(at(16)); // 16:00-17:00, flush with the end
+    expect(slots).not.toContainEqual(at(16, 30)); // would run past 17:00
+  });
+
+  it("still keeps the buffer between two of Phoenix's own sessions", () => {
+    // The other half of the rule above: dropping the edge padding must not have
+    // dropped the gap that actually matters.
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }];
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [{ start: at(12), end: at(13) }],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    });
+    expect(slots).not.toContainEqual(at(11)); // 11:00-12:00 leaves no gap before
+    expect(slots).not.toContainEqual(at(13)); // 13:00-14:00 leaves no gap after
+    expect(slots).toContainEqual(at(10, 30)); // ends 11:30, a clear hour before
+    expect(slots).toContainEqual(at(13, 30)); // starts a clear 30 min after
   });
 
   it("a busy span's own bufferMinutes overrides the default — e.g. a bigger gap around a studio-mate's booking", () => {

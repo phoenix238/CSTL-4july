@@ -9,13 +9,27 @@ export const GET = guarded(async () => {
   const s = await getSettings();
   return NextResponse.json({
     accessNote: s.accessNote,
+    emailTemplate: s.emailTemplate,
+    // Legacy per-clinic letters — still sent so the composer can fall back to
+    // them for a clinic until the shared letter is saved.
     emailTemplateWaterloo: s.emailTemplateWaterloo,
     emailTemplateBethnal: s.emailTemplateBethnal,
     paymentDetails: s.paymentDetails,
     waterlooAddress: s.waterlooAddress,
     bethnalAddress: s.bethnalAddress,
+    waterlooFindIt: s.waterlooFindIt,
+    bethnalFindIt: s.bethnalFindIt,
+    waterlooPhoto: s.waterlooPhoto,
+    bethnalPhoto: s.bethnalPhoto,
     waterlooArrivalNote: s.waterlooArrivalNote,
     bethnalArrivalNote: s.bethnalArrivalNote,
+    // The email preview composes the real thing in the browser — without these
+    // it would show a generated Maps search link where the sent email uses the
+    // pin, and omit the directions entirely.
+    waterlooLocationUrl: s.waterlooLocationUrl,
+    bethnalLocationUrl: s.bethnalLocationUrl,
+    waterlooDirections: s.waterlooDirections,
+    bethnalDirections: s.bethnalDirections,
     weeklyHours: resolveWeeklyHours(s.weeklyHours),
     bookingSlotMinutes: s.bookingSlotMinutes,
     bookingMinNoticeMins: s.bookingMinNoticeMins,
@@ -25,6 +39,7 @@ export const GET = guarded(async () => {
     chalkFarmBufferMinutes: s.chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes: s.chalkFarmEdgeBufferMinutes,
     chalkFarmWeeklyCapHours: s.chalkFarmWeeklyCapHours,
+    crossClinicGapMinutes: s.crossClinicGapMinutes,
     bookingNotifyEmail: s.bookingNotifyEmail,
     portalEnabled: s.portalEnabled,
     portalSelfBook: s.portalSelfBook,
@@ -42,8 +57,44 @@ export const GET = guarded(async () => {
   });
 });
 
+/**
+ * The settings the UI is allowed to write. Everything else on AppSettings —
+ * `googleRefreshToken` above all — is set by the app itself and must not be
+ * reachable from a request body. Previously the whole JSON body went straight
+ * into the update, so any column was writable and a mistyped field name wrote
+ * silently rather than erroring.
+ */
+const EDITABLE_SETTINGS = [
+  "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
+  "emailTemplate", "waterlooFindIt", "bethnalFindIt", "waterlooPhoto", "bethnalPhoto",
+  "waterlooAddress", "bethnalAddress", "waterlooArrivalNote", "bethnalArrivalNote",
+  "waterlooLocationUrl", "bethnalLocationUrl", "waterlooDirections", "bethnalDirections",
+  "clinicContactLine", "intakeFormUrl", "intakeQuestions", "clientCopy",
+  "mapsReviewUrlWaterloo", "mapsReviewUrlBethnal",
+  "reviewEmailSubjectWaterloo", "reviewEmailSubjectBethnal",
+  "reviewEmailBodyWaterloo", "reviewEmailBodyBethnal",
+  "weeklyHours", "bookingSlotMinutes", "bookingMinNoticeMins", "bookingHorizonDays",
+  "bookingBufferMinutes", "bethnalBufferMinutes", "chalkFarmBufferMinutes",
+  "chalkFarmEdgeBufferMinutes", "chalkFarmWeeklyCapHours", "crossClinicGapMinutes",
+  "bookingNotifyEmail",
+  "portalEnabled", "portalNotifyEmail", "portalNoticeHours", "lateCancelGoodwillPence",
+  "portalReceipts", "portalSelfBook",
+  "bankAccountName", "bankSortCode", "bankAccountNumber", "bankPaymentNote",
+  "starlingEnabled", "starlingAutoMark", "starlingNotifyEmail", "starlingLookbackDays",
+  "personalCalendarId", "roomCalendarId", "chalkFarmCalendarId",
+  "clientsFolderId", "reflectionsDocId", "marketingSheetId", "appUrl",
+] as const;
+
 export const PATCH = guarded(async (req: Request) => {
-  const data = await req.json();
+  const body = (await req.json()) as Record<string, unknown>;
+  const data: Record<string, unknown> = {};
+  for (const key of EDITABLE_SETTINGS) {
+    if (key in body) data[key] = body[key];
+  }
+  const rejected = Object.keys(body).filter((k) => !(k in data));
+  if (rejected.length) {
+    return NextResponse.json({ error: `Not a settable field: ${rejected.join(", ")}` }, { status: 400 });
+  }
   const settings = await prisma.appSettings.upsert({
     where: { id: 1 },
     update: data,

@@ -10,8 +10,7 @@ import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } fr
 // holds all of them instead of leaving the welcome/access/payment/review scattered
 // in separate Settings dropdowns.
 export interface SettingsMessages {
-  emailTemplateWaterloo: string;
-  emailTemplateBethnal: string;
+  emailTemplate: string;
   accessNote: string;
   paymentDetails: string;
   reviewEmailSubjectWaterloo: string;
@@ -33,11 +32,16 @@ type Group =
 const GROUPS: Group[] = [
   {
     title: "The welcome email (a new client's first email)",
-    blurb: "Sent the moment you book a new client — with the intake link, access note and address.",
+    blurb:
+      "Sent the moment you book a new client. Write it once — the clinic name, price, address, map pin and how to find the door are filled in for whichever clinic they booked, and the intake link and your sign-off are added at the end.",
     source: "settings",
     fields: [
-      { key: "emailTemplateWaterloo", label: "Waterloo — welcome message", multiline: true, placeholders: ["name", "accessNote", "intakeLink"] },
-      { key: "emailTemplateBethnal", label: "Bethnal Green — welcome message", multiline: true, placeholders: ["name", "accessNote", "intakeLink"] },
+      {
+        key: "emailTemplate",
+        label: "Welcome message",
+        multiline: true,
+        placeholders: ["name", "when", "clinic", "price", "accessNote", "intakeLink"],
+      },
     ],
   },
   {

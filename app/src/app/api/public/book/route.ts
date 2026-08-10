@@ -3,9 +3,10 @@ import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
-import { findExistingClient } from "@/lib/clients";
+import { findClientByEmail } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
+import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
 import { sendEmail } from "@/lib/google/gmail";
 
 // NOT guarded — public self-booking. Authorization model: we never trust the
@@ -44,12 +45,17 @@ export async function POST(req: Request) {
     }
     const cleanPhone = phone?.trim() ?? "";
 
+    // Before anything that costs: a Drive folder, a Doc, calendar events and an
+    // email all follow from here, so the ceiling is checked first, not after.
+    await assertBookingAllowed(req, cleanEmail);
+
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
     const settings = await getSettings();
     await assertSlotAvailable({ clinic: clinic as Clinic, start });
 
-    const existing = await findExistingClient(cleanName, cleanEmail, cleanPhone);
+    // Email only — never the fuzzy name/phone match. See findClientByEmail.
+    const existing = await findClientByEmail(cleanEmail);
     const result = await bookSession({
       clientId: existing?.id,
       newClient: existing ? undefined : { name: cleanName, email: cleanEmail, phone: cleanPhone },
@@ -58,6 +64,9 @@ export async function POST(req: Request) {
       sendEmail: true,
       sendPayment: true,
       bookedVia: "online",
+      // A returning client booking here is arranging another session, not moving
+      // the one they already have. Moving is what the portal's reschedule is for.
+      replaceUpcoming: false,
     });
 
     // Let Phoenix know a booking came in — non-fatal: the booking itself has
@@ -104,6 +113,10 @@ export async function POST(req: Request) {
     // plainly so they just pick again.
     if (err instanceof SlotTakenError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    // Booking too often — a real message they can act on, not a generic 500.
+    if (err instanceof RateLimitedError) {
+      return NextResponse.json({ error: err.message }, { status: 429 });
     }
     // Never surface raw internal/Google API error text to a public visitor.
     console.error(err);

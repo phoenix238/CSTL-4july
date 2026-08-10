@@ -15,18 +15,17 @@ import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
   accessNote: string;
-  emailTemplateWaterloo: string;
-  emailTemplateBethnal: string;
+  emailTemplate: string;
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
   clinicContactLine: string;
-  waterlooArrivalNote: string;
-  bethnalArrivalNote: string;
   waterlooLocationUrl: string;
   bethnalLocationUrl: string;
-  waterlooDirections: string;
-  bethnalDirections: string;
+  waterlooFindIt: string;
+  bethnalFindIt: string;
+  waterlooPhoto: string;
+  bethnalPhoto: string;
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
@@ -48,6 +47,7 @@ export interface SettingsData {
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
   chalkFarmWeeklyCapHours: number;
+  crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
   clientCopy: ClientCopy;
   portalEnabled: boolean;
@@ -131,15 +131,15 @@ export function SettingsView({
   const [addressesDraft, setAddressesDraft] = useState({
     waterlooAddress: settings.waterlooAddress,
     bethnalAddress: settings.bethnalAddress,
-    waterlooArrivalNote: settings.waterlooArrivalNote,
-    bethnalArrivalNote: settings.bethnalArrivalNote,
   });
   const [editingLocations, setEditingLocations] = useState(false);
   const [locationsDraft, setLocationsDraft] = useState({
     waterlooLocationUrl: settings.waterlooLocationUrl,
     bethnalLocationUrl: settings.bethnalLocationUrl,
-    waterlooDirections: settings.waterlooDirections,
-    bethnalDirections: settings.bethnalDirections,
+    waterlooFindIt: settings.waterlooFindIt,
+    bethnalFindIt: settings.bethnalFindIt,
+    waterlooPhoto: settings.waterlooPhoto,
+    bethnalPhoto: settings.bethnalPhoto,
   });
   const [editingGoogle, setEditingGoogle] = useState(false);
   const [googleDraft, setGoogleDraft] = useState({
@@ -164,7 +164,7 @@ export function SettingsView({
 
   const copyLocation = async (clinic: "waterloo" | "bethnal") => {
     const url = clinic === "waterloo" ? settings.waterlooLocationUrl : settings.bethnalLocationUrl;
-    const directions = clinic === "waterloo" ? settings.waterlooDirections : settings.bethnalDirections;
+    const directions = clinic === "waterloo" ? settings.waterlooFindIt : settings.bethnalFindIt;
     // Map link on its own line, a blank line, then the directions (their own
     // line breaks kept) — reads cleanly pasted into WhatsApp or an email.
     const text = [url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
@@ -273,8 +273,6 @@ export function SettingsView({
                 setAddressesDraft({
                   waterlooAddress: settings.waterlooAddress,
                   bethnalAddress: settings.bethnalAddress,
-                  waterlooArrivalNote: settings.waterlooArrivalNote,
-                  bethnalArrivalNote: settings.bethnalArrivalNote,
                 });
               }
               setEditingAddresses(!editingAddresses);
@@ -287,20 +285,18 @@ export function SettingsView({
         {!editingAddresses ? (
           <Card className="px-5 py-1.5">
             <Row label="Waterloo">{settings.waterlooAddress || "not set yet"}</Row>
-            <Row label="Waterloo note">{settings.waterlooArrivalNote || "not set yet"}</Row>
-            <Row label="Bethnal Green">{settings.bethnalAddress || "not set yet"}</Row>
-            <Row label="Bethnal Green note" last>
-              {settings.bethnalArrivalNote || "not set yet"}
+            <Row label="Bethnal Green" last>
+              {settings.bethnalAddress || "not set yet"}
             </Row>
           </Card>
         ) : (
           <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
             {(
               [
-                ["waterlooAddress", "WATERLOO ADDRESS", "waterlooArrivalNote", "ABOUT WATERLOO"],
-                ["bethnalAddress", "BETHNAL GREEN ADDRESS", "bethnalArrivalNote", "ABOUT BETHNAL GREEN"],
+                ["waterlooAddress", "WATERLOO ADDRESS"],
+                ["bethnalAddress", "BETHNAL GREEN ADDRESS"],
               ] as const
-            ).map(([addrKey, addrLabel, noteKey, noteLabel]) => (
+            ).map(([addrKey, addrLabel]) => (
               <div key={addrKey} className="flex flex-col gap-[11px]">
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
@@ -310,17 +306,6 @@ export function SettingsView({
                     value={addressesDraft[addrKey]}
                     onChange={(e) => setAddressesDraft({ ...addressesDraft, [addrKey]: e.target.value })}
                     className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    {noteLabel}
-                  </span>
-                  <textarea
-                    value={addressesDraft[noteKey]}
-                    onChange={(e) => setAddressesDraft({ ...addressesDraft, [noteKey]: e.target.value })}
-                    placeholder="Parking, what to expect, how to find the door — shown to visitors on the booking page."
-                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
                   />
                 </label>
               </div>
@@ -363,6 +348,7 @@ export function SettingsView({
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
           chalkFarmWeeklyCapHours={settings.chalkFarmWeeklyCapHours}
+          crossClinicGapMinutes={settings.crossClinicGapMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
         />
@@ -420,8 +406,7 @@ export function SettingsView({
         <ClientMessagesEditor
           initial={settings.clientCopy}
           settingsInitial={{
-            emailTemplateWaterloo: settings.emailTemplateWaterloo,
-            emailTemplateBethnal: settings.emailTemplateBethnal,
+            emailTemplate: settings.emailTemplate,
             accessNote: settings.accessNote,
             paymentDetails: settings.paymentDetails,
             reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
@@ -525,7 +510,7 @@ export function SettingsView({
       </Dropdown>
 
       <Dropdown
-        label="LOCATION LINK & DIRECTIONS — TO SEND CLIENTS"
+        label="MAP PIN & HOW TO FIND IT"
         open={!!open.locations}
         onToggle={() => toggle("locations")}
       >
@@ -536,8 +521,10 @@ export function SettingsView({
                 setLocationsDraft({
                   waterlooLocationUrl: settings.waterlooLocationUrl,
                   bethnalLocationUrl: settings.bethnalLocationUrl,
-                  waterlooDirections: settings.waterlooDirections,
-                  bethnalDirections: settings.bethnalDirections,
+                  waterlooFindIt: settings.waterlooFindIt,
+                  bethnalFindIt: settings.bethnalFindIt,
+                  waterlooPhoto: settings.waterlooPhoto,
+                  bethnalPhoto: settings.bethnalPhoto,
                 });
               }
               setEditingLocations(!editingLocations);
@@ -551,10 +538,10 @@ export function SettingsView({
           <Card className="flex flex-col gap-3.5 px-5 py-4">
             {(
               [
-                ["waterloo", "Waterloo", settings.waterlooLocationUrl, settings.waterlooDirections],
-                ["bethnal", "Bethnal Green", settings.bethnalLocationUrl, settings.bethnalDirections],
+                ["waterloo", "Waterloo", settings.waterlooLocationUrl, settings.waterlooFindIt, settings.waterlooPhoto],
+                ["bethnal", "Bethnal Green", settings.bethnalLocationUrl, settings.bethnalFindIt, settings.bethnalPhoto],
               ] as const
-            ).map(([clinic, label, url, directions], i) => (
+            ).map(([clinic, label, url, directions, photo], i) => (
               <div
                 key={clinic}
                 className={`flex flex-col gap-2 ${i === 0 ? "border-b border-hairline pb-3.5" : ""}`}
@@ -573,9 +560,17 @@ export function SettingsView({
                   {url ? <span className="break-all">{url}</span> : <span className="text-faint">not set yet</span>}
                 </div>
                 <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">Directions: </span>
+                  <span className="font-semibold">How to find it: </span>
                   {directions || <span className="text-faint">not set yet</span>}
                 </div>
+                {photo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photo}
+                    alt={`The entrance at ${label}`}
+                    className="max-h-[150px] w-fit rounded-lg border border-line object-cover"
+                  />
+                )}
               </div>
             ))}
           </Card>
@@ -583,10 +578,10 @@ export function SettingsView({
           <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
             {(
               [
-                ["waterlooLocationUrl", "WATERLOO LOCATION LINK", "waterlooDirections", "WATERLOO DIRECTIONS"],
-                ["bethnalLocationUrl", "BETHNAL GREEN LOCATION LINK", "bethnalDirections", "BETHNAL GREEN DIRECTIONS"],
+                ["waterlooLocationUrl", "WATERLOO MAP PIN", "waterlooFindIt", "HOW TO FIND WATERLOO", "waterlooPhoto", "Waterloo"],
+                ["bethnalLocationUrl", "BETHNAL GREEN MAP PIN", "bethnalFindIt", "HOW TO FIND BETHNAL GREEN", "bethnalPhoto", "Bethnal Green"],
               ] as const
-            ).map(([urlKey, urlLabel, dirKey, dirLabel]) => (
+            ).map(([urlKey, urlLabel, dirKey, dirLabel, photoKey, clinicLabel]) => (
               <div key={urlKey} className="flex flex-col gap-[11px]">
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
@@ -610,10 +605,17 @@ export function SettingsView({
                     className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
                   />
                 </label>
+                <PhotoField
+                  label={`PHOTO OF THE ${clinicLabel.toUpperCase()} ENTRANCE`}
+                  clinicLabel={clinicLabel}
+                  value={locationsDraft[photoKey]}
+                  onChange={(v) => setLocationsDraft({ ...locationsDraft, [photoKey]: v })}
+                  onError={toast}
+                />
               </div>
             ))}
             <PrimaryButton
-              onClick={() => save({ ...locationsDraft }, () => setEditingLocations(false), "Location & directions updated ✓")}
+              onClick={() => save({ ...locationsDraft }, () => setEditingLocations(false), "Location, directions & photo updated ✓")}
               className="self-start px-[18px] py-[9px] text-[13px]"
             >
               Save
@@ -649,6 +651,118 @@ function Row({ label, children, last = false }: { label: string; children: React
     >
       <span className="text-muted">{label}</span>
       <span className="min-w-0 text-right font-semibold break-all">{children}</span>
+    </div>
+  );
+}
+
+/** Longest edge a stored entrance photo is scaled down to, in pixels. */
+const PHOTO_MAX_EDGE = 1400;
+/** Refuse anything above this before we even try to read it. */
+const PHOTO_MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+/**
+ * Downscale a chosen image in the browser and hand back a data: URL.
+ *
+ * A photo straight off a phone is 3-5 MB, which is too big to sit in a settings
+ * row and too big to attach to every confirmation email. Scaling to a long edge
+ * of 1400px lands around 200-400 KB — plenty to recognise a front door by, and
+ * small enough that the client's inbox doesn't mind.
+ */
+function shrinkImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Couldn't process that image"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("That file doesn't look like an image"));
+    };
+    img.src = url;
+  });
+}
+
+/** Pick, preview and remove one clinic's entrance photo. */
+function PhotoField({
+  label,
+  clinicLabel,
+  value,
+  onChange,
+  onError,
+}: {
+  label: string;
+  clinicLabel: string;
+  value: string;
+  onChange: (dataUrl: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    if (file.size > PHOTO_MAX_UPLOAD_BYTES) {
+      onError("That photo is very large — please pick one under 15 MB");
+      return;
+    }
+    setBusy(true);
+    try {
+      onChange(await shrinkImage(file));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Couldn't read that photo");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
+      {value && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={value}
+          alt={`The entrance at ${clinicLabel}`}
+          className="max-h-[170px] w-fit rounded-lg border border-line object-cover"
+        />
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg">
+          {busy ? "Reading…" : value ? "Replace photo" : "Choose a photo"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              pick(e.target.files?.[0]);
+              // Let the same file be picked again after a remove.
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {value && (
+          <button
+            onClick={() => onChange("")}
+            className="cursor-pointer text-[12px] font-semibold text-muted hover:text-[oklch(0.55_0.15_25)]"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      <span className="text-[11.5px] text-muted">
+        Shown on the booking page and sent with the confirmation email, so they can see the door before they arrive.
+      </span>
     </div>
   );
 }

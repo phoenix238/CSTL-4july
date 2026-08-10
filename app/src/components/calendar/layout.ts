@@ -55,22 +55,34 @@ export const SPAN_COLORS: Record<
 export type AvailClinic = "waterloo" | "bethnal";
 
 /**
- * One availability window drawn on the calendar. `weekly` windows come from the
- * recurring Settings hours (shown as a faint baseline, not editable here);
- * `open`/`block` windows are one-off date overrides you draw on the grid and can
+ * One availability window drawn on the calendar.
+ *
+ * Two different things are shown, deliberately layered:
+ *  - `weekly` (faint) is the hours you *intended* — straight from Settings.
+ *  - `bookable` (solid) is what a client can *actually* book right now,
+ *    computed by the same code as the public /book page.
+ * The gap between them is the point: it's where a calendar event, a buffer,
+ * the notice window or the weekly cap has quietly closed time you thought was
+ * open. `open`/`block` are one-off date overrides you draw on the grid and can
  * edit or remove — `id` is their AvailabilityOverride row id.
  */
 export interface AvailWindowDTO {
   id?: string;
   clinic: AvailClinic;
   date: string; // "YYYY-MM-DD" (London)
-  kind: "open" | "block" | "weekly";
+  kind: "open" | "block" | "weekly" | "bookable";
   startMin: number;
   endMin: number;
 }
 
 /** Colours for the availability layer — green = bookable, red = closed. */
 export const AVAIL_COLORS = {
+  // Solid and confident — this is the layer that's actually true for clients.
+  bookable: {
+    bg: "oklch(0.88 0.09 148 / 0.72)",
+    border: "oklch(0.52 0.14 148)",
+    text: "oklch(0.34 0.1 148)",
+  },
   open: {
     bg: "oklch(0.92 0.06 148 / 0.55)",
     border: "oklch(0.6 0.13 148)",

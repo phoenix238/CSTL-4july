@@ -22,6 +22,16 @@ import { QuickBook } from "./QuickBook";
 import { TimeGrid } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
 import { AVAIL_COLORS, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO, type SpanSource } from "./layout";
+import { mergeIntervals } from "@/lib/booking/availability";
+import { SESSION_MINUTES } from "@/lib/booking/rules";
+
+/** One day's verdict from /api/bookable. */
+interface BookableDay {
+  date: string;
+  bookable: number;
+  openMinutes: number;
+  reason: string;
+}
 
 interface OverrideDTO {
   id: string;
@@ -80,6 +90,9 @@ export function CalendarView() {
   const [weeklyHours, setWeeklyHours] = useState<WeeklyHours | null>(null);
   const [overrides, setOverrides] = useState<OverrideDTO[]>([]);
   const [availComposer, setAvailComposer] = useState<AvailComposerState | null>(null);
+  // What a client can genuinely book, straight from the booking engine — plus
+  // why any day has none. Fetched only in availability mode, for the week shown.
+  const [bookable, setBookable] = useState<{ slots: string[]; days: BookableDay[] } | null>(null);
 
   // Which calendars are wired up + the recurring weekly hours (baseline shown
   // faintly behind drawn availability).
@@ -156,6 +169,54 @@ export function CalendarView() {
     }
     return out;
   }, [availMode, availClinic, weeklyHours, overrides, weekStart]);
+
+  // The real answer for the visible week, refetched whenever the week, the
+  // clinic, or anything that could change availability moves.
+  useEffect(() => {
+    if (!availMode) {
+      setBookable(null);
+      return;
+    }
+    let stale = false;
+    const url = `/api/bookable?clinic=${availClinic}&start=${encodeURIComponent(weekStart.toISOString())}&days=7`;
+    api<{ slots: string[]; days: BookableDay[] }>(url)
+      .then((r) => {
+        if (!stale) setBookable(r);
+      })
+      .catch(() => {
+        if (!stale) setBookable(null);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [availMode, availClinic, weekStart, overrides, week.spans]);
+
+  // Bookable starts merged into the ranges they cover, so a run of half-hourly
+  // slots reads as one solid band rather than a stack of overlapping hours.
+  const bookableWindows = useMemo<AvailWindowDTO[]>(() => {
+    if (!bookable?.slots.length) return [];
+    const byDay = new Map<string, Array<{ start: number; end: number }>>();
+    for (const iso of bookable.slots) {
+      const at = new Date(iso);
+      const key = londonDateKey(at);
+      const startMin = londonMinutes(at);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key)!.push({ start: startMin, end: startMin + SESSION_MINUTES });
+    }
+    const out: AvailWindowDTO[] = [];
+    for (const [date, ranges] of byDay) {
+      for (const iv of mergeIntervals(ranges)) {
+        out.push({ clinic: availClinic, date, kind: "bookable", startMin: iv.start, endMin: iv.end });
+      }
+    }
+    return out;
+  }, [bookable, availClinic]);
+
+  const dayNotes = useMemo<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const d of bookable?.days ?? []) if (d.reason) out[d.date] = d.reason;
+    return out;
+  }, [bookable]);
 
   function enterAvailability() {
     setView("week");
@@ -348,13 +409,30 @@ export function CalendarView() {
               </button>
             ))}
           </div>
-          <span className="text-muted">
-            Faint green = your usual weekly hours (set in{" "}
-            <a href="/settings" className="font-semibold text-sage-text underline">
-              Settings
-            </a>
-            ). Draw here to open or close specific days.
-          </span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 rounded-[3px] border"
+                style={{ background: AVAIL_COLORS.weekly.bg, borderColor: AVAIL_COLORS.weekly.border }}
+              />
+              Your usual hours (
+              <a href="/settings" className="font-semibold text-sage-text underline">
+                Settings
+              </a>
+              )
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 rounded-[3px] border"
+                style={{ background: AVAIL_COLORS.bookable.bg, borderColor: AVAIL_COLORS.bookable.border }}
+              />
+              <b className="font-semibold text-sage-text">Actually bookable now</b>
+            </span>
+            <span>
+              Where they differ, something has closed the time — a calendar event, a gap setting, the notice
+              window or the weekly cap. Empty days say which. Draw here to open or close specific days.
+            </span>
+          </div>
         </div>
       )}
 
@@ -394,9 +472,13 @@ export function CalendarView() {
             spans={visible(week.spans) ?? []}
             mode="display"
             availabilityMode={availMode}
-            availWindows={availMode ? availWindows : undefined}
+            availWindows={availMode ? [...availWindows, ...bookableWindows] : undefined}
+            dayNotes={availMode ? dayNotes : undefined}
             onAvailabilityClick={(w) => {
-              if (!w.id || w.kind === "weekly") return;
+              // Only a real one-off override is editable here. The weekly
+              // baseline lives in Settings, and the bookable layer is a computed
+              // read-out — there's nothing to open for either.
+              if (!w.id || (w.kind !== "open" && w.kind !== "block")) return;
               setAvailComposer({
                 mode: "edit",
                 clinic: availClinic,

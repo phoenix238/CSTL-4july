@@ -104,6 +104,10 @@ model Booking {
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
   secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
   emailSent        Boolean  @default(false)
+  // Set when the booking succeeded but its confirmation email didn't go out, so
+  // a client left with nothing in writing is findable and can be followed up —
+  // rather than the failure existing only in a server log.
+  confirmationFailedAt DateTime?
   createdAt        DateTime @default(now())
 
   // — Payment —
@@ -159,12 +163,39 @@ model Enquiry {
   @@index([offerToken])
 }
 
+/**
+ * One row per attempt to book from the public page — what the rate limit counts.
+ *
+ * The booking form is open to the internet by design, and every accepted
+ * submission creates a client record, a Drive folder, a Doc, two calendar
+ * events and an email sent from Phoenix's own Gmail. Without a ceiling, a
+ * script can fill the diary, fill Drive, and get the sending account throttled.
+ * Kept in Postgres rather than in memory because serverless instances don't
+ * share memory — an in-process counter would reset constantly and count wrong.
+ */
+model BookingAttempt {
+  id        String   @id @default(cuid())
+  /** "email:someone@example.com" or "ip:1.2.3.4" */
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
+
 // Single row (id = 1). Holds editable settings and the Google wiring.
 model AppSettings {
   id                    Int    @id @default(1)
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
-  emailTemplateWaterloo String @default("Hi {name},\n\nLooking forward to seeing you at Waterloo. Sessions are £80 for 60 minutes, payable on the day by card or bank transfer.\n\nA few notes before we meet:\n{accessNote}\n\nWhen you have a moment, please fill in your short intake form — it takes a couple of minutes and goes straight into your confidential record:\n{intakeLink}\n\nSee you soon,\nPhoenix")
-  emailTemplateBethnal  String @default("Hi {name},\n\nLooking forward to seeing you at Bethnal Green. Sessions are on a £30–60 sliding scale for 60 minutes — pay what feels fair on the day.\n\nA few notes before we meet:\n{accessNote}\n\nWhen you have a moment, please fill in your short intake form — it takes a couple of minutes and goes straight into your confidential record:\n{intakeLink}\n\nSee you soon,\nPhoenix")
+  // The one welcome letter, shared by both clinics. What differs between them —
+  // price, address, map pin, how to find the door — is filled in around it, so
+  // the wording only has to be written and edited once.
+  // Placeholders: {name} {when} {clinic} {price} {accessNote} {intakeLink}
+  emailTemplate         String @default("Hi {name},\n\nYou're booked in for {when} at {clinic} — 60 minutes, {price}.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
+  // Legacy per-clinic letters, superseded by emailTemplate above. Kept (rather
+  // than dropped) so `prisma db push` never touches existing wording, and used
+  // as the fallback for whichever clinic until emailTemplate is saved.
+  emailTemplateWaterloo String @default("Hi {name},\n\nYou're booked in for {when} at Waterloo — 60 minutes, £80, payable on the day by card or bank transfer.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
+  emailTemplateBethnal  String @default("Hi {name},\n\nYou're booked in for {when} at Bethnal Green — 60 minutes on a £30–60 sliding scale, pay what feels fair on the day.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
   waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
   bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
@@ -172,8 +203,20 @@ model AppSettings {
   // room ("R5 - Phoenix") and Chalk Farm ("Phoenix") calendar events, alongside the
   // day's session count and times. Client names stay off the shared venue calendars.
   clinicContactLine     String @default("")
-  // Short "about this clinic" note shown on the public booking page under the
-  // address — parking, what to expect, how to find the door, etc.
+  // How to find and get into each place — buzzer, floor, parking, which door.
+  // One field per clinic, shown on the public booking page *and* in the
+  // confirmation email; replaces the old arrival-note/directions pair, which
+  // said much the same thing in two places and reached different surfaces.
+  waterlooFindIt        String @default("")
+  bethnalFindIt         String @default("")
+  // An optional photo of the entrance per clinic — the green door, the buzzer,
+  // the alley you'd otherwise walk past. Stored as a data: URL (the Settings
+  // upload downscales before saving), shown on the public booking page and sent
+  // inline with the confirmation email, so it travels with the message rather
+  // than depending on a link the client has to be given access to.
+  waterlooPhoto         String @default("")
+  bethnalPhoto          String @default("")
+  // Legacy — folded into waterlooFindIt / bethnalFindIt above, kept for the data.
   waterlooArrivalNote   String @default("")
   bethnalArrivalNote    String @default("")
   // Shareable "where we are" details you copy from a client's profile (or Settings)
@@ -219,6 +262,11 @@ model AppSettings {
   chalkFarmBufferMinutes Int @default(30) // safety gap around a studio-mate's booking on the shared Chalk Farm calendar (Bethnal Green)
   chalkFarmEdgeBufferMinutes Int @default(15) // padding added before the day's first and after the day's last Bethnal session on the shared "Phoenix" Chalk Farm block, so studio-mates don't book right up against it
   chalkFarmWeeklyCapHours Int @default(10) // Bethnal Green: max total hours of Phoenix's own confirmed sessions bookable in one London calendar week (Mon-Sun); 0 = no cap
+  // Travel time between the two clinics. Working a Waterloo morning and a Bethnal
+  // Green evening on the same day is fine and deliberate — this is the clearance
+  // kept around a session at the *other* site so the two can't be booked so close
+  // together that the journey is impossible.
+  crossClinicGapMinutes Int @default(90)
   bookingNotifyEmail   Boolean @default(true) // email Phoenix when someone books via /book
 
   // — Client portal (/me/[token]) —

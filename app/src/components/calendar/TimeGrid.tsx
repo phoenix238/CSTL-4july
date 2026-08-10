@@ -35,6 +35,8 @@ export interface TimeGridProps {
    * marks availability rather than adding an event.
    */
   availWindows?: AvailWindowDTO[];
+  /** Why a day has nothing bookable, keyed by London date key — shown in-column. */
+  dayNotes?: Record<string, string>;
   /** availability mode: click an editable (open/block) availability window */
   onAvailabilityClick?: (w: AvailWindowDTO) => void;
   /** true while the calendar is in availability-editing mode */
@@ -81,6 +83,7 @@ export function TimeGrid({
   onRangeSelect,
   onEventMove,
   availWindows,
+  dayNotes,
   onAvailabilityClick,
   availabilityMode = false,
   picker,
@@ -337,6 +340,14 @@ export function TimeGrid({
                   />
                 ))}
 
+                {/* Why there's nothing bookable here — the answer on the screen,
+                    rather than at the end of an investigation. */}
+                {dayNotes?.[londonDateKey(day)] && (
+                  <div className="pointer-events-none absolute top-1 right-[3px] left-[3px] z-[1] rounded-md bg-[oklch(0.96_0.02_60_/_0.92)] px-1.5 py-1 text-[9.5px] leading-tight font-medium text-[oklch(0.48_0.06_40)]">
+                    {dayNotes[londonDateKey(day)]}
+                  </div>
+                )}
+
                 {/* availability layer — green = bookable, red = closed. Weekly
                     baseline is faint and untouchable; drawn overrides are clickable. */}
                 {dayAvail[di].map((w, wi) => {
@@ -349,7 +360,9 @@ export function TimeGrid({
                       ? "Unavailable"
                       : w.kind === "weekly"
                         ? "Usual hours"
-                        : "Available";
+                        : w.kind === "bookable"
+                          ? "Bookable"
+                          : "Available";
                   return (
                     <div
                       key={`${w.kind}-${w.id ?? wi}`}

@@ -122,7 +122,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         clinic={mode === "reschedule" && upcoming ? upcoming.clinic : clinic}
         selected={selected}
         onSelect={setSelected}
-        slotsUrl={(c) => `/api/portal/${token}/slots?clinic=${c}`}
+        slotsUrl={(c) =>
+          `/api/portal/${token}/slots?clinic=${c}${mode === "reschedule" ? "&moving=1" : ""}`
+        }
         emptyMessage="No times free at the moment — please check back in a few days, or message Phoenix directly."
       />
 
