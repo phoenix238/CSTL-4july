@@ -56,6 +56,8 @@ export interface BookingResult {
   intakeUrl: string;
   /** false if the confirmation email couldn't be sent (booking still stands) */
   emailSent: boolean;
+  /** true if they'd already filled in their intake form before this booking — skips the "send it" nag */
+  intakeDone: boolean;
 }
 
 /** Retry a Gmail send through the usual transient failures before giving up. */
@@ -275,6 +277,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     emailTextForClipboard,
     intakeUrl: intakeLink,
     emailSent,
+    intakeDone: client.intakeDone,
   };
 }
 

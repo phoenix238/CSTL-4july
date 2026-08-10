@@ -52,6 +52,7 @@ interface BookResult {
   items: string[];
   emailTextForClipboard?: string;
   emailSent: boolean;
+  intakeDone: boolean;
 }
 
 export function EnquiryFlow({
@@ -94,7 +95,9 @@ export function EnquiryFlow({
 
   // booking panel
   const [settings, setSettings] = useState<(EmailSettings & { clientCopy?: ClientCopy }) | null>(null);
-  const [sendPayment, setSendPayment] = useState(true);
+  // Off by default — payment details now live on the client's own personal
+  // page (sent separately), so the confirmation email doesn't need to carry them too.
+  const [sendPayment, setSendPayment] = useState(false);
   // Whether to email the confirmation on booking. Defaults on; untick to book
   // silently and copy the message for WhatsApp instead — your choice each time.
   const [sendConfirmEmail, setSendConfirmEmail] = useState(true);
@@ -597,27 +600,32 @@ export function EnquiryFlow({
               </div>
             ))}
           </div>
-          <div className="mt-3 rounded-xl border border-clay/25 bg-clay-tint/40 px-4 py-3.5 text-left">
-            {intakeSent ? (
+          {(intakeSent || result.intakeDone) && (
+            <div className="mt-3 rounded-xl border border-clay/25 bg-clay-tint/40 px-4 py-3.5 text-left">
               <div className="flex items-center gap-2 text-[13px] text-sage-text">
                 <span>✓</span>
-                <span>Intake form on its way — it&apos;ll land straight in their confidential record.</span>
+                <span>
+                  {intakeSent
+                    ? "Intake form on its way — it'll land straight in their confidential record."
+                    : "Already have their intake on file — nothing more needed for a rebooking."}
+                </span>
               </div>
-            ) : (
-              <>
-                <div className="text-[13px] font-semibold text-clay-text">One last thing — their intake form</div>
-                <div className="mt-0.5 text-[12.5px] text-muted">
-                  It&apos;s kept out of the welcome email on purpose, so the first message stays a warm hello.
-                  Send it whenever feels right.
-                </div>
-                <div className="mt-2.5">
-                  <PrimaryButton onClick={sendIntakeForm} disabled={sendingIntake}>
-                    {sendingIntake ? "Sending…" : "Send intake form"}
-                  </PrimaryButton>
-                </div>
-              </>
-            )}
-          </div>
+            </div>
+          )}
+          {!intakeSent && !result.intakeDone && (
+            <div className="mt-3 rounded-xl border border-clay/25 bg-clay-tint/40 px-4 py-3.5 text-left">
+              <div className="text-[13px] font-semibold text-clay-text">One last thing — their intake form</div>
+              <div className="mt-0.5 text-[12.5px] text-muted">
+                It&apos;s kept out of the welcome email on purpose, so the first message stays a warm hello.
+                Send it whenever feels right.
+              </div>
+              <div className="mt-2.5">
+                <PrimaryButton onClick={sendIntakeForm} disabled={sendingIntake}>
+                  {sendingIntake ? "Sending…" : "Send intake form"}
+                </PrimaryButton>
+              </div>
+            </div>
+          )}
           <div className="mt-4 flex justify-center gap-2">
             <Link href={`/clients/${result.clientId}`}>
               <OutlineButton>Open client</OutlineButton>
