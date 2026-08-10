@@ -26,6 +26,8 @@ export default async function SettingsPage() {
         clinicContactLine: settings.clinicContactLine,
         waterlooFindIt: settings.waterlooFindIt,
         bethnalFindIt: settings.bethnalFindIt,
+        waterlooPhoto: settings.waterlooPhoto,
+        bethnalPhoto: settings.bethnalPhoto,
         waterlooLocationUrl: settings.waterlooLocationUrl,
         bethnalLocationUrl: settings.bethnalLocationUrl,
 

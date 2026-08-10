@@ -8,7 +8,8 @@ import {
 import { syncChalkFarmDayBlock } from "@/lib/google/chalkFarm";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime, londonDateKey } from "@/lib/time";
-import { composeBookingEmail } from "./email";
+import { composeBookingEmail, resolveClinicPhoto } from "./email";
+import { parseDataUrl } from "@/lib/google/mime";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { defaultAmountPence } from "@/lib/account";
 import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
@@ -184,6 +185,12 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // so it's one message, not two; it's also returned for the standalone resend button.
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
   const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, intakeLink);
+  // The photo of the entrance, sent inline under the text so the client can see
+  // the door they're looking for without following a link.
+  const photo = parseDataUrl(resolveClinicPhoto(req.clinic, settings));
+  const attachments = photo
+    ? [{ filename: `${req.clinic === "waterloo" ? "waterloo" : "bethnal-green"}-entrance.jpg`, ...photo, inline: true }]
+    : undefined;
   const body = req.emailBody?.trim() || email.body;
   // Whether this is the client's very first welcome message — captured before we
   // flip welcomeSent, so the confirmation copy and the flip agree.
@@ -208,6 +215,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
           email.subject,
           body,
           req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
+          attachments,
         ),
       );
       emailSent = true;

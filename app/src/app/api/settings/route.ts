@@ -19,6 +19,8 @@ export const GET = guarded(async () => {
     bethnalAddress: s.bethnalAddress,
     waterlooFindIt: s.waterlooFindIt,
     bethnalFindIt: s.bethnalFindIt,
+    waterlooPhoto: s.waterlooPhoto,
+    bethnalPhoto: s.bethnalPhoto,
     waterlooArrivalNote: s.waterlooArrivalNote,
     bethnalArrivalNote: s.bethnalArrivalNote,
     // The email preview composes the real thing in the browser — without these
@@ -64,7 +66,7 @@ export const GET = guarded(async () => {
  */
 const EDITABLE_SETTINGS = [
   "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
-  "emailTemplate", "waterlooFindIt", "bethnalFindIt",
+  "emailTemplate", "waterlooFindIt", "bethnalFindIt", "waterlooPhoto", "bethnalPhoto",
   "waterlooAddress", "bethnalAddress", "waterlooArrivalNote", "bethnalArrivalNote",
   "waterlooLocationUrl", "bethnalLocationUrl", "waterlooDirections", "bethnalDirections",
   "clinicContactLine", "intakeFormUrl", "intakeQuestions", "clientCopy",

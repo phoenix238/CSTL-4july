@@ -1,4 +1,7 @@
 import { getGmailApi, withRetry } from "./client";
+import { buildMessage, type Attachment } from "./mime";
+
+export type { Attachment } from "./mime";
 
 /** Set when replying to an enquiry that came in over Gmail — keeps the reply in the client's original thread. */
 export interface GmailThread {
@@ -18,22 +21,26 @@ export interface GmailThread {
  * Pass `thread` to reply inside the client's original Gmail thread (e.g. an
  * enquiry started from the Gmail add-on) instead of sending a fresh email.
  */
-export async function sendEmail(to: string, subject: string, body: string, thread?: GmailThread) {
+export async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  thread?: GmailThread,
+  /** e.g. the photo of the door at Bethnal Green, sent inline under the text */
+  attachments?: Attachment[],
+) {
   const gmail = await getGmailApi();
   const profile = await gmail.users.getProfile({ userId: "me" });
   const from = profile.data.emailAddress;
   const replySubject = thread && !/^re:/i.test(subject) ? `Re: ${subject}` : subject;
-  const message = [
-    `To: ${to}`,
-    ...(from ? [`From: =?UTF-8?B?${Buffer.from("Phoenix Tanner").toString("base64")}?= <${from}>`] : []),
-    `Subject: =?UTF-8?B?${Buffer.from(replySubject).toString("base64")}?=`,
-    ...(thread?.inReplyTo ? [`In-Reply-To: ${thread.inReplyTo}`, `References: ${thread.inReplyTo}`] : []),
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "Content-Transfer-Encoding: base64",
-    "",
-    Buffer.from(body).toString("base64"),
-  ].join("\r\n");
+  const message = buildMessage({
+    to,
+    from: from ?? undefined,
+    subject: replySubject,
+    body,
+    inReplyTo: thread?.inReplyTo,
+    attachments,
+  });
   await withRetry(() =>
     gmail.users.messages.send({
       userId: "me",

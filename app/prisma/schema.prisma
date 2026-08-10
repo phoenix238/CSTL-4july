@@ -190,6 +190,13 @@ model AppSettings {
   // said much the same thing in two places and reached different surfaces.
   waterlooFindIt        String @default("")
   bethnalFindIt         String @default("")
+  // An optional photo of the entrance per clinic — the green door, the buzzer,
+  // the alley you'd otherwise walk past. Stored as a data: URL (the Settings
+  // upload downscales before saving), shown on the public booking page and sent
+  // inline with the confirmation email, so it travels with the message rather
+  // than depending on a link the client has to be given access to.
+  waterlooPhoto         String @default("")
+  bethnalPhoto          String @default("")
   // Legacy — folded into waterlooFindIt / bethnalFindIt above, kept for the data.
   waterlooArrivalNote   String @default("")
   bethnalArrivalNote    String @default("")

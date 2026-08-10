@@ -24,6 +24,9 @@ export interface EmailSettings {
   /** how to find the door: buzzer, floor, parking */
   waterlooFindIt?: string;
   bethnalFindIt?: string;
+  /** photo of the entrance, as a data: URL */
+  waterlooPhoto?: string;
+  bethnalPhoto?: string;
   /** legacy pair, folded into `*FindIt` above */
   waterlooDirections?: string;
   bethnalDirections?: string;
@@ -48,6 +51,11 @@ export function resolveFindIt(clinic: Clinic, s: EmailSettings): string {
   return [(w ? s.waterlooDirections : s.bethnalDirections)?.trim(), (w ? s.waterlooArrivalNote : s.bethnalArrivalNote)?.trim()]
     .filter(Boolean)
     .join("\n");
+}
+
+/** The entrance photo for one clinic, as a data: URL — empty string if none set. */
+export function resolveClinicPhoto(clinic: Clinic, s: EmailSettings): string {
+  return ((clinic === "waterloo" ? s.waterlooPhoto : s.bethnalPhoto) ?? "").trim();
 }
 
 /** The welcome letter: the shared one, or the old per-clinic one until it's saved. */
