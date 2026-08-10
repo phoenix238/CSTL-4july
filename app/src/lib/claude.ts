@@ -140,6 +140,68 @@ export async function extractHighlights(recent: string, existing: string[]): Pro
   }
 }
 
+const caseHistoryExtractSchema = z.object({
+  presenting: z.string(),
+  historyOfPresenting: z.string(),
+  medical: z.string(),
+  medications: z.string(),
+  previousTreatment: z.string(),
+  lifestyle: z.string(),
+  birthDevelopment: z.string(),
+  injuries: z.string(),
+  redFlags: z.string(),
+  goals: z.string(),
+  plan: z.string(),
+  priorSessions: z.array(z.object({ date: z.string(), text: z.string() })),
+});
+
+export type CaseHistoryExtract = z.infer<typeof caseHistoryExtractSchema>;
+
+/**
+ * Sort an existing, free-text client Doc into the standard case-history
+ * sections, so an old record can be rebuilt onto the layout.
+ *
+ * Strictly a sorting job, not a writing one: the text is moved across as it was
+ * written, never summarised, tidied or inferred. Anything the Doc doesn't say
+ * comes back empty rather than guessed — this is a clinical record, and an
+ * invented "no known conditions" would be worse than a blank section. The
+ * original wording is kept in the Doc regardless, under ORIGINAL RECORD.
+ */
+export async function extractCaseHistory(
+  clientName: string,
+  docText: string,
+): Promise<CaseHistoryExtract> {
+  const text = await chat(
+    `You reorganise a craniosacral therapist's existing client record into a standard case-history layout.
+
+You are SORTING text, not rewriting it. Copy the client's and therapist's own words across as they were written — keep clinical vocabulary (stillpoint, occipital base, sacrum, unwinding), keep the client's own phrases and metaphors. Do not summarise, do not paraphrase, do not smooth out the wording.
+
+NEVER invent. If the record doesn't cover a section, return an empty string for it. Do not write "none known", "not stated" or similar — an empty string means empty.
+
+Reply with ONLY a JSON object, no other text:
+{
+  "presenting": "what they came with",
+  "historyOfPresenting": "when it started, how it's changed, what helps or aggravates",
+  "medical": "diagnoses, conditions, ongoing medical care",
+  "medications": "medications and supplements",
+  "previousTreatment": "other bodywork/therapies tried, and how they went",
+  "lifestyle": "work, posture, sleep, exercise, current stressors",
+  "birthDevelopment": "birth and early developmental history",
+  "injuries": "injuries, accidents, falls, dental work, surgery",
+  "redFlags": "cautions, contraindications, anything to refer on or watch",
+  "goals": "what the client wants from the work",
+  "plan": "treatment plan, frequency, approach",
+  "priorSessions": [{ "date": "the date as written in the record, or empty string", "text": "that session's notes, verbatim" }]
+}
+
+"priorSessions" is for dated session notes already written into the record — list them oldest first, verbatim. Return [] when the record has none. Text that is intake/history rather than a session belongs in the sections above, not here.`,
+    `Client: ${clientName}\n\nTheir existing record:\n\n${docText.slice(0, 40_000)}`,
+    8000,
+  );
+  const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  return caseHistoryExtractSchema.parse(json);
+}
+
 const importedClientSchema = z.object({
   name: z.string(),
   email: z.string(),

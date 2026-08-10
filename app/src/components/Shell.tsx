@@ -14,6 +14,7 @@ const NAV = [
   { label: "Enquiries", href: "/enquiries" },
   { label: "Calendar", href: "/calendar" },
   { label: "Import", href: "/import" },
+  { label: "Case history", href: "/case-history" },
 ];
 
 function NavLinks({

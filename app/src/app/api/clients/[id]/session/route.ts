@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { summariseSession } from "@/lib/claude";
-import { appendFormattedSections, ensureClientFolderAndDoc } from "@/lib/google/drive";
+import { ensureClientFolderAndDoc } from "@/lib/google/drive";
+import { addSectionToSessionLog } from "@/lib/caseHistory";
 import { fmtDate } from "@/lib/time";
 
 // Save a live Clean Language session: store the full transcript in the app, and
@@ -32,17 +33,15 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
 
   const clinicLabel = clinic === "waterloo" ? "Waterloo" : "Bethnal Green";
   const { docId } = await ensureClientFolderAndDoc(id);
-  await appendFormattedSections(docId, null, [
-    {
-      heading: `Session (Clean Language) — ${fmtDate(date)} · ${clinicLabel}`,
-      lines: [
-        { kind: "bullets", label: "Summary", items: bullets },
-        ...(pinned.length ? [{ kind: "bullets" as const, label: "Highlights — their words", items: pinned }] : []),
-        ...(myNotes ? [{ kind: "paragraph" as const, label: "My notes", value: myNotes }] : []),
-        ...(transcript ? [{ kind: "paragraph" as const, label: "Full conversation", value: transcript }] : []),
-      ],
-    },
-  ]);
+  await addSectionToSessionLog(docId, {
+    heading: `${fmtDate(date)} · ${clinicLabel} · Clean Language`,
+    lines: [
+      { kind: "bullets", label: "Summary", items: bullets },
+      ...(pinned.length ? [{ kind: "bullets" as const, label: "Highlights — their words", items: pinned }] : []),
+      ...(myNotes ? [{ kind: "paragraph" as const, label: "My notes", value: myNotes }] : []),
+      ...(transcript ? [{ kind: "paragraph" as const, label: "Full conversation", value: transcript }] : []),
+    ],
+  });
 
   return NextResponse.json(recording);
 });

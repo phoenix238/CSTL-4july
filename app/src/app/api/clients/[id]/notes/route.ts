@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { summariseNote } from "@/lib/claude";
-import { appendNoteToDoc, ensureClientFolderAndDoc } from "@/lib/google/drive";
-import { fmtDate } from "@/lib/time";
+import { ensureClientFolderAndDoc } from "@/lib/google/drive";
+import { addSessionToDoc } from "@/lib/caseHistory";
 
 export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
@@ -17,8 +17,9 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     data: { clientId: id, date, clinic, raw, bullets },
   });
 
+  // Into the top of the Doc's session log, not the bottom of the Doc.
   const { docId } = await ensureClientFolderAndDoc(id);
-  await appendNoteToDoc(docId, { date: fmtDate(date), clinic, bullets, raw });
+  await addSessionToDoc(docId, { date, clinic, bullets, raw });
 
   return NextResponse.json(note);
 });

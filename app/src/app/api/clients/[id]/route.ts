@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { guarded } from "@/lib/api";
 import { deleteClient, updateClientDetails } from "@/lib/clients";
 import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
+import { refreshAtAGlance } from "@/lib/caseHistory";
 import { fmtDate } from "@/lib/time";
 
 export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -14,26 +15,34 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   // The "FROM THE INTAKE FORM" editor on the profile is also how details get
   // corrected/filled in by hand — mirror that into the Doc, same as a real
   // intake-form submission would, so the Doc stays the record of what's known.
+  //
+  // On a Doc that's on the case-history layout the "at a glance" block is
+  // rewritten in place, rather than a dated correction being tacked onto the
+  // end: the record should read as current, not as a trail of amendments. Docs
+  // not yet reformatted keep the old appended behaviour.
   if (syncToDoc) {
     const { docId } = await ensureClientFolderAndDoc(id);
-    const sections: DocSection[] = [
-      {
-        heading: `Details updated — ${fmtDate(new Date())}`,
-        lines: [
-          { kind: "field", label: "Full name", value: client.name },
-          { kind: "field", label: "Email", value: client.email },
-          { kind: "field", label: "Phone", value: client.phone },
-          { kind: "field", label: "Date of birth", value: client.dob },
-          { kind: "field", label: "Occupation", value: client.occupation },
-          { kind: "field", label: "Doctor", value: client.doctor },
-          { kind: "paragraph", label: "Medications", value: client.meds },
-          { kind: "paragraph", label: "Health conditions", value: client.conditions },
-          { kind: "field", label: "Emergency contact", value: client.emergency },
-          { kind: "field", label: "Referred by", value: client.referred },
-        ],
-      },
-    ];
-    await appendFormattedSections(docId, null, sections);
+    const replaced = await refreshAtAGlance(id, docId);
+    if (!replaced) {
+      const sections: DocSection[] = [
+        {
+          heading: `Details updated — ${fmtDate(new Date())}`,
+          lines: [
+            { kind: "field", label: "Full name", value: client.name },
+            { kind: "field", label: "Email", value: client.email },
+            { kind: "field", label: "Phone", value: client.phone },
+            { kind: "field", label: "Date of birth", value: client.dob },
+            { kind: "field", label: "Occupation", value: client.occupation },
+            { kind: "field", label: "Doctor", value: client.doctor },
+            { kind: "paragraph", label: "Medications", value: client.meds },
+            { kind: "paragraph", label: "Health conditions", value: client.conditions },
+            { kind: "field", label: "Emergency contact", value: client.emergency },
+            { kind: "field", label: "Referred by", value: client.referred },
+          ],
+        },
+      ];
+      await appendFormattedSections(docId, null, sections);
+    }
   }
 
   return NextResponse.json(client);

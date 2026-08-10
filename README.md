@@ -29,9 +29,20 @@ phone, and updates itself whenever this repo changes.
   moved — with the option to pull what's already in it into the profile.
 - **Every client** gets `Drive › CSTL › Clients › (name)` with a Doc; the marketing
   spreadsheet (`Drive › CSTL › Clients › Docs`) tracks email + consent.
+- **Case history layout** — every client Doc carries the same headers, in the same order:
+  *at a glance*, then **1. the intake form as they submitted it**, the clinical sections
+  (presenting issue, history of it, medical, medications, previous treatment, lifestyle,
+  birth & development, injuries, red flags, goals, plan), **13. session log** — newest
+  first, where new notes land — and **14. consent & data**. Intake answers seed the
+  sections they already answer, so nothing is asked for twice. New Docs are created on
+  the layout; the **Case history** screen brings existing ones onto it, one client at a
+  time or all of them, sorting each Doc's current text into the sections and keeping the
+  whole of it underneath as *Original record*. Nothing is deleted, and Doc links don't
+  change.
 - **Calendar** — the week at a glance, personal + room/block events side by side.
 - **Import** — drop old files; Claude extracts client records, duplicates are merged,
-  originals stored in each client's folder, legacy notes appended to their Doc.
+  originals stored in each client's folder, legacy notes written into their Doc under
+  *Original record*, ready for the Case history pass to sort into sections.
 - **Settings** — clinic rules, access note, per-location email templates, Google wiring.
 - **Gmail add-on** (`../gmail-addon`) — a button inside Gmail (desktop + mobile) that turns
   an open client email into an enquiry here, one tap, with the reply landing back in the
