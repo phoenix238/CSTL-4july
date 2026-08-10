@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeAvailability,
   computeAvailableSlots,
   dayOpenIntervals,
+  explainEmptyDay,
   isSlotAvailable,
   mergeIntervals,
   resolveWeeklyHours,
@@ -87,6 +89,83 @@ describe("resolveWeeklyHours", () => {
   it("drops malformed windows but keeps valid ones", () => {
     const raw = { waterloo: [{ weekday: 1, startMin: 540, endMin: 1020 }, { weekday: 9, startMin: 0, endMin: 60 }] };
     expect(resolveWeeklyHours(raw).waterloo).toEqual([{ weekday: 1, startMin: 540, endMin: 1020 }]);
+  });
+});
+
+describe("explainEmptyDay", () => {
+  const run = (params: Partial<Parameters<typeof computeAvailability>[0]> = {}) =>
+    computeAvailability({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }], // 9-5
+      overrides: [],
+      busy: [],
+      slotMinutes: 30,
+      now: at(0),
+      ...params,
+    }).days[0];
+
+  it("says nothing at all when the day has bookable time", () => {
+    expect(explainEmptyDay(run())).toBe("");
+  });
+
+  it("names the weekly cap — the reason that costs the most time to work out by hand", () => {
+    const trace = run({
+      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 } },
+    });
+    expect(trace.bookable).toBe(0);
+    expect(explainEmptyDay(trace)).toMatch(/cap/i);
+  });
+
+  it("says when no hours are set for the day", () => {
+    expect(explainEmptyDay(run({ weeklyHours: [] }))).toMatch(/no hours/i);
+  });
+
+  it("says when a full diary is what's blocking it", () => {
+    const trace = run({ busy: [{ start: at(9), end: at(17) }] });
+    expect(explainEmptyDay(trace)).toMatch(/taken/i);
+  });
+
+  it("says when it's the minimum-notice window", () => {
+    // "Now" is late in the day, so every slot on it is already past the cutoff.
+    const trace = run({ now: at(16, 30) });
+    expect(explainEmptyDay(trace)).toMatch(/too soon/i);
+  });
+
+  it("says when the hours are too short to hold a session", () => {
+    const trace = run({ weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 570 }] }); // 30 min
+    expect(explainEmptyDay(trace)).toMatch(/shorter than one session/i);
+  });
+});
+
+describe("computeAvailability", () => {
+  it("returns exactly what computeAvailableSlots does — the calendar and /book can't disagree", () => {
+    const params = {
+      clinic: "bethnal" as const,
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }],
+      overrides: [],
+      busy: [{ start: at(11), end: at(12) }],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    };
+    expect(computeAvailability(params).slots).toEqual(computeAvailableSlots(params));
+  });
+
+  it("accounts for every candidate — bookable plus dropped equals the total considered", () => {
+    const day = computeAvailability({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }],
+      overrides: [],
+      busy: [{ start: at(11), end: at(12) }],
+      slotMinutes: 30,
+      now: at(10),
+      minNoticeMinutes: 120,
+    }).days[0];
+    const { past, hours, busy, cap } = day.dropped;
+    expect(day.bookable + past + hours + busy + cap).toBe(day.candidates);
   });
 });
 

@@ -6,6 +6,7 @@ import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
 import { findClientByEmail } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
+import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
 import { sendEmail } from "@/lib/google/gmail";
 
 // NOT guarded — public self-booking. Authorization model: we never trust the
@@ -43,6 +44,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Please add a valid email" }, { status: 400 });
     }
     const cleanPhone = phone?.trim() ?? "";
+
+    // Before anything that costs: a Drive folder, a Doc, calendar events and an
+    // email all follow from here, so the ceiling is checked first, not after.
+    await assertBookingAllowed(req, cleanEmail);
 
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
@@ -108,6 +113,10 @@ export async function POST(req: Request) {
     // plainly so they just pick again.
     if (err instanceof SlotTakenError) {
       return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    // Booking too often — a real message they can act on, not a generic 500.
+    if (err instanceof RateLimitedError) {
+      return NextResponse.json({ error: err.message }, { status: 429 });
     }
     // Never surface raw internal/Google API error text to a public visitor.
     console.error(err);

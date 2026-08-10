@@ -148,11 +148,19 @@ const pad = (iv: { start: Date; end: Date }, minutes: number) =>
     : iv;
 
 /**
+ * Why a candidate didn't make it — "ok" when it did.
+ *
+ * Reported rather than swallowed so the admin calendar can say *why* a day has
+ * nothing on it. Every explanation shown there comes from this one pass, so the
+ * reason a slot is missing is always the real reason.
+ */
+export type FitResult = "ok" | "hours" | "busy" | "cap";
+
+/**
  * Does this exact candidate instant (at `minute` past London midnight) fit
- * inside one of the day's open intervals, with its full padded footprint,
- * and clear of every busy span? Shared by the grid scan below and by
- * `isSlotAvailable`, which checks one arbitrary instant that may not land on
- * the grid at all.
+ * inside one of the day's open intervals, and clear of every busy span?
+ * Shared by the grid scan below and by `isSlotAvailable`, which checks one
+ * arbitrary instant that may not land on the grid at all.
  */
 function slotFits(
   candidate: Date,
@@ -162,7 +170,7 @@ function slotFits(
   busy: AvailabilityParams["busy"],
   bufferMinutes: number,
   weeklyCap?: AvailabilityParams["weeklyCap"],
-): boolean {
+): FitResult {
   // Both clinics currently footprint to exactly the session hour (see
   // blockedRange in rules.ts), but this stays generic in case a future
   // clinic rule pads its real calendar footprint beyond the raw session
@@ -178,7 +186,7 @@ function slotFits(
   // 09:00–17:00 with a 15-min buffer offered nothing before 09:30 or after 15:30.
   const footprintStart = minute - startPadMin;
   const footprintEnd = minute + SESSION_MINUTES + endPadMin;
-  if (!intervals.some((iv) => footprintStart >= iv.start && footprintEnd <= iv.end)) return false;
+  if (!intervals.some((iv) => footprintStart >= iv.start && footprintEnd <= iv.end)) return "hours";
 
   // Each busy span pads by its own buffer if it has one (e.g. a bigger
   // safety gap around a studio-mate's Chalk Farm booking), else the
@@ -187,19 +195,38 @@ function slotFits(
     const padded = pad(b, b.bufferMinutes ?? bufferMinutes);
     return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
   });
-  if (busyClash) return false;
+  if (busyClash) return "busy";
 
   if (weeklyCap) {
     const weekKey = londonDateKey(londonWeekStart(candidate));
     const already = weeklyCap.bookedMinutesByWeek[weekKey] ?? 0;
-    if (already + SESSION_MINUTES > weeklyCap.capMinutes) return false;
+    if (already + SESSION_MINUTES > weeklyCap.capMinutes) return "cap";
   }
 
-  return true;
+  return "ok";
 }
 
-/** Real bookable slot start times: open hours minus busy time, minus past/too-soon. */
-export function computeAvailableSlots(params: AvailabilityParams): Date[] {
+/** What happened on one London day, so an empty one can explain itself. */
+export interface DayTrace {
+  dateKey: string;
+  /** total open minutes from weekly hours + overrides, before anything else applies */
+  openMinutes: number;
+  /** grid positions considered inside those hours */
+  candidates: number;
+  bookable: number;
+  /** why the rest were dropped */
+  dropped: { past: number; hours: number; busy: number; cap: number };
+}
+
+/**
+ * The slots, and a per-day account of how they were arrived at.
+ *
+ * `computeAvailableSlots` is this function without the trace. They are the same
+ * pass on purpose: the admin calendar's explanation of an empty day has to come
+ * from the code that actually decides, or it becomes another thing that can
+ * disagree with the booking page — which is the bug it exists to prevent.
+ */
+export function computeAvailability(params: AvailabilityParams): { slots: Date[]; days: DayTrace[] } {
   const {
     clinic,
     windowStart,
@@ -215,6 +242,7 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
   } = params;
   const cutoff = new Date(now.getTime() + minNoticeMinutes * 60_000);
   const results: Date[] = [];
+  const days: DayTrace[] = [];
 
   // Step by London calendar days (DST-safe). A fixed 24 h step would process
   // the autumn fall-back Sunday twice (duplicate slots) and drop a day.
@@ -223,19 +251,60 @@ export function computeAvailableSlots(params: AvailabilityParams): Date[] {
     const weekday = londonWeekdayIndex(day);
     const dateKey = londonDateKey(day);
     const intervals = dayOpenIntervals(weekday, dateKey, weeklyHours, overrides);
+    const trace: DayTrace = {
+      dateKey,
+      openMinutes: intervals.reduce((sum, iv) => sum + (iv.end - iv.start), 0),
+      candidates: 0,
+      bookable: 0,
+      dropped: { past: 0, hours: 0, busy: 0, cap: 0 },
+    };
+    days.push(trace);
     if (!intervals.length) continue;
 
     for (const interval of intervals) {
       for (let minute = interval.start; minute + SESSION_MINUTES <= interval.end; minute += slotMinutes) {
         const candidate = londonTime(y, m, d, Math.floor(minute / 60), minute % 60);
-        if (candidate < cutoff) continue;
-        if (!slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap)) continue;
+        trace.candidates++;
+        if (candidate < cutoff) {
+          trace.dropped.past++;
+          continue;
+        }
+        const fit = slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap);
+        if (fit !== "ok") {
+          trace.dropped[fit]++;
+          continue;
+        }
+        trace.bookable++;
         results.push(candidate);
       }
     }
   }
 
-  return results;
+  return { slots: results, days };
+}
+
+/** Real bookable slot start times: open hours minus busy time, minus past/too-soon. */
+export function computeAvailableSlots(params: AvailabilityParams): Date[] {
+  return computeAvailability(params).slots;
+}
+
+/**
+ * One plain sentence for why a day has nothing bookable on it — or "" when it
+ * has. Deliberately names the setting responsible, so the answer to "why is the
+ * 12th empty?" is on the screen rather than at the end of an investigation.
+ */
+export function explainEmptyDay(trace: DayTrace): string {
+  if (trace.bookable > 0) return "";
+  if (trace.openMinutes === 0) return "No hours set for this day";
+  if (trace.candidates === 0) return "The hours set are shorter than one session";
+  const { past, hours, busy, cap } = trace.dropped;
+  // Reported worst-first: the cap and a full diary are the surprising answers,
+  // the notice window and short hours are the expected ones.
+  if (cap > 0 && cap >= busy) return "Weekly Chalk Farm hours cap reached for this week";
+  if (busy > 0 && busy >= past) return "Everything's taken — busy time on your calendar, or gaps too small";
+  if (past > 0) return "Too soon to book — inside your minimum-notice window";
+  if (hours > 0) return "The hours set don't leave room for a full session";
+  return "Nothing bookable";
 }
 
 /**
@@ -268,5 +337,5 @@ export function isSlotAvailable(
   if (!intervals.length) return false;
 
   const minute = londonMinutes(candidate);
-  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap);
+  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap) === "ok";
 }

@@ -163,6 +163,25 @@ model Enquiry {
   @@index([offerToken])
 }
 
+/**
+ * One row per attempt to book from the public page — what the rate limit counts.
+ *
+ * The booking form is open to the internet by design, and every accepted
+ * submission creates a client record, a Drive folder, a Doc, two calendar
+ * events and an email sent from Phoenix's own Gmail. Without a ceiling, a
+ * script can fill the diary, fill Drive, and get the sending account throttled.
+ * Kept in Postgres rather than in memory because serverless instances don't
+ * share memory — an in-process counter would reset constantly and count wrong.
+ */
+model BookingAttempt {
+  id        String   @id @default(cuid())
+  /** "email:someone@example.com" or "ip:1.2.3.4" */
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+}
+
 // Single row (id = 1). Holds editable settings and the Google wiring.
 model AppSettings {
   id                    Int    @id @default(1)

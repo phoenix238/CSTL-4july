@@ -1,7 +1,7 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonWeekStart } from "@/lib/time";
-import { computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams } from "./availability";
+import { computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
 
 /**
@@ -102,19 +102,29 @@ export function filterBusyForClinic(
  * the browse view and the write check could drift apart, a slot could look free
  * and then be refused, or worse, be taken twice.
  */
-export async function loadAvailableSlots({
+export async function loadAvailableSlots(args: {
+  clinic: Clinic;
+  windowStart: Date;
+  windowEnd: Date;
+  /** Ignore this booking's own footprint — so a client rescheduling can see the
+   * slot they currently hold, and adjacent ones, as available. */
+  excludeBookingId?: string;
+}): Promise<Date[]> {
+  return computeAvailableSlots(await availabilityParams(args));
+}
+
+/** Gather everything `computeAvailability` needs for one clinic and window. */
+async function availabilityParams({
   clinic,
   windowStart,
   windowEnd,
-  /** Ignore this booking's own footprint — so a client rescheduling can see the
-   * slot they currently hold, and adjacent ones, as available. */
   excludeBookingId,
 }: {
   clinic: Clinic;
   windowStart: Date;
   windowEnd: Date;
   excludeBookingId?: string;
-}): Promise<Date[]> {
+}): Promise<AvailabilityParams> {
   const settings = await getSettings();
   const [overrides, busy, weeklyCap] = await Promise.all([
     prisma.availabilityOverride.findMany({
@@ -124,7 +134,7 @@ export async function loadAvailableSlots({
     clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
   ]);
 
-  return computeAvailableSlots({
+  return {
     clinic,
     windowStart,
     windowEnd,
@@ -142,7 +152,23 @@ export async function loadAvailableSlots({
     bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
     minNoticeMinutes: settings.bookingMinNoticeMins,
     weeklyCap,
-  });
+  };
+}
+
+/**
+ * The same answer as `loadAvailableSlots`, plus the per-day account of how it
+ * got there — for the admin calendar, which shows what a client can actually
+ * book and explains any day where that's nothing.
+ *
+ * Goes through the identical path rather than recomputing: the whole point is
+ * that the calendar and the booking page can't disagree.
+ */
+export async function loadAvailabilityWithTrace(args: {
+  clinic: Clinic;
+  windowStart: Date;
+  windowEnd: Date;
+}): Promise<{ slots: Date[]; days: DayTrace[] }> {
+  return computeAvailability(await availabilityParams(args));
 }
 
 /** The browsing window a client sees: today out to the booking horizon. */
