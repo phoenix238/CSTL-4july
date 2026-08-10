@@ -32,6 +32,7 @@ export function AvailabilityComposer({
   endMin,
   kind: initialKind = "open",
   repeatWeekly: initialRepeat = false,
+  exactStart: initialExact = false,
   id,
   onClose,
   onSaved,
@@ -43,6 +44,7 @@ export function AvailabilityComposer({
   endMin: number;
   kind?: "open" | "block";
   repeatWeekly?: boolean;
+  exactStart?: boolean;
   id?: string;
   onClose: () => void;
   onSaved: () => void;
@@ -53,6 +55,9 @@ export function AvailabilityComposer({
   const [startTime, setStartTime] = useState(minToTime(startMin));
   const [endTime, setEndTime] = useState(minToTime(endMin));
   const [repeatWeekly, setRepeatWeekly] = useState(initialRepeat);
+  // "block" = an open stretch the booking grid fills with start times.
+  // "slot"  = one exact pickable start time (exactStart on the override).
+  const [fill, setFill] = useState<"block" | "slot">(initialExact ? "slot" : "block");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -67,15 +72,17 @@ export function AvailabilityComposer({
     }
     setSaving(true);
     try {
+      // A single slot only makes sense for open time; a block is always a stretch.
+      const exactStart = kind === "open" && fill === "slot";
       if (mode === "create") {
         await api("/api/availability-overrides", {
           method: "POST",
-          body: JSON.stringify({ clinic, date: londonDateKey(day), kind, startMin: s, endMin: e, note: "", repeatWeekly }),
+          body: JSON.stringify({ clinic, date: londonDateKey(day), kind, startMin: s, endMin: e, note: "", repeatWeekly, exactStart }),
         });
       } else {
         await api(`/api/availability-overrides/${id}`, {
           method: "PATCH",
-          body: JSON.stringify({ kind, startMin: s, endMin: e, repeatWeekly }),
+          body: JSON.stringify({ kind, startMin: s, endMin: e, repeatWeekly, exactStart }),
         });
       }
       toast(kind === "open" ? "Availability saved ✓" : "Marked unavailable ✓");
@@ -139,9 +146,28 @@ export function AvailabilityComposer({
             </div>
           </div>
 
+          {kind === "open" && (
+            <div className="flex flex-col gap-1.5">
+              <SectionLabel>OFFER THIS AS</SectionLabel>
+              <div className="flex gap-1.5">
+                {(["block", "slot"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFill(f)}
+                    className={`cursor-pointer rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold select-none ${
+                      fill === f ? "bg-clay text-cream" : "border border-line bg-card text-ink-soft hover:bg-hoverbg"
+                    }`}
+                  >
+                    {f === "block" ? "An open block" : "One exact slot"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-end gap-2">
             <label className="flex flex-col gap-1.5">
-              <SectionLabel>FROM</SectionLabel>
+              <SectionLabel>{kind === "open" && fill === "slot" ? "AT" : "FROM"}</SectionLabel>
               <input
                 type="time"
                 step={900}
@@ -163,9 +189,11 @@ export function AvailabilityComposer({
           </div>
 
           <div className="text-[11.5px] text-muted">
-            {kind === "open"
-              ? "Opens this window for online booking, on top of your usual weekly hours."
-              : "Closes this window — no online bookings land here, even during your usual hours."}
+            {kind === "block"
+              ? "Closes this window — no online bookings land here, even during your usual hours."
+              : fill === "slot"
+                ? "Offers exactly one bookable start at this time — nothing either side of it. Draw one for each specific time you want to give (e.g. 7:00, then 8:15)."
+                : "Opens this window for online booking, filled with start times on your usual spacing, on top of your weekly hours."}
           </div>
 
           <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-hoverbg/40 px-3 py-2.5">

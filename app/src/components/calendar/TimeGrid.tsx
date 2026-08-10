@@ -364,7 +364,9 @@ export function TimeGrid({
                         ? "Usual hours"
                         : w.kind === "bookable"
                           ? "Bookable"
-                          : "Available") + (w.repeatWeekly ? " ↻" : "");
+                          : w.exactStart
+                            ? "Slot"
+                            : "Available") + (w.repeatWeekly ? " ↻" : "");
                   return (
                     <div
                       key={`${w.kind}-${w.id ?? wi}`}

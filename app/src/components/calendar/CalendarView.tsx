@@ -41,6 +41,7 @@ interface OverrideDTO {
   startMin: number;
   endMin: number;
   repeatWeekly?: boolean;
+  exactStart?: boolean;
 }
 
 interface AvailComposerState {
@@ -51,6 +52,7 @@ interface AvailComposerState {
   endMin: number;
   kind?: "open" | "block";
   repeatWeekly?: boolean;
+  exactStart?: boolean;
   id?: string;
 }
 
@@ -177,6 +179,7 @@ export function CalendarView() {
             startMin: o.startMin,
             endMin: o.endMin,
             repeatWeekly: o.repeatWeekly,
+            exactStart: o.exactStart,
           });
         }
       }
@@ -501,6 +504,7 @@ export function CalendarView() {
                 endMin: w.endMin,
                 kind: w.kind,
                 repeatWeekly: w.repeatWeekly,
+                exactStart: w.exactStart,
                 id: w.id,
               });
             }}
@@ -629,6 +633,7 @@ export function CalendarView() {
           endMin={availComposer.endMin}
           kind={availComposer.kind}
           repeatWeekly={availComposer.repeatWeekly}
+          exactStart={availComposer.exactStart}
           id={availComposer.id}
           onClose={() => setAvailComposer(null)}
           onSaved={availabilitySaved}

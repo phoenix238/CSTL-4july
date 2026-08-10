@@ -308,6 +308,59 @@ describe("repeating overrides", () => {
   });
 });
 
+describe("exact-start windows offer a single pickable slot", () => {
+  const run = (overrides: OverrideWindow[], weeklyHours: WeeklyWindow[] = [], busy: { start: Date; end: Date }[] = []) =>
+    computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides,
+      busy,
+      slotMinutes: 30,
+      now: at(0),
+    }).map(fmtTime);
+
+  it("offers only the start time, not a grid, however long the window is", () => {
+    // A two-hour window that, as an open block, would give four starts.
+    const exact: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "open", startMin: 19 * 60, endMin: 21 * 60, exactStart: true },
+    ];
+    expect(run(exact)).toEqual(["19:00"]);
+  });
+
+  it("two exact slots build a bespoke evening — 19:00 and 20:15 only", () => {
+    const exact: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "open", startMin: 19 * 60, endMin: 20 * 60, exactStart: true },
+      { date: "2026-07-07", kind: "open", startMin: 20 * 60 + 15, endMin: 21 * 60 + 15, exactStart: true },
+    ];
+    expect(run(exact)).toEqual(["19:00", "20:15"]);
+  });
+
+  it("an exact slot inside a block is closed", () => {
+    const overrides: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "open", startMin: 19 * 60, endMin: 20 * 60, exactStart: true },
+      { date: "2026-07-07", kind: "block", startMin: 19 * 60, endMin: 20 * 60 },
+    ];
+    expect(run(overrides)).toEqual([]);
+  });
+
+  it("an exact slot already taken by a booking drops out", () => {
+    const exact: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "open", startMin: 19 * 60, endMin: 20 * 60, exactStart: true },
+    ];
+    expect(run(exact, [], [{ start: at(19), end: at(20) }])).toEqual([]);
+  });
+
+  it("coexists with open-block windows the same day — daytime grid plus a fixed evening slot", () => {
+    const overrides: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "open", startMin: 20 * 60, endMin: 21 * 60, exactStart: true },
+    ];
+    const weekly: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 10 * 60, endMin: 12 * 60 }]; // 10-12 block
+    const slots = run(overrides, weekly);
+    expect(slots).toEqual(["10:00", "10:30", "11:00", "20:00"]);
+  });
+});
+
 describe("a deliberately-drawn gap between two windows is respected", () => {
   // Exactly Phoenix's two evening slots: 19:00-20:00 then 20:15-21:15.
   const twoEvenings: WeeklyWindow[] = [

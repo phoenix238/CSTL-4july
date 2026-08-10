@@ -144,6 +144,7 @@ export async function loadOverridesForWindow(
     startMin: o.startMin,
     endMin: o.endMin,
     repeatWeekly: o.repeatWeekly,
+    exactStart: o.exactStart,
   }));
 }
 

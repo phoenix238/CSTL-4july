@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 
 export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  const { kind, startMin, endMin, note, repeatWeekly } = await req.json();
-  const data: { kind?: string; startMin?: number; endMin?: number; note?: string; repeatWeekly?: boolean } = {};
+  const { kind, startMin, endMin, note, repeatWeekly, exactStart } = await req.json();
+  const data: { kind?: string; startMin?: number; endMin?: number; note?: string; repeatWeekly?: boolean; exactStart?: boolean } = {};
 
   if (kind !== undefined) {
     if (kind !== "open" && kind !== "block") {
@@ -24,6 +24,7 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   }
   if (note !== undefined) data.note = String(note).trim();
   if (repeatWeekly !== undefined) data.repeatWeekly = !!repeatWeekly;
+  if (exactStart !== undefined) data.exactStart = !!exactStart;
 
   const override = await prisma.availabilityOverride.update({ where: { id }, data });
   return NextResponse.json({ override });

@@ -363,6 +363,13 @@ model AvailabilityOverride {
    * rather than something re-drawn every week.
    */
   repeatWeekly Boolean @default(false)
+  /**
+   * For an "open" window: offer only its start time as a single pickable slot,
+   * rather than stepping a grid of starts across it. Lets a day be built from
+   * specific times ("7:00 and 8:15") instead of an open block the booking grid
+   * fills in. Ignored for a "block".
+   */
+  exactStart Boolean @default(false)
   note      String   @default("")
   createdAt DateTime @default(now())
 

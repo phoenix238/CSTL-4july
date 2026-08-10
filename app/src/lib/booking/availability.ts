@@ -67,6 +67,12 @@ export interface OverrideWindow {
   endMin: number;
   /** applies to `date`'s weekday every week from `date` onward, until removed */
   repeatWeekly?: boolean;
+  /**
+   * An "open" window that offers only its start time, as a single pickable slot,
+   * instead of a grid of starts across it. So a day can be built from specific
+   * times ("7:00, 8:15") rather than an open block. Ignored for a "block".
+   */
+  exactStart?: boolean;
 }
 
 /**
@@ -127,23 +133,41 @@ export function subtractInterval(base: Interval[], cut: Interval): Interval[] {
   return out;
 }
 
-/** The open minute-of-day intervals for one clinic on one London calendar date. */
+/**
+ * The open minute-of-day intervals for one clinic on one London calendar date.
+ *
+ * `gridOnly` leaves out exact-start open windows — the ones offering a single
+ * pickable time rather than a grid of starts. The slot scan asks for the grid
+ * set (to step across) and the full set (to check a candidate's footprint fits
+ * in open time) separately; an exact slot must count as open time without
+ * spawning a grid of extra starts inside its own window.
+ */
 export function dayOpenIntervals(
   weekday: number,
   dateKey: string,
   weeklyHours: WeeklyWindow[],
   overrides: OverrideWindow[],
+  { gridOnly = false }: { gridOnly?: boolean } = {},
 ): Interval[] {
   let intervals = mergeIntervals(
     weeklyHours.filter((w) => w.weekday === weekday).map((w) => ({ start: w.startMin, end: w.endMin })),
   );
   const forDate = overrides.filter((o) => overrideAppliesOn(o, dateKey, weekday));
-  const opens = forDate.filter((o) => o.kind === "open").map((o) => ({ start: o.startMin, end: o.endMin }));
+  const opens = forDate
+    .filter((o) => o.kind === "open" && !(gridOnly && o.exactStart))
+    .map((o) => ({ start: o.startMin, end: o.endMin }));
   if (opens.length) intervals = mergeIntervals([...intervals, ...opens]);
   for (const block of forDate.filter((o) => o.kind === "block")) {
     intervals = subtractInterval(intervals, { start: block.startMin, end: block.endMin });
   }
   return intervals;
+}
+
+/** The exact-start times an "open" override contributes on one day (as minutes). */
+export function exactStartsOn(overrides: OverrideWindow[], dateKey: string, weekday: number): number[] {
+  return overrides
+    .filter((o) => o.kind === "open" && o.exactStart && overrideAppliesOn(o, dateKey, weekday))
+    .map((o) => o.startMin);
 }
 
 export interface AvailabilityParams {
@@ -306,38 +330,52 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
     const { y, m, d } = londonYMD(day);
     const weekday = londonWeekdayIndex(day);
     const dateKey = londonDateKey(day);
-    const intervals = dayOpenIntervals(weekday, dateKey, weeklyHours, overrides);
+    // Two views of the day's open time: the full set (used to check a
+    // candidate's footprint fits) and the grid set (stepped for starts). They
+    // differ only by exact-start windows, which count as open time but must not
+    // spawn a grid of starts inside themselves.
+    const fitIntervals = dayOpenIntervals(weekday, dateKey, weeklyHours, overrides);
+    const gridIntervals = dayOpenIntervals(weekday, dateKey, weeklyHours, overrides, { gridOnly: true });
     const trace: DayTrace = {
       dateKey,
-      openMinutes: intervals.reduce((sum, iv) => sum + (iv.end - iv.start), 0),
+      openMinutes: fitIntervals.reduce((sum, iv) => sum + (iv.end - iv.start), 0),
       candidates: 0,
       bookable: 0,
       dropped: { past: 0, hours: 0, busy: 0, cap: 0, clockChange: 0 },
     };
     days.push(trace);
-    if (!intervals.length) continue;
+    if (!fitIntervals.length) continue;
 
-    for (const interval of intervals) {
+    // Every start to consider: the grid across open blocks, plus each exact
+    // slot's single time. Deduped so an exact time that also lands on the grid
+    // isn't offered twice.
+    const candidateMinutes = new Set<number>();
+    for (const interval of gridIntervals) {
       for (let minute = interval.start; minute + SESSION_MINUTES <= interval.end; minute += slotMinutes) {
-        // Null on the spring-forward Sunday, for the hour that doesn't happen.
-        const candidate = londonTimeExact(y, m, d, Math.floor(minute / 60), minute % 60);
-        trace.candidates++;
-        if (!candidate) {
-          trace.dropped.clockChange++;
-          continue;
-        }
-        if (candidate < cutoff) {
-          trace.dropped.past++;
-          continue;
-        }
-        const fit = slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap);
-        if (fit !== "ok") {
-          trace.dropped[fit]++;
-          continue;
-        }
-        trace.bookable++;
-        results.push(candidate);
+        candidateMinutes.add(minute);
       }
+    }
+    for (const minute of exactStartsOn(overrides, dateKey, weekday)) candidateMinutes.add(minute);
+
+    for (const minute of [...candidateMinutes].sort((a, b) => a - b)) {
+      // Null on the spring-forward Sunday, for the hour that doesn't happen.
+      const candidate = londonTimeExact(y, m, d, Math.floor(minute / 60), minute % 60);
+      trace.candidates++;
+      if (!candidate) {
+        trace.dropped.clockChange++;
+        continue;
+      }
+      if (candidate < cutoff) {
+        trace.dropped.past++;
+        continue;
+      }
+      const fit = slotFits(candidate, minute, fitIntervals, clinic, busy, bufferMinutes, weeklyCap);
+      if (fit !== "ok") {
+        trace.dropped[fit]++;
+        continue;
+      }
+      trace.bookable++;
+      results.push(candidate);
     }
   }
 

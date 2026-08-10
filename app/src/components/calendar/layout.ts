@@ -75,6 +75,8 @@ export interface AvailWindowDTO {
   endMin: number;
   /** an "open"/"block" window that repeats on this weekday every week */
   repeatWeekly?: boolean;
+  /** an "open" window offering a single pickable start rather than a grid */
+  exactStart?: boolean;
 }
 
 /** Colours for the availability layer — green = bookable, red = closed. */
