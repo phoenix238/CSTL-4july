@@ -14,6 +14,8 @@ export function IntakeForm({
   alreadyDone,
   questions,
   copy,
+  embedded = false,
+  onDone,
 }: {
   token: string;
   clientName: string;
@@ -22,6 +24,9 @@ export function IntakeForm({
   alreadyDone: boolean;
   questions: IntakeQuestion[];
   copy: ClientCopy;
+  /** Rendered inline inside another page (e.g. filling it in with a client in the room) — no full-page chrome. */
+  embedded?: boolean;
+  onDone?: () => void;
 }) {
   const toast = useToast();
   const [name, setName] = useState(clientName);
@@ -55,6 +60,7 @@ export function IntakeForm({
         body: JSON.stringify({ name, email, answers, consent }),
       });
       setDone(true);
+      onDone?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't send that — please try again");
     } finally {
@@ -63,8 +69,8 @@ export function IntakeForm({
   }
 
   if (done) {
-    return (
-      <div className="mx-auto flex min-h-screen max-w-[560px] flex-col items-center justify-center gap-3 px-5 text-center">
+    const thanks = (
+      <div className="flex flex-col items-center gap-3 text-center">
         <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-sage-tint text-2xl text-sage-text">
           ✓
         </div>
@@ -72,22 +78,17 @@ export function IntakeForm({
         <p className="text-[14px] leading-relaxed text-muted">{copy.intakeThanksBody}</p>
       </div>
     );
+    if (embedded) return <div className="px-5 py-8">{thanks}</div>;
+    return (
+      <div className="mx-auto flex min-h-screen max-w-[560px] flex-col items-center justify-center gap-3 px-5">
+        {thanks}
+      </div>
+    );
   }
 
-  return (
-    <div className="mx-auto max-w-[600px] px-5 py-10">
-      <header className="mb-6 text-center">
-        <h1 className="font-serif text-[28px] leading-[1.1]">{copy.intakePageTitle}</h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.intakePageIntro}</p>
-        {alreadyDone && (
-          <p className="mt-3 rounded-xl bg-sage-tint px-3.5 py-2 text-[12.5px] text-sage-text">
-            You&apos;ve filled this in before — you can update anything that&apos;s changed.
-          </p>
-        )}
-      </header>
-
-      <Card className="px-5 py-6">
-        <form
+  const form = (
+    <Card className="px-5 py-6">
+      <form
           onSubmit={(e) => {
             e.preventDefault();
             submit();
@@ -162,10 +163,27 @@ export function IntakeForm({
         </div>
 
         <PrimaryButton type="submit" disabled={saving} className="mt-1 py-3">
-          {saving ? "Sending…" : "Send to Phoenix"}
+          {saving ? (embedded ? "Saving…" : "Sending…") : embedded ? "Save intake form" : "Send to Phoenix"}
         </PrimaryButton>
         </form>
-      </Card>
+    </Card>
+  );
+
+  if (embedded) return form;
+
+  return (
+    <div className="mx-auto max-w-[600px] px-5 py-10">
+      <header className="mb-6 text-center">
+        <h1 className="font-serif text-[28px] leading-[1.1]">{copy.intakePageTitle}</h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.intakePageIntro}</p>
+        {alreadyDone && (
+          <p className="mt-3 rounded-xl bg-sage-tint px-3.5 py-2 text-[12.5px] text-sage-text">
+            You&apos;ve filled this in before — you can update anything that&apos;s changed.
+          </p>
+        )}
+      </header>
+
+      {form}
     </div>
   );
 }

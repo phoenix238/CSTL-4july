@@ -8,9 +8,12 @@ import { ReflectionComposer } from "./ReflectionComposer";
 import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
+import { InPersonIntakePanel } from "./InPersonIntakePanel";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
+import type { IntakeQuestion } from "@/lib/intakeQuestions";
+import type { ClientCopy } from "@/lib/clientCopy";
 
 export interface ProfileClient {
   id: string;
@@ -75,6 +78,8 @@ export function ClientProfile({
   location,
   accountBookings = [],
   paymentRef = "",
+  intakeQuestions,
+  clientCopy,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
@@ -86,6 +91,8 @@ export function ClientProfile({
   location?: { address: string; url: string; directions: string } | null;
   accountBookings?: AccountRow[];
   paymentRef?: string;
+  intakeQuestions: IntakeQuestion[];
+  clientCopy: ClientCopy;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -108,6 +115,8 @@ export function ClientProfile({
   const [changingClinic, setChangingClinic] = useState(false);
   const [sendingIntake, setSendingIntake] = useState(false);
   const [sendingReview, setSendingReview] = useState(false);
+  const [inPersonOpen, setInPersonOpen] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   async function cancelNextSession() {
     if (!nextBookingId) return;
@@ -237,12 +246,16 @@ export function ClientProfile({
 
   const age = calcAge(client.dob);
 
-  const details: Array<[string, string]> = [
+  const primaryDetails: Array<[string, string]> = [
     ["DATE OF BIRTH", age !== null ? `${client.dob} — age ${age}` : client.dob],
     ["OCCUPATION", client.occupation],
-    ["DOCTOR", client.doctor],
     ["MEDICATIONS", client.meds],
     ["HEALTH CONDITIONS", client.conditions],
+  ];
+
+  // Less-often-needed at a glance — tucked behind "Show more".
+  const secondaryDetails: Array<[string, string]> = [
+    ["DOCTOR", client.doctor],
     ["EMERGENCY CONTACT", client.emergency],
     ["REFERRED BY", client.referred],
     [
@@ -672,14 +685,6 @@ export function ClientProfile({
             </button>
           </div>
 
-          <ClientAccountPanel
-            clientId={client.id}
-            clientName={client.name}
-            hasEmail={Boolean(client.email)}
-            paymentRef={paymentRef}
-            bookings={accountBookings}
-          />
-
           <div className="flex items-center justify-between px-0.5 pt-2">
             <SectionLabel>FROM THE INTAKE FORM</SectionLabel>
             <button
@@ -743,7 +748,29 @@ export function ClientProfile({
               >
                 {sendingReview ? "Sending…" : "Send review request"}
               </button>
+              <button
+                onClick={() => setInPersonOpen((v) => !v)}
+                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
+              >
+                {inPersonOpen ? "Close" : "Fill in person"}
+              </button>
             </div>
+          )}
+
+          {!editing && inPersonOpen && (
+            <InPersonIntakePanel
+              clientId={client.id}
+              clientName={client.name}
+              clientPhone={client.phone}
+              clientEmail={client.email}
+              questions={intakeQuestions}
+              copy={clientCopy}
+              onDone={() => {
+                toast(`${client.name.split(" ")[0]}'s intake form saved ✓`);
+                setInPersonOpen(false);
+                router.refresh();
+              }}
+            />
           )}
 
           {!editing && (
@@ -771,14 +798,35 @@ export function ClientProfile({
 
           {!editing ? (
             <Card className="px-4 py-1.5">
-              {details.map(([label, value], i) => (
-                <div key={label} className={`py-[11px] ${i < details.length - 1 ? "border-b border-hairline" : ""}`}>
+              {primaryDetails.map(([label, value], i) => (
+                <div
+                  key={label}
+                  className={`py-[11px] ${i < primaryDetails.length - 1 || detailsExpanded ? "border-b border-hairline" : ""}`}
+                >
                   <div className="text-[10.5px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
                     {label}
                   </div>
                   <div className="mt-[3px] text-[13px] leading-normal">{value || "Not yet recorded"}</div>
                 </div>
               ))}
+              {detailsExpanded &&
+                secondaryDetails.map(([label, value], i) => (
+                  <div
+                    key={label}
+                    className={`py-[11px] ${i < secondaryDetails.length - 1 ? "border-b border-hairline" : ""}`}
+                  >
+                    <div className="text-[10.5px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                      {label}
+                    </div>
+                    <div className="mt-[3px] text-[13px] leading-normal">{value || "Not yet recorded"}</div>
+                  </div>
+                ))}
+              <button
+                onClick={() => setDetailsExpanded((v) => !v)}
+                className="w-full cursor-pointer py-[9px] text-center text-[11.5px] font-semibold text-muted hover:text-clay-text"
+              >
+                {detailsExpanded ? "Show less ‹" : "Show more ›"}
+              </button>
             </Card>
           ) : (
             <Card className="flex flex-col gap-[11px] border-[1.5px] border-clay/35 px-4 py-3.5">
@@ -830,6 +878,14 @@ export function ClientProfile({
               </PrimaryButton>
             </Card>
           )}
+
+          <ClientAccountPanel
+            clientId={client.id}
+            clientName={client.name}
+            hasEmail={Boolean(client.email)}
+            paymentRef={paymentRef}
+            bookings={accountBookings}
+          />
         </aside>
       </div>
     </div>
