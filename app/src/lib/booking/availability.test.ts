@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  chalkFarmDayBlockMinutes,
   computeAvailability,
   computeAvailableSlots,
   dayOpenIntervals,
@@ -8,6 +9,7 @@ import {
   mergeIntervals,
   resolveWeeklyHours,
   subtractInterval,
+  type AvailabilityParams,
   type OverrideWindow,
   type WeeklyWindow,
 } from "./availability";
@@ -157,6 +159,23 @@ describe("computeAvailableSlots on ordinary times on DST days", () => {
   }
 });
 
+describe("chalkFarmDayBlockMinutes", () => {
+  it("is zero for a day with no sessions", () => {
+    expect(chalkFarmDayBlockMinutes([], 15)).toBe(0);
+  });
+  it("a lone session is its hour plus both edges", () => {
+    expect(chalkFarmDayBlockMinutes([600], 15)).toBe(60 + 30); // 10:00 session, 15-min edges
+  });
+  it("spans from the first session to the last, gaps included", () => {
+    // 10:00 and 14:00, no edge: 09→15 wall would be 5h, i.e. (840-600)+60 = 300.
+    expect(chalkFarmDayBlockMinutes([600, 840], 0)).toBe(840 - 600 + 60);
+  });
+  it("back-to-back sessions cost only the extra hour, not double the edges", () => {
+    // 10:00 and 11:00 with 15-min edges: 09:45→12:15 = 150.
+    expect(chalkFarmDayBlockMinutes([600, 660], 15)).toBe(660 - 600 + 60 + 30);
+  });
+});
+
 describe("resolveWeeklyHours", () => {
   it("returns empty (nothing bookable) for null/malformed input", () => {
     expect(resolveWeeklyHours(null)).toEqual({ waterloo: [], bethnal: [] });
@@ -187,7 +206,12 @@ describe("explainEmptyDay", () => {
 
   it("names the weekly cap — the reason that costs the most time to work out by hand", () => {
     const trace = run({
-      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 } },
+      weeklyCap: {
+        capMinutes: 600,
+        edgeBufferMinutes: 0,
+        blockMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 },
+        sessionMinsByDay: {},
+      },
     });
     expect(trace.bookable).toBe(0);
     expect(explainEmptyDay(trace)).toMatch(/cap/i);
@@ -655,9 +679,17 @@ describe("computeAvailableSlots", () => {
     expect(slots).toEqual([at(18)]);
   });
 
-  it("weeklyCap excludes a candidate that would push the week's total past the cap", () => {
+  const weekKey = londonDateKey(londonWeekStart(TUESDAY));
+  const cap = (over: Partial<NonNullable<AvailabilityParams["weeklyCap"]>> = {}) => ({
+    capMinutes: 600,
+    edgeBufferMinutes: 0,
+    blockMinutesByWeek: {},
+    sessionMinsByDay: {},
+    ...over,
+  });
+
+  it("weeklyCap excludes a candidate that would push the week's room total past the cap", () => {
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
-    const weekKey = londonDateKey(londonWeekStart(TUESDAY));
     const slots = computeAvailableSlots({
       clinic: "bethnal",
       ...dayWindow(TUESDAY),
@@ -665,15 +697,14 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      // Already at the 600-min (10 hr) cap this week — the 60-min candidate would push it over.
-      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [weekKey]: 600 } },
+      // Already at the 600-min (10 hr) cap this week — one more 60-min block tips it over.
+      weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 600 } }),
     });
     expect(slots).toEqual([]);
   });
 
   it("weeklyCap still allows a candidate that exactly fills the remaining cap", () => {
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
-    const weekKey = londonDateKey(londonWeekStart(TUESDAY));
     const slots = computeAvailableSlots({
       clinic: "bethnal",
       ...dayWindow(TUESDAY),
@@ -681,10 +712,33 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      // 540 min (9 hr) already booked this week — 60 more exactly reaches the 600-min cap.
-      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [weekKey]: 540 } },
+      // 540 min held this week — a fresh day adds exactly 60 (no edge padding), reaching 600.
+      weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 540 } }),
     });
     expect(slots).toEqual([at(9)]);
+  });
+
+  it("counts room-block time, not sessions: a second session the same day only costs the gap it adds", () => {
+    // 9-10 already booked. Cap has 90 min left. A 14:00 session as a *count* is
+    // one hour, but as room time it extends the day's block from 9-10 to 9-15
+    // (+5 hours) — far over. A 10:00 session, back-to-back, adds only its own hour.
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 960 }]; // 9-16
+    const base = {
+      clinic: "bethnal" as const,
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [{ start: at(9), end: at(10) }], // the existing 9-10 session, as busy time
+      slotMinutes: 60,
+      now: at(0),
+    };
+    const slots = computeAvailableSlots({
+      ...base,
+      // 540 of the 600-min cap used; the day already holds a 9-10 block.
+      weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 540 }, sessionMinsByDay: { [londonDateKey(TUESDAY)]: [540] } }),
+    }).map(fmtTime);
+    expect(slots).toContain("10:00"); // extends block to 9-11: +60, reaches 600 — allowed
+    expect(slots).not.toContain("11:00"); // would extend to 9-12: +120, over the cap
   });
 
   it("weeklyCap only counts the candidate's own week — a different week's total doesn't block it", () => {
@@ -697,9 +751,24 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      weeklyCap: { capMinutes: 600, bookedMinutesByWeek: { [otherWeekKey]: 600 } },
+      weeklyCap: cap({ blockMinutesByWeek: { [otherWeekKey]: 600 } }),
     });
     expect(slots).toEqual([at(9)]);
+  });
+
+  it("edge padding is part of the room time — a lone session costs its hour plus both edges", () => {
+    const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
+    // Cap 80 min, 15-min edges: a lone session costs 60 + 2×15 = 90 > 80, so none.
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours,
+      overrides: [],
+      busy: [],
+      now: at(0),
+      weeklyCap: cap({ capMinutes: 80, edgeBufferMinutes: 15 }),
+    });
+    expect(slots).toEqual([]);
   });
 });
 

@@ -556,7 +556,7 @@ export function AvailabilitySettings({
           min={0}
           max={30}
           step={1}
-          hint="Bethnal Green only. Once confirmed Bethnal sessions in a Monday-Sunday week reach this many hours, no further Bethnal slots are offered that week on the public page, portal, or offer-pick link. Doesn't stop you booking over it yourself from QuickBook or Enquiries — same as the other gaps above."
+          hint="Bethnal Green only. Counts the actual Chalk Farm room time held each Monday–Sunday week — from the edge padding before your first session to after your last, gaps between sessions included, not just the session hours. Once a week reaches this many hours, no further Bethnal slots are offered that week on the public page, portal, or offer-pick link. Doesn't stop you booking over it yourself from QuickBook or Enquiries."
           onChange={(v) => {
             setTuning((p) => ({ ...p, chalkFarmWeeklyCapHours: v }));
             setTuningDirty(true);

@@ -188,14 +188,39 @@ export interface AvailabilityParams {
   now?: Date;
   minNoticeMinutes?: number;
   /**
-   * A cap on total booked minutes per London calendar week (Mon-Sun) — used
-   * for Bethnal Green's weekly Chalk Farm hours cap. `bookedMinutesByWeek` is
-   * keyed by `londonDateKey(londonWeekStart(...))` and already reflects every
-   * *other* confirmed session that week (the caller excludes the booking
-   * being rescheduled, if any); a candidate is rejected if adding its session
-   * would push that week's total past `capMinutes`.
+   * A cap on Bethnal Green's shared Chalk Farm *room time* per London calendar
+   * week (Mon-Sun) — the real hours held with the studio, not a count of
+   * sessions.
+   *
+   * Each day's room block runs from `edgeBufferMinutes` before the first
+   * session to the same after the last (gaps between sessions included — that
+   * time is still the room booked). A candidate is rejected if the extra block
+   * time it would add to its day pushes the week's total past `capMinutes`.
+   *
+   * `blockMinutesByWeek` (keyed by `londonDateKey(londonWeekStart(...))`) is the
+   * current total, and `sessionMinsByDay` (minute-of-day starts, keyed by
+   * `londonDateKey`) lets the marginal cost of adding one session be computed.
+   * Both already exclude the booking being rescheduled, if any.
    */
-  weeklyCap?: { capMinutes: number; bookedMinutesByWeek: Record<string, number> };
+  weeklyCap?: {
+    capMinutes: number;
+    edgeBufferMinutes: number;
+    blockMinutesByWeek: Record<string, number>;
+    sessionMinsByDay: Record<string, number[]>;
+  };
+}
+
+/**
+ * Minutes of shared Chalk Farm room held on one day for a set of session start
+ * times (as minutes past London midnight): from `edgeBufferMinutes` before the
+ * earliest session to the same after the latest session's end. Empty → 0. Pure,
+ * so the cap math is unit-testable and matches the real block in chalkFarm.ts.
+ */
+export function chalkFarmDayBlockMinutes(sessionStartMins: number[], edgeBufferMinutes: number): number {
+  if (!sessionStartMins.length) return 0;
+  const first = Math.min(...sessionStartMins);
+  const last = Math.max(...sessionStartMins);
+  return last + SESSION_MINUTES + edgeBufferMinutes - (first - edgeBufferMinutes);
 }
 
 const pad = (iv: { start: Date; end: Date }, minutes: number) =>
@@ -278,9 +303,17 @@ function slotFits(
   if (busyClash) return "busy";
 
   if (weeklyCap) {
+    // The cap counts room-block time, so a session's cost is how much it would
+    // *extend* its day's block — nothing if it slots between two existing
+    // sessions, a full hour-plus-padding if it opens a new day.
+    const dateKey = londonDateKey(candidate);
     const weekKey = londonDateKey(londonWeekStart(candidate));
-    const already = weeklyCap.bookedMinutesByWeek[weekKey] ?? 0;
-    if (already + SESSION_MINUTES > weeklyCap.capMinutes) return "cap";
+    const dayStarts = weeklyCap.sessionMinsByDay[dateKey] ?? [];
+    const edge = weeklyCap.edgeBufferMinutes;
+    const delta =
+      chalkFarmDayBlockMinutes([...dayStarts, minute], edge) - chalkFarmDayBlockMinutes(dayStarts, edge);
+    const weekTotal = weeklyCap.blockMinutesByWeek[weekKey] ?? 0;
+    if (weekTotal + delta > weeklyCap.capMinutes) return "cap";
   }
 
   return "ok";
