@@ -100,7 +100,10 @@ async function createBookingRow({
 }) {
   const end = new Date(start.getTime() + SESSION_MINUTES * 60_000);
   return prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${londonDateKey(start)}`}))`;
+    // $executeRaw, not $queryRaw: pg_advisory_xact_lock() returns void, which
+    // $queryRaw tries to deserialize as a result column and fails on — this is
+    // called purely for its side effect (holding the lock for the transaction).
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${londonDateKey(start)}`}))`;
     const clash = await tx.booking.findFirst({
       where: {
         status: "confirmed",
