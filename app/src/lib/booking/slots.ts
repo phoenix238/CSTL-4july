@@ -1,7 +1,7 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonWeekStart } from "@/lib/time";
-import { computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace } from "./availability";
+import { computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
 
 /**
@@ -113,6 +113,40 @@ export async function loadAvailableSlots(args: {
   return computeAvailableSlots(await availabilityParams(args));
 }
 
+/**
+ * Every override that could touch a window, mapped to the shape the engine
+ * wants.
+ *
+ * A one-off is only relevant if its date falls inside the window. A repeating
+ * one is relevant to any window at or after the date it was drawn on, whatever
+ * that date was — so the query can't be a plain date range, and both the slot
+ * loader and the offer-pick route go through here rather than each writing
+ * their own `where` and drifting apart (the mistake this whole file guards
+ * against). `computeAvailability` decides which specific days each one lands on.
+ */
+export async function loadOverridesForWindow(
+  clinic: Clinic,
+  windowStart: Date,
+  windowEnd: Date,
+): Promise<OverrideWindow[]> {
+  const rows = await prisma.availabilityOverride.findMany({
+    where: {
+      clinic,
+      OR: [
+        { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
+        { repeatWeekly: true, date: { lt: londonDateKey(windowEnd) } },
+      ],
+    },
+  });
+  return rows.map((o) => ({
+    date: o.date,
+    kind: o.kind as "open" | "block",
+    startMin: o.startMin,
+    endMin: o.endMin,
+    repeatWeekly: o.repeatWeekly,
+  }));
+}
+
 /** Gather everything `computeAvailability` needs for one clinic and window. */
 async function availabilityParams({
   clinic,
@@ -127,9 +161,7 @@ async function availabilityParams({
 }): Promise<AvailabilityParams> {
   const settings = await getSettings();
   const [overrides, busy, weeklyCap] = await Promise.all([
-    prisma.availabilityOverride.findMany({
-      where: { clinic, date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
-    }),
+    loadOverridesForWindow(clinic, windowStart, windowEnd),
     getBusySpans(windowStart, windowEnd),
     clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
   ]);
@@ -139,12 +171,7 @@ async function availabilityParams({
     windowStart,
     windowEnd,
     weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic],
-    overrides: overrides.map((o) => ({
-      date: o.date,
-      kind: o.kind as "open" | "block",
-      startMin: o.startMin,
-      endMin: o.endMin,
-    })),
+    overrides,
     busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId),
     slotMinutes: settings.bookingSlotMinutes,
     // Waterloo and Bethnal Green don't need the same spacing between Phoenix's

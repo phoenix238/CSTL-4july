@@ -8,6 +8,7 @@ import {
   londonAddDays,
   londonDateKey,
   londonMinutes,
+  londonTime,
   londonTimeExact,
   londonWeekdayIndex,
   londonWeekStart,
@@ -55,10 +56,41 @@ export function resolveWeeklyHours(raw: unknown): WeeklyHours {
 }
 
 export interface OverrideWindow {
-  date: string; // "YYYY-MM-DD"
+  /**
+   * "YYYY-MM-DD". For a one-off, the date it applies to. For a repeating
+   * window, the date it was drawn on — the first day it applies, and the
+   * weekday it recurs on thereafter.
+   */
+  date: string;
   kind: "open" | "block";
   startMin: number;
   endMin: number;
+  /** applies to `date`'s weekday every week from `date` onward, until removed */
+  repeatWeekly?: boolean;
+}
+
+/**
+ * Does this override apply to the given London day?
+ *
+ * A one-off matches its own date. A repeating one matches the same weekday on
+ * that date or any later one — string comparison is safe and exact on
+ * "YYYY-MM-DD", and avoids inventing instants for a purely calendar question.
+ */
+export function overrideAppliesOn(
+  o: { date: string; repeatWeekly?: boolean },
+  dateKey: string,
+  weekday: number,
+): boolean {
+  if (o.date === dateKey) return true;
+  if (!o.repeatWeekly) return false;
+  return o.date < dateKey && overrideWeekday(o.date) === weekday;
+}
+
+/** Mon-first weekday index of a "YYYY-MM-DD" date. */
+function overrideWeekday(date: string): number {
+  const [y, m, d] = date.split("-").map(Number);
+  // Midday, so the answer can't be moved by a clock change.
+  return londonWeekdayIndex(londonTime(y, m, d, 12, 0));
 }
 
 export interface Interval {
@@ -105,7 +137,7 @@ export function dayOpenIntervals(
   let intervals = mergeIntervals(
     weeklyHours.filter((w) => w.weekday === weekday).map((w) => ({ start: w.startMin, end: w.endMin })),
   );
-  const forDate = overrides.filter((o) => o.date === dateKey);
+  const forDate = overrides.filter((o) => overrideAppliesOn(o, dateKey, weekday));
   const opens = forDate.filter((o) => o.kind === "open").map((o) => ({ start: o.startMin, end: o.endMin }));
   if (opens.length) intervals = mergeIntervals([...intervals, ...opens]);
   for (const block of forDate.filter((o) => o.kind === "block")) {
@@ -192,13 +224,31 @@ function slotFits(
   // 09:00–17:00 with a 15-min buffer offered nothing before 09:30 or after 15:30.
   const footprintStart = minute - startPadMin;
   const footprintEnd = minute + SESSION_MINUTES + endPadMin;
-  if (!intervals.some((iv) => footprintStart >= iv.start && footprintEnd <= iv.end)) return "hours";
+  const openInterval = intervals.find((iv) => footprintStart >= iv.start && footprintEnd <= iv.end);
+  if (!openInterval) return "hours";
 
-  // Each busy span pads by its own buffer if it has one (e.g. a bigger
-  // safety gap around a studio-mate's Chalk Farm booking), else the
-  // default bufferMinutes — see the AvailabilityParams.busy doc comment.
+  // The open interval this candidate sits in, as real instants — used to decide
+  // whether the default client gap even applies to a given busy span.
+  const intervalStart = new Date(candidate.getTime() - (minute - openInterval.start) * 60_000);
+  const intervalEnd = new Date(candidate.getTime() + (openInterval.end - minute) * 60_000);
+
+  // Each busy span pads by its own buffer if it has one (a bigger safety gap
+  // around a studio-mate's Chalk Farm booking, or the travel time to the other
+  // clinic), else the default bufferMinutes — see AvailabilityParams.busy.
   const busyClash = busy.some((b) => {
-    const padded = pad(b, b.bufferMinutes ?? bufferMinutes);
+    // A span with its own buffer carries a *physical* constraint — a room
+    // that's taken, a journey that has to be made — so its clearance always
+    // applies, wherever the span sits.
+    //
+    // The default client gap is different: it's breathing room *within* a
+    // stretch of open time. When two windows are separated by a gap Phoenix
+    // drew on purpose (say 19:00–20:00 then 20:15–21:15), that 15 minutes is
+    // already his considered answer, and letting the slider add more would
+    // silently delete the second session the moment the first was booked. So
+    // the default gap only applies between sessions inside the *same* window.
+    const sameWindow = b.start < intervalEnd && b.end > intervalStart;
+    const gap = b.bufferMinutes ?? (sameWindow ? bufferMinutes : 0);
+    const padded = pad(b, gap);
     return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
   });
   if (busyClash) return "busy";

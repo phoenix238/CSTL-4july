@@ -8,7 +8,7 @@ export const GET = guarded(async () => {
 });
 
 export const POST = guarded(async (req: Request) => {
-  const { clinic, date, kind, startMin, endMin, note } = await req.json();
+  const { clinic, date, kind, startMin, endMin, note, repeatWeekly } = await req.json();
   if (clinic !== "waterloo" && clinic !== "bethnal") {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }
@@ -24,7 +24,7 @@ export const POST = guarded(async (req: Request) => {
     return NextResponse.json({ error: "Invalid time range" }, { status: 400 });
   }
   const override = await prisma.availabilityOverride.create({
-    data: { clinic, date, kind, startMin: start, endMin: end, note: note?.trim() || "" },
+    data: { clinic, date, kind, startMin: start, endMin: end, note: note?.trim() || "", repeatWeekly: !!repeatWeekly },
   });
   return NextResponse.json({ override });
 });

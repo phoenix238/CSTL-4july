@@ -22,7 +22,7 @@ import { QuickBook } from "./QuickBook";
 import { TimeGrid } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
 import { AVAIL_COLORS, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO, type SpanSource } from "./layout";
-import { mergeIntervals } from "@/lib/booking/availability";
+import { mergeIntervals, overrideAppliesOn } from "@/lib/booking/availability";
 import { SESSION_MINUTES } from "@/lib/booking/rules";
 
 /** One day's verdict from /api/bookable. */
@@ -40,6 +40,7 @@ interface OverrideDTO {
   kind: string;
   startMin: number;
   endMin: number;
+  repeatWeekly?: boolean;
 }
 
 interface AvailComposerState {
@@ -49,6 +50,7 @@ interface AvailComposerState {
   startMin: number;
   endMin: number;
   kind?: "open" | "block";
+  repeatWeekly?: boolean;
   id?: string;
 }
 
@@ -162,8 +164,20 @@ export function CalendarView() {
         }
       }
       for (const o of overrides) {
-        if (o.clinic === availClinic && o.date === dateKey && (o.kind === "open" || o.kind === "block")) {
-          out.push({ id: o.id, clinic: availClinic, date: dateKey, kind: o.kind, startMin: o.startMin, endMin: o.endMin });
+        if (o.clinic !== availClinic || (o.kind !== "open" && o.kind !== "block")) continue;
+        // A one-off shows on its own date; a repeating one shows on its weekday
+        // every week from the date it was drawn onward — the same rule the
+        // booking engine uses, so what's drawn matches what's bookable.
+        if (overrideAppliesOn(o, dateKey, weekday)) {
+          out.push({
+            id: o.id,
+            clinic: availClinic,
+            date: dateKey,
+            kind: o.kind,
+            startMin: o.startMin,
+            endMin: o.endMin,
+            repeatWeekly: o.repeatWeekly,
+          });
         }
       }
     }
@@ -486,6 +500,7 @@ export function CalendarView() {
                 startMin: w.startMin,
                 endMin: w.endMin,
                 kind: w.kind,
+                repeatWeekly: w.repeatWeekly,
                 id: w.id,
               });
             }}
@@ -613,6 +628,7 @@ export function CalendarView() {
           startMin={availComposer.startMin}
           endMin={availComposer.endMin}
           kind={availComposer.kind}
+          repeatWeekly={availComposer.repeatWeekly}
           id={availComposer.id}
           onClose={() => setAvailComposer(null)}
           onSaved={availabilitySaved}

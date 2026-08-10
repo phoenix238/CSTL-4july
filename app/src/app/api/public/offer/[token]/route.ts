@@ -6,7 +6,7 @@ import { londonDayStart, londonDateKey } from "@/lib/time";
 import { isSlotAvailable, resolveWeeklyHours } from "@/lib/booking/availability";
 import type { Clinic } from "@/lib/booking/rules";
 import { bookSession } from "@/lib/booking/book";
-import { filterBusyForClinic, loadBethnalWeeklyCap } from "@/lib/booking/slots";
+import { filterBusyForClinic, loadBethnalWeeklyCap, loadOverridesForWindow } from "@/lib/booking/slots";
 import { sendEmail } from "@/lib/google/gmail";
 
 function isClinic(v: string): v is Clinic {
@@ -28,9 +28,8 @@ async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Prom
   const windowStart = londonDayStart(-1, earliest);
   const windowEnd = londonDayStart(2, latest);
   const [overrides, busy, weeklyCap] = await Promise.all([
-    prisma.availabilityOverride.findMany({
-      where: { clinic, date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
-    }),
+    // Shared loader — picks up repeating windows too, exactly as the /book path does.
+    loadOverridesForWindow(clinic, windowStart, windowEnd),
     getBusySpans(windowStart, windowEnd),
     clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd) : Promise.resolve(undefined),
   ]);
@@ -40,12 +39,7 @@ async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Prom
     isSlotAvailable(t, {
       clinic,
       weeklyHours,
-      overrides: overrides.map((o) => ({
-        date: o.date,
-        kind: o.kind as "open" | "block",
-        startMin: o.startMin,
-        endMin: o.endMin,
-      })),
+      overrides,
       busy: busySpans,
       bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,

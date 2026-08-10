@@ -245,6 +245,118 @@ describe("computeAvailability", () => {
   });
 });
 
+describe("repeating overrides", () => {
+  // Drawn on Tue 7 July 2026, repeating weekly.
+  const repeatingOpen: OverrideWindow[] = [
+    { date: "2026-07-07", kind: "open", startMin: 19 * 60, endMin: 21 * 60, repeatWeekly: true },
+  ];
+
+  it("applies to the same weekday on a later week", () => {
+    // Tue 14 July — a week on. The window should be open even though no weekly
+    // hours are set and no override exists for that exact date.
+    const nextTue = londonDayStart(0, new Date("2026-07-14T12:00:00Z"));
+    const slots = computeAvailableSlots({
+      clinic: "waterloo",
+      windowStart: nextTue,
+      windowEnd: londonDayStart(1, nextTue),
+      weeklyHours: [],
+      overrides: repeatingOpen,
+      busy: [],
+      slotMinutes: 30,
+      now: at(0),
+    });
+    expect(slots.map(fmtTime)).toContain("19:00");
+    expect(slots.map(fmtTime)).toContain("20:00");
+  });
+
+  it("does not apply to other weekdays, or to weeks before it was drawn", () => {
+    const wedAfter = londonDayStart(0, new Date("2026-07-08T12:00:00Z")); // Wed
+    const tueBefore = londonDayStart(0, new Date("2026-06-30T12:00:00Z")); // Tue, a week earlier
+    for (const day of [wedAfter, tueBefore]) {
+      const slots = computeAvailableSlots({
+        clinic: "waterloo",
+        windowStart: day,
+        windowEnd: londonDayStart(1, day),
+        weeklyHours: [],
+        overrides: repeatingOpen,
+        busy: [],
+        slotMinutes: 30,
+        now: at(0),
+      });
+      expect(slots).toEqual([]);
+    }
+  });
+
+  it("a repeating block closes that weekday every week", () => {
+    const repeatingBlock: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "block", startMin: 12 * 60, endMin: 13 * 60, repeatWeekly: true },
+    ];
+    const nextTue = londonDayStart(0, new Date("2026-07-14T12:00:00Z"));
+    const slots = computeAvailableSlots({
+      clinic: "waterloo",
+      windowStart: nextTue,
+      windowEnd: londonDayStart(1, nextTue),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 9 * 60, endMin: 17 * 60 }],
+      overrides: repeatingBlock,
+      busy: [],
+      slotMinutes: 30,
+      now: at(0),
+    });
+    expect(slots.map(fmtTime)).not.toContain("12:00");
+    expect(slots.map(fmtTime)).toContain("11:00"); // ends 12:00, right up to the block
+    expect(slots.map(fmtTime)).toContain("13:00");
+  });
+});
+
+describe("a deliberately-drawn gap between two windows is respected", () => {
+  // Exactly Phoenix's two evening slots: 19:00-20:00 then 20:15-21:15.
+  const twoEvenings: WeeklyWindow[] = [
+    { weekday: tueWeekday, startMin: 19 * 60, endMin: 20 * 60 },
+    { weekday: tueWeekday, startMin: 20 * 60 + 15, endMin: 21 * 60 + 15 },
+  ];
+  const run = (bufferMinutes: number, busy: { start: Date; end: Date }[] = []) =>
+    computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: twoEvenings,
+      overrides: [],
+      busy,
+      slotMinutes: 30,
+      bufferMinutes,
+      now: at(0),
+    }).map(fmtTime);
+
+  it("offers both sessions even with a client gap larger than the drawn gap", () => {
+    // The 15-min gap Phoenix drew is his answer; a 30-min slider must not shrink it.
+    expect(run(30)).toEqual(["19:00", "20:15"]);
+  });
+
+  it("booking the first evening still leaves the second bookable", () => {
+    // This is the exact failure mode: 19:00 taken, does 20:15 survive a 30-min gap?
+    expect(run(30, [{ start: at(19), end: at(20) }])).toEqual(["20:15"]);
+  });
+
+  it("still keeps the gap between two sessions inside one window", () => {
+    // 9-11 single window, a booking at 9: the 30-min gap should push the next
+    // start out — the default gap still does its job within a window.
+    const oneWindow: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 9 * 60, endMin: 11 * 60 }];
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: oneWindow,
+      overrides: [],
+      busy: [{ start: at(9), end: at(10) }],
+      slotMinutes: 15,
+      bufferMinutes: 30,
+      now: at(0),
+    }).map(fmtTime);
+    expect(slots).not.toContain("10:00"); // only 0 min after the 9-10 booking
+    expect(slots).not.toContain("10:15"); // only 15 min
+    // 10:30 would need to end by 11:00 — it does (10:30-11:30 doesn't fit), so none.
+    expect(slots).toEqual([]);
+  });
+});
+
 describe("dayOpenIntervals", () => {
   const weekly: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 720 }]; // 9-12
 

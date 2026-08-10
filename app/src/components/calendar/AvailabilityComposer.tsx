@@ -31,6 +31,7 @@ export function AvailabilityComposer({
   startMin,
   endMin,
   kind: initialKind = "open",
+  repeatWeekly: initialRepeat = false,
   id,
   onClose,
   onSaved,
@@ -41,6 +42,7 @@ export function AvailabilityComposer({
   startMin: number;
   endMin: number;
   kind?: "open" | "block";
+  repeatWeekly?: boolean;
   id?: string;
   onClose: () => void;
   onSaved: () => void;
@@ -50,8 +52,11 @@ export function AvailabilityComposer({
   const [kind, setKind] = useState<"open" | "block">(initialKind);
   const [startTime, setStartTime] = useState(minToTime(startMin));
   const [endTime, setEndTime] = useState(minToTime(endMin));
+  const [repeatWeekly, setRepeatWeekly] = useState(initialRepeat);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const weekdayName = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "long" }).format(day);
 
   async function save() {
     const s = timeToMin(startTime);
@@ -65,12 +70,12 @@ export function AvailabilityComposer({
       if (mode === "create") {
         await api("/api/availability-overrides", {
           method: "POST",
-          body: JSON.stringify({ clinic, date: londonDateKey(day), kind, startMin: s, endMin: e, note: "" }),
+          body: JSON.stringify({ clinic, date: londonDateKey(day), kind, startMin: s, endMin: e, note: "", repeatWeekly }),
         });
       } else {
         await api(`/api/availability-overrides/${id}`, {
           method: "PATCH",
-          body: JSON.stringify({ kind, startMin: s, endMin: e }),
+          body: JSON.stringify({ kind, startMin: s, endMin: e, repeatWeekly }),
         });
       }
       toast(kind === "open" ? "Availability saved ✓" : "Marked unavailable ✓");
@@ -83,10 +88,15 @@ export function AvailabilityComposer({
 
   async function remove() {
     if (!id) return;
+    // A repeating window is a series — deleting the row clears every future week,
+    // so say so plainly rather than have a whole recurring day vanish on one tap.
+    if (initialRepeat && !window.confirm(`Remove this repeating ${weekdayName} time from every week? To close just this one day, mark it Unavailable instead.`)) {
+      return;
+    }
     setDeleting(true);
     try {
       await api(`/api/availability-overrides/${id}`, { method: "DELETE" });
-      toast("Removed");
+      toast(initialRepeat ? "Repeating time removed" : "Removed");
       onSaved();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't remove that");
@@ -157,6 +167,23 @@ export function AvailabilityComposer({
               ? "Opens this window for online booking, on top of your usual weekly hours."
               : "Closes this window — no online bookings land here, even during your usual hours."}
           </div>
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-hoverbg/40 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={repeatWeekly}
+              onChange={(e) => setRepeatWeekly(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="text-[12.5px] leading-snug">
+              <span className="font-semibold text-ink">Repeat every {weekdayName}</span>
+              <span className="block text-[11.5px] text-muted">
+                {repeatWeekly
+                  ? `Applies to every ${weekdayName} from ${fmtDayLong(day)} onward, until you remove it.`
+                  : "Just this one day."}
+              </span>
+            </span>
+          </label>
 
           <div className="flex items-center gap-2">
             <OutlineButton onClick={onClose}>Close</OutlineButton>

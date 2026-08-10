@@ -348,12 +348,25 @@ model ChalkFarmDayBlock {
 model AvailabilityOverride {
   id        String   @id @default(cuid())
   clinic    String   // waterloo | bethnal
-  date      String   // "YYYY-MM-DD", London calendar date — plain string avoids DST/UTC edge cases
+  /**
+   * "YYYY-MM-DD", London calendar date — plain string avoids DST/UTC edge cases.
+   * For a repeating window this is the date it was drawn on: the first day it
+   * applies, and the weekday it recurs on.
+   */
+  date      String
   kind      String   // "open" | "block"
   startMin  Int      // minutes after London midnight
   endMin    Int      // minutes after London midnight
+  /**
+   * Applies to this weekday every week from `date` onward, until removed —
+   * so availability drawn on the calendar can be the primary way hours are set,
+   * rather than something re-drawn every week.
+   */
+  repeatWeekly Boolean @default(false)
   note      String   @default("")
   createdAt DateTime @default(now())
 
   @@index([clinic, date])
+  // Repeating windows are fetched for the whole clinic regardless of date.
+  @@index([clinic, repeatWeekly])
 }

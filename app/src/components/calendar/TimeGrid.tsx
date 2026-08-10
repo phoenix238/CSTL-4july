@@ -76,7 +76,9 @@ export function TimeGrid({
   weekStart,
   spans,
   startHour = 7,
-  endHour = 21,
+  // Runs to 22:00 so a late evening session — 20:15–21:15, or a slot bookable
+  // to 21:30 — is fully visible rather than clipped at the bottom edge.
+  endHour = 22,
   mode,
   onEventClick,
   onSlotClick,
@@ -356,13 +358,13 @@ export function TimeGrid({
                   const top = toY(w.startMin);
                   const height = Math.max(((w.endMin - w.startMin) / 60) * HOUR_PX, 12);
                   const label =
-                    w.kind === "block"
+                    (w.kind === "block"
                       ? "Unavailable"
                       : w.kind === "weekly"
                         ? "Usual hours"
                         : w.kind === "bookable"
                           ? "Bookable"
-                          : "Available";
+                          : "Available") + (w.repeatWeekly ? " ↻" : "");
                   return (
                     <div
                       key={`${w.kind}-${w.id ?? wi}`}
