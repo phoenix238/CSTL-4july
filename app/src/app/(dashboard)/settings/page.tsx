@@ -19,18 +19,16 @@ export default async function SettingsPage() {
       clients={clients}
       settings={{
         accessNote: settings.accessNote,
-        emailTemplateWaterloo: settings.emailTemplateWaterloo,
-        emailTemplateBethnal: settings.emailTemplateBethnal,
+        emailTemplate: settings.emailTemplate,
         paymentDetails: settings.paymentDetails,
         waterlooAddress: settings.waterlooAddress,
         bethnalAddress: settings.bethnalAddress,
         clinicContactLine: settings.clinicContactLine,
-        waterlooArrivalNote: settings.waterlooArrivalNote,
-        bethnalArrivalNote: settings.bethnalArrivalNote,
+        waterlooFindIt: settings.waterlooFindIt,
+        bethnalFindIt: settings.bethnalFindIt,
         waterlooLocationUrl: settings.waterlooLocationUrl,
         bethnalLocationUrl: settings.bethnalLocationUrl,
-        waterlooDirections: settings.waterlooDirections,
-        bethnalDirections: settings.bethnalDirections,
+
         appUrl: settings.appUrl,
         personalCalendarId: settings.personalCalendarId,
         roomCalendarId: settings.roomCalendarId,

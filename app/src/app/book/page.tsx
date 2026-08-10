@@ -2,6 +2,7 @@ import { getSettings } from "@/lib/db";
 import { BookingFlow } from "@/components/BookingFlow";
 import { ToastProvider } from "@/components/ui";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { resolveFindIt } from "@/lib/booking/email";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,8 @@ export default async function BookPage() {
       <BookingFlow
         waterlooAddress={settings.waterlooAddress}
         bethnalAddress={settings.bethnalAddress}
-        waterlooNote={settings.waterlooArrivalNote}
-        bethnalNote={settings.bethnalArrivalNote}
+        waterlooNote={resolveFindIt("waterloo", settings)}
+        bethnalNote={resolveFindIt("bethnal", settings)}
         copy={copy}
       />
     </ToastProvider>

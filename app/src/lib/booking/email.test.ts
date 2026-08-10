@@ -78,6 +78,47 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("You're booked for Tue 5 Aug · 3:00 pm.");
   });
 
+  it("uses the one shared letter for both clinics, filling in {clinic} and {price}", () => {
+    const shared: EmailSettings = {
+      ...settings,
+      emailTemplate: "Hi {name},\n\nBooked for {when} at {clinic} — {price}.\n\nSee you soon,\nPhoenix",
+    };
+    const w = composeBookingEmail({ name: "Maya", welcomeSent: false }, "waterloo", "Tue 5 Aug", true, shared);
+    const b = composeBookingEmail({ name: "Maya", welcomeSent: false }, "bethnal", "Tue 5 Aug", true, shared);
+    expect(w.body).toContain("at Waterloo — £80.");
+    expect(b.body).toContain("at Bethnal Green — £30–60 sliding scale.");
+    // …and each still gets its own address, so one letter doesn't mean one clinic.
+    expect(w.body).toContain(settings.waterlooAddress);
+    expect(b.body).toContain(settings.bethnalAddress);
+  });
+
+  it("falls back to the old per-clinic letter until the shared one is saved", () => {
+    // Existing wording has to keep working untouched — an empty shared template
+    // must not mean an empty email.
+    const email = compose({ emailTemplate: "" });
+    expect(email.body).toContain("Welcome to Waterloo.");
+  });
+
+  it("falls back to the old directions/arrival-note pair until the merged field is saved", () => {
+    const email = compose({
+      waterlooFindIt: "",
+      waterlooDirections: "Blue door, buzzer 4.",
+      waterlooArrivalNote: "Parking on the street after 6pm.",
+    });
+    expect(email.body).toContain("Blue door, buzzer 4.");
+    expect(email.body).toContain("Parking on the street after 6pm.");
+  });
+
+  it("prefers the merged how-to-find-it field once it's set", () => {
+    const email = compose({
+      waterlooFindIt: "Green door, second floor.",
+      waterlooDirections: "OLD directions",
+      waterlooArrivalNote: "OLD note",
+    });
+    expect(email.body).toContain("Green door, second floor.");
+    expect(email.body).not.toContain("OLD");
+  });
+
   it("falls back to a placeholder link string when none is passed (browser preview)", () => {
     const email = composeBookingEmail({ name: "Sam", welcomeSent: false }, "bethnal", "Wed · 10:00 am", false, settings);
     expect(email.body).toContain("(your personal intake link)");

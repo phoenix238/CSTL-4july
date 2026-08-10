@@ -9,8 +9,11 @@ export interface ComposedEmail {
 
 /** The settings fields the email needs — plain shape so the browser can pass /api/settings JSON. */
 export interface EmailSettings {
-  emailTemplateWaterloo: string;
-  emailTemplateBethnal: string;
+  /** the one welcome letter, shared by both clinics */
+  emailTemplate?: string;
+  /** legacy per-clinic letters — the fallback until `emailTemplate` is saved */
+  emailTemplateWaterloo?: string;
+  emailTemplateBethnal?: string;
   accessNote: string;
   paymentDetails: string;
   waterlooAddress: string;
@@ -19,10 +22,39 @@ export interface EmailSettings {
   waterlooLocationUrl?: string;
   bethnalLocationUrl?: string;
   /** how to find the door: buzzer, floor, parking */
+  waterlooFindIt?: string;
+  bethnalFindIt?: string;
+  /** legacy pair, folded into `*FindIt` above */
   waterlooDirections?: string;
   bethnalDirections?: string;
   waterlooArrivalNote?: string;
   bethnalArrivalNote?: string;
+}
+
+/**
+ * How to find and get into one clinic.
+ *
+ * Exported because the public booking page shows the same thing under the
+ * address — it used to read a separate "arrival note" field while the email
+ * read "directions", so the two surfaces could tell a client different things
+ * about the same front door.
+ */
+export function resolveFindIt(clinic: Clinic, s: EmailSettings): string {
+  const w = clinic === "waterloo";
+  const current = (w ? s.waterlooFindIt : s.bethnalFindIt)?.trim();
+  if (current) return current;
+  // Nothing saved in the merged field yet — fall back to whatever the old pair
+  // holds, so existing wording keeps working untouched.
+  return [(w ? s.waterlooDirections : s.bethnalDirections)?.trim(), (w ? s.waterlooArrivalNote : s.bethnalArrivalNote)?.trim()]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** The welcome letter: the shared one, or the old per-clinic one until it's saved. */
+export function resolveTemplate(clinic: Clinic, s: EmailSettings): string {
+  const shared = s.emailTemplate?.trim();
+  if (shared) return shared;
+  return (clinic === "waterloo" ? s.emailTemplateWaterloo : s.emailTemplateBethnal) ?? "";
 }
 
 /** Everything that varies by clinic, resolved once. */
@@ -34,11 +66,7 @@ function clinicDetails(clinic: Clinic, s: EmailSettings) {
     // "search Google Maps for this address" link is the fallback, not the
     // default — it was landing people on a search page rather than the door.
     locationUrl: (w ? s.waterlooLocationUrl : s.bethnalLocationUrl)?.trim() ?? "",
-    // Directions and the arrival note are the same kind of thing (how to find
-    // and enter the place); either may be set, so both are included.
-    directions: [(w ? s.waterlooDirections : s.bethnalDirections)?.trim(), (w ? s.waterlooArrivalNote : s.bethnalArrivalNote)?.trim()]
-      .filter(Boolean)
-      .join("\n"),
+    directions: resolveFindIt(clinic, s),
   };
 }
 
@@ -108,7 +136,10 @@ export function composeBookingEmail(
     return { subject, body, includes };
   }
 
-  const template = clinic === "waterloo" ? settings.emailTemplateWaterloo : settings.emailTemplateBethnal;
+  // One letter for both clinics — what differs between them (the price, and the
+  // location block assembled above) is filled in around it, so the wording only
+  // has to be written once.
+  const template = resolveTemplate(clinic, settings);
   const filled = template
     .split("{name}")
     .join(client.name)
@@ -116,6 +147,10 @@ export function composeBookingEmail(
     .join(settings.accessNote)
     .split("{when}")
     .join(whenLabel)
+    .split("{clinic}")
+    .join(CLINIC_LABEL[clinic])
+    .split("{price}")
+    .join(CLINIC_PRICE[clinic])
     .split("{intakeLink}")
     .join(intakeLink);
   const { main, signOff } = splitSignOff(filled);

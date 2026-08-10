@@ -167,6 +167,14 @@ model Enquiry {
 model AppSettings {
   id                    Int    @id @default(1)
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
+  // The one welcome letter, shared by both clinics. What differs between them —
+  // price, address, map pin, how to find the door — is filled in around it, so
+  // the wording only has to be written and edited once.
+  // Placeholders: {name} {when} {clinic} {price} {accessNote} {intakeLink}
+  emailTemplate         String @default("Hi {name},\n\nYou're booked in for {when} at {clinic} — 60 minutes, {price}.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
+  // Legacy per-clinic letters, superseded by emailTemplate above. Kept (rather
+  // than dropped) so `prisma db push` never touches existing wording, and used
+  // as the fallback for whichever clinic until emailTemplate is saved.
   emailTemplateWaterloo String @default("Hi {name},\n\nYou're booked in for {when} at Waterloo — 60 minutes, £80, payable on the day by card or bank transfer.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
   emailTemplateBethnal  String @default("Hi {name},\n\nYou're booked in for {when} at Bethnal Green — 60 minutes on a £30–60 sliding scale, pay what feels fair on the day.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
   paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
@@ -176,8 +184,13 @@ model AppSettings {
   // room ("R5 - Phoenix") and Chalk Farm ("Phoenix") calendar events, alongside the
   // day's session count and times. Client names stay off the shared venue calendars.
   clinicContactLine     String @default("")
-  // Short "about this clinic" note shown on the public booking page under the
-  // address — parking, what to expect, how to find the door, etc.
+  // How to find and get into each place — buzzer, floor, parking, which door.
+  // One field per clinic, shown on the public booking page *and* in the
+  // confirmation email; replaces the old arrival-note/directions pair, which
+  // said much the same thing in two places and reached different surfaces.
+  waterlooFindIt        String @default("")
+  bethnalFindIt         String @default("")
+  // Legacy — folded into waterlooFindIt / bethnalFindIt above, kept for the data.
   waterlooArrivalNote   String @default("")
   bethnalArrivalNote    String @default("")
   // Shareable "where we are" details you copy from a client's profile (or Settings)

@@ -9,11 +9,16 @@ export const GET = guarded(async () => {
   const s = await getSettings();
   return NextResponse.json({
     accessNote: s.accessNote,
+    emailTemplate: s.emailTemplate,
+    // Legacy per-clinic letters — still sent so the composer can fall back to
+    // them for a clinic until the shared letter is saved.
     emailTemplateWaterloo: s.emailTemplateWaterloo,
     emailTemplateBethnal: s.emailTemplateBethnal,
     paymentDetails: s.paymentDetails,
     waterlooAddress: s.waterlooAddress,
     bethnalAddress: s.bethnalAddress,
+    waterlooFindIt: s.waterlooFindIt,
+    bethnalFindIt: s.bethnalFindIt,
     waterlooArrivalNote: s.waterlooArrivalNote,
     bethnalArrivalNote: s.bethnalArrivalNote,
     // The email preview composes the real thing in the browser — without these
@@ -59,6 +64,7 @@ export const GET = guarded(async () => {
  */
 const EDITABLE_SETTINGS = [
   "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
+  "emailTemplate", "waterlooFindIt", "bethnalFindIt",
   "waterlooAddress", "bethnalAddress", "waterlooArrivalNote", "bethnalArrivalNote",
   "waterlooLocationUrl", "bethnalLocationUrl", "waterlooDirections", "bethnalDirections",
   "clinicContactLine", "intakeFormUrl", "intakeQuestions", "clientCopy",

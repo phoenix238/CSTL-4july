@@ -15,18 +15,15 @@ import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
   accessNote: string;
-  emailTemplateWaterloo: string;
-  emailTemplateBethnal: string;
+  emailTemplate: string;
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
   clinicContactLine: string;
-  waterlooArrivalNote: string;
-  bethnalArrivalNote: string;
   waterlooLocationUrl: string;
   bethnalLocationUrl: string;
-  waterlooDirections: string;
-  bethnalDirections: string;
+  waterlooFindIt: string;
+  bethnalFindIt: string;
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
@@ -132,15 +129,13 @@ export function SettingsView({
   const [addressesDraft, setAddressesDraft] = useState({
     waterlooAddress: settings.waterlooAddress,
     bethnalAddress: settings.bethnalAddress,
-    waterlooArrivalNote: settings.waterlooArrivalNote,
-    bethnalArrivalNote: settings.bethnalArrivalNote,
   });
   const [editingLocations, setEditingLocations] = useState(false);
   const [locationsDraft, setLocationsDraft] = useState({
     waterlooLocationUrl: settings.waterlooLocationUrl,
     bethnalLocationUrl: settings.bethnalLocationUrl,
-    waterlooDirections: settings.waterlooDirections,
-    bethnalDirections: settings.bethnalDirections,
+    waterlooFindIt: settings.waterlooFindIt,
+    bethnalFindIt: settings.bethnalFindIt,
   });
   const [editingGoogle, setEditingGoogle] = useState(false);
   const [googleDraft, setGoogleDraft] = useState({
@@ -165,7 +160,7 @@ export function SettingsView({
 
   const copyLocation = async (clinic: "waterloo" | "bethnal") => {
     const url = clinic === "waterloo" ? settings.waterlooLocationUrl : settings.bethnalLocationUrl;
-    const directions = clinic === "waterloo" ? settings.waterlooDirections : settings.bethnalDirections;
+    const directions = clinic === "waterloo" ? settings.waterlooFindIt : settings.bethnalFindIt;
     // Map link on its own line, a blank line, then the directions (their own
     // line breaks kept) — reads cleanly pasted into WhatsApp or an email.
     const text = [url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
@@ -274,8 +269,6 @@ export function SettingsView({
                 setAddressesDraft({
                   waterlooAddress: settings.waterlooAddress,
                   bethnalAddress: settings.bethnalAddress,
-                  waterlooArrivalNote: settings.waterlooArrivalNote,
-                  bethnalArrivalNote: settings.bethnalArrivalNote,
                 });
               }
               setEditingAddresses(!editingAddresses);
@@ -288,20 +281,18 @@ export function SettingsView({
         {!editingAddresses ? (
           <Card className="px-5 py-1.5">
             <Row label="Waterloo">{settings.waterlooAddress || "not set yet"}</Row>
-            <Row label="Waterloo note">{settings.waterlooArrivalNote || "not set yet"}</Row>
-            <Row label="Bethnal Green">{settings.bethnalAddress || "not set yet"}</Row>
-            <Row label="Bethnal Green note" last>
-              {settings.bethnalArrivalNote || "not set yet"}
+            <Row label="Bethnal Green" last>
+              {settings.bethnalAddress || "not set yet"}
             </Row>
           </Card>
         ) : (
           <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
             {(
               [
-                ["waterlooAddress", "WATERLOO ADDRESS", "waterlooArrivalNote", "ABOUT WATERLOO"],
-                ["bethnalAddress", "BETHNAL GREEN ADDRESS", "bethnalArrivalNote", "ABOUT BETHNAL GREEN"],
+                ["waterlooAddress", "WATERLOO ADDRESS"],
+                ["bethnalAddress", "BETHNAL GREEN ADDRESS"],
               ] as const
-            ).map(([addrKey, addrLabel, noteKey, noteLabel]) => (
+            ).map(([addrKey, addrLabel]) => (
               <div key={addrKey} className="flex flex-col gap-[11px]">
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
@@ -311,17 +302,6 @@ export function SettingsView({
                     value={addressesDraft[addrKey]}
                     onChange={(e) => setAddressesDraft({ ...addressesDraft, [addrKey]: e.target.value })}
                     className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    {noteLabel}
-                  </span>
-                  <textarea
-                    value={addressesDraft[noteKey]}
-                    onChange={(e) => setAddressesDraft({ ...addressesDraft, [noteKey]: e.target.value })}
-                    placeholder="Parking, what to expect, how to find the door — shown to visitors on the booking page."
-                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
                   />
                 </label>
               </div>
@@ -422,8 +402,7 @@ export function SettingsView({
         <ClientMessagesEditor
           initial={settings.clientCopy}
           settingsInitial={{
-            emailTemplateWaterloo: settings.emailTemplateWaterloo,
-            emailTemplateBethnal: settings.emailTemplateBethnal,
+            emailTemplate: settings.emailTemplate,
             accessNote: settings.accessNote,
             paymentDetails: settings.paymentDetails,
             reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
@@ -527,7 +506,7 @@ export function SettingsView({
       </Dropdown>
 
       <Dropdown
-        label="LOCATION LINK & DIRECTIONS — TO SEND CLIENTS"
+        label="MAP PIN & HOW TO FIND IT"
         open={!!open.locations}
         onToggle={() => toggle("locations")}
       >
@@ -538,8 +517,8 @@ export function SettingsView({
                 setLocationsDraft({
                   waterlooLocationUrl: settings.waterlooLocationUrl,
                   bethnalLocationUrl: settings.bethnalLocationUrl,
-                  waterlooDirections: settings.waterlooDirections,
-                  bethnalDirections: settings.bethnalDirections,
+                  waterlooFindIt: settings.waterlooFindIt,
+                  bethnalFindIt: settings.bethnalFindIt,
                 });
               }
               setEditingLocations(!editingLocations);
@@ -553,8 +532,8 @@ export function SettingsView({
           <Card className="flex flex-col gap-3.5 px-5 py-4">
             {(
               [
-                ["waterloo", "Waterloo", settings.waterlooLocationUrl, settings.waterlooDirections],
-                ["bethnal", "Bethnal Green", settings.bethnalLocationUrl, settings.bethnalDirections],
+                ["waterloo", "Waterloo", settings.waterlooLocationUrl, settings.waterlooFindIt],
+                ["bethnal", "Bethnal Green", settings.bethnalLocationUrl, settings.bethnalFindIt],
               ] as const
             ).map(([clinic, label, url, directions], i) => (
               <div
@@ -575,7 +554,7 @@ export function SettingsView({
                   {url ? <span className="break-all">{url}</span> : <span className="text-faint">not set yet</span>}
                 </div>
                 <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">Directions: </span>
+                  <span className="font-semibold">How to find it: </span>
                   {directions || <span className="text-faint">not set yet</span>}
                 </div>
               </div>
@@ -585,8 +564,8 @@ export function SettingsView({
           <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
             {(
               [
-                ["waterlooLocationUrl", "WATERLOO LOCATION LINK", "waterlooDirections", "WATERLOO DIRECTIONS"],
-                ["bethnalLocationUrl", "BETHNAL GREEN LOCATION LINK", "bethnalDirections", "BETHNAL GREEN DIRECTIONS"],
+                ["waterlooLocationUrl", "WATERLOO MAP PIN", "waterlooFindIt", "HOW TO FIND WATERLOO"],
+                ["bethnalLocationUrl", "BETHNAL GREEN MAP PIN", "bethnalFindIt", "HOW TO FIND BETHNAL GREEN"],
               ] as const
             ).map(([urlKey, urlLabel, dirKey, dirLabel]) => (
               <div key={urlKey} className="flex flex-col gap-[11px]">
