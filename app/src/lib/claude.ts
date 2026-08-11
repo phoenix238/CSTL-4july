@@ -67,6 +67,20 @@ Extract from the message and reply with ONLY a JSON object, no other text:
   return enquirySchema.parse(json);
 }
 
+/**
+ * Tighten a raw (often dictated) personal reflection into readable prose for
+ * the Doc — first person, Phoenix's own words, not turned into clinical
+ * bullets like a session note. Just the rambling, false starts and filler cut.
+ */
+export async function summariseReflection(raw: string): Promise<string> {
+  const text = await chat(
+    `You clean up a craniosacral therapist's own private, often-dictated reflection for his personal notes doc. Keep his voice and first person — cut filler, false starts and repetition, tighten rambling into clear prose, but never add ideas or turn it into clinical/bulleted language. Reply with ONLY the cleaned reflection text, no preamble, no quotes around it.`,
+    raw,
+    600,
+  );
+  return text.trim();
+}
+
 /** Turn a raw (often dictated) session note into short bullet points for the Doc. */
 export async function summariseNote(raw: string): Promise<string[]> {
   const text = await chat(
