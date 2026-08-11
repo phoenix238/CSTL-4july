@@ -33,6 +33,12 @@ export interface MessageParts {
   to: string;
   from?: string;
   fromName?: string;
+  /**
+   * A blind copy — how Phoenix gets told about a booking without a second,
+   * differently-worded email being written for him. He receives the exact
+   * message the client received, and the client can't see he was copied.
+   */
+  bcc?: string;
   subject: string;
   body: string;
   inReplyTo?: string;
@@ -51,6 +57,7 @@ export function buildMessage({
   to,
   from,
   fromName = "Phoenix Tanner",
+  bcc,
   subject,
   body,
   inReplyTo,
@@ -59,6 +66,9 @@ export function buildMessage({
   const headers = [
     `To: ${to}`,
     ...(from ? [`From: ${encodeHeader(fromName)} <${from}>`] : []),
+    // Gmail strips this header before delivery to `to`, and delivers a copy to
+    // the address named here — which is the whole point.
+    ...(bcc ? [`Bcc: ${bcc}`] : []),
     `Subject: ${encodeHeader(subject)}`,
     ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
     "MIME-Version: 1.0",

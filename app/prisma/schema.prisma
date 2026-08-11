@@ -227,6 +227,15 @@ model AppSettings {
   bethnalDirections     String @default("")
   intakeFormUrl         String @default("https://forms.gle/2nPTLzHcffgzmydo8")
   googleRefreshToken    String @default("")
+  // What Google actually granted, and how the connection is actually behaving.
+  // "Connected" used to mean nothing more than "a refresh token string exists",
+  // so the app showed a green tick while every send failed. These three record
+  // the truth instead: the scopes consent really returned, when the token was
+  // last stored, and the last real error Google gave us (cleared on a success).
+  googleScopes          String @default("") // space-separated, straight from the OAuth response
+  googleConnectedAt     DateTime?
+  googleLastError       String @default("") // "" = last Google call worked
+  googleLastCheckedAt   DateTime?
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks

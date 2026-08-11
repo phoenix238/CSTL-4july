@@ -53,18 +53,12 @@ export async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<
   throw lastErr;
 }
 
-/**
- * True when a Google API error is about authorization rather than the request
- * itself — a stored refresh token that predates a newly-added scope (e.g.
- * gmail.send), or one that's been revoked/expired. The fix is always the same:
- * reconnect Google (re-consent) from Settings.
- */
-export function isGoogleAuthError(err: unknown): boolean {
-  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-  return /insufficient (authentication scopes|permission)|invalid_grant|invalid credentials|unauthorized_client|access.*denied/.test(
-    msg,
-  );
-}
+// The old `isGoogleAuthError` lived here: a boolean that turned every Google
+// failure into the single suggestion "reconnect Google". Superseded by
+// googleErrorMessage / googleFixFor in ./health, which keep what Google
+// actually said and match the advice to it — reconnecting is the wrong answer
+// for a rotated client secret or a disabled Gmail API, and following it round
+// in circles is what made this impossible to diagnose.
 
 /** Resolve a logical calendar to its Google Calendar id from settings. */
 export async function calendarId(key: CalendarKey): Promise<string> {

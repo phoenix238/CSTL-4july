@@ -32,6 +32,8 @@ export interface ClientCopy {
   confirmBodyPending: string;
   confirmIntakeCardTitle: string;
   confirmIntakeCardBody: string;
+  /** shown instead of the intake card when a returning client has already filled it in */
+  confirmReturningNote: string;
 
   // — Offer-pick page (client taps one of the offered times) —
   offerPickTitle: string; // {name}
@@ -68,6 +70,8 @@ export const CLIENT_COPY_DEFAULTS: ClientCopy = {
   confirmIntakeCardTitle: "Before your session: the intake form",
   confirmIntakeCardBody:
     "A short form covering your health history and what you'd like from the session. It takes about 3 minutes and helps Phoenix prepare properly before you arrive — worth doing ahead of time rather than on the day. We've also emailed you this link.",
+  confirmReturningNote:
+    "Lovely to see you again — nothing else to fill in. Your confirmation is on its way, and you can change or cancel this any time from your own booking page.",
 
   offerPickTitle: "Pick a time, {name}",
   offerPickIntro: "Here are the times offered for {clinic} — tap one to book it straight away.",

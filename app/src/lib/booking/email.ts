@@ -32,6 +32,34 @@ export interface EmailSettings {
   bethnalDirections?: string;
   waterlooArrivalNote?: string;
   bethnalArrivalNote?: string;
+  /** bank details, so the first email answers "how do I pay you" in full */
+  bankAccountName?: string;
+  bankSortCode?: string;
+  bankAccountNumber?: string;
+  bankPaymentNote?: string;
+}
+
+/**
+ * Stand-ins for the links in the browser preview, where the client's tokens
+ * don't exist yet (they're minted server-side when the booking is made).
+ *
+ * They have to be substituted back out before sending, because the preview box
+ * is editable and whatever it holds is what gets sent — so a preview shown with
+ * "(your personal intake link)" in it was emailing exactly that to the client,
+ * in place of the link. See fillPreviewLinks.
+ */
+export const PREVIEW_INTAKE_LINK = "(your personal intake link)";
+export const PREVIEW_PORTAL_LINK = "(your personal booking page)";
+export const PREVIEW_PAYMENT_REF = "(your payment reference)";
+
+/** The links and reference that belong to one client, resolved before composing. */
+export interface ClientLinks {
+  /** their personal intake form */
+  intakeLink: string;
+  /** their permanent booking page (/me/[token]) — where they rebook and find payment details */
+  portalLink?: string;
+  /** the reference they put on a bank transfer */
+  paymentRef?: string;
 }
 
 /**
@@ -96,20 +124,53 @@ function splitSignOff(body: string): { main: string; signOff: string } {
 }
 
 /**
- * What the confirmation email contains:
- *  - returning client → a short confirmation with the time, place and how to
- *    get there; the calendar invite comes from Google Calendar itself.
- *  - new client (first email only) → the same, plus the location template in
- *    Phoenix's own words, the access note, the intake link and optionally
- *    payment details.
+ * How to pay, as one block: the wording from Settings, then the account details
+ * and — the part that makes a bank transfer matchable — their own reference.
  *
- * The order is fixed and the sign-off is always last, because this email's job
- * is to answer, in this order: when is it, where is it, how do I get in, what
- * do I owe, what do you need from me. The editable template supplies the voice;
- * the facts are assembled around it rather than glued on the end.
+ * The reference used to go out in a separate "Your booking page" email, which
+ * meant a new client's payment information arrived split across two messages
+ * sent at different times, and the half with the reference in it was the half
+ * that was easy to miss.
+ */
+function paymentBlock(s: EmailSettings, paymentRef?: string): string {
+  const lines = [s.paymentDetails.trim()].filter(Boolean);
+  const bank = [
+    s.bankAccountName?.trim() && `  Account name: ${s.bankAccountName.trim()}`,
+    s.bankSortCode?.trim() && `  Sort code: ${s.bankSortCode.trim()}`,
+    s.bankAccountNumber?.trim() && `  Account number: ${s.bankAccountNumber.trim()}`,
+    paymentRef && `  Reference: ${paymentRef}`,
+  ].filter(Boolean) as string[];
+  if (bank.length) {
+    lines.push(["For bank transfers:", ...bank].join("\n"));
+    if (paymentRef) lines.push("Please use that reference every time — it's how I match your payment to you.");
+  }
+  if (s.bankPaymentNote?.trim()) lines.push(s.bankPaymentNote.trim());
+  return lines.join("\n\n");
+}
+
+/**
+ * What the confirmation email contains, and deliberately only two shapes of it:
+ *
+ *  - **First time** → one email carrying everything a new client ever needs:
+ *    the letter in Phoenix's own words, when and where, how to find the door,
+ *    how to pay and with what reference, their own booking page (which is how
+ *    they book every session after this one), and the intake form. It replaces
+ *    the drip of separate welcome / booking-page / intake emails that used to
+ *    follow a first booking, each carrying one piece of the same picture.
+ *
+ *  - **Every time after** → a confirmation and a map. Nothing else: they have
+ *    their page, they know how to pay, and they've filled the form in. Repeating
+ *    all of it on every rebooking is how a returning client learns to skim past
+ *    the email that also contains the address.
+ *
+ * Within the first email the order is fixed and the sign-off is always last,
+ * because it answers, in this order: when is it, where is it, how do I get in,
+ * what do I owe, where do I do all this myself next time, what do you need from
+ * me. The editable template supplies the voice; the facts are assembled around
+ * it rather than glued on the end.
  *
  * Pure — also runs in the browser for the live preview in the booking panel, where
- * the real token doesn't exist yet, so a placeholder link string is passed instead.
+ * the real tokens don't exist yet, so placeholder link strings are passed instead.
  */
 export function composeBookingEmail(
   client: { name: string; welcomeSent: boolean },
@@ -117,12 +178,16 @@ export function composeBookingEmail(
   whenLabel: string,
   sendPayment: boolean,
   settings: EmailSettings,
-  /** the client's personal intake link — real URL on the server, a placeholder for preview */
-  intakeLink = "(your personal intake link)",
+  links: ClientLinks = {
+    intakeLink: PREVIEW_INTAKE_LINK,
+    portalLink: PREVIEW_PORTAL_LINK,
+    paymentRef: PREVIEW_PAYMENT_REF,
+  },
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
+  const { intakeLink, portalLink, paymentRef } = links;
   const includes: string[] = ["Google Calendar invite attached"];
 
   // Where it is — one block, not an address line and a separate map line. The
@@ -160,7 +225,11 @@ export function composeBookingEmail(
     .split("{price}")
     .join(CLINIC_PRICE[clinic])
     .split("{intakeLink}")
-    .join(intakeLink);
+    .join(intakeLink)
+    .split("{portalLink}")
+    .join(portalLink ?? "")
+    .split("{paymentRef}")
+    .join(paymentRef ?? "");
   const { main, signOff } = splitSignOff(filled);
 
   const sections = [main, whereBlock];
@@ -168,10 +237,30 @@ export function composeBookingEmail(
   // Payment, once. The templates already name the price in their own words, so
   // repeating it as a "Payment (£30–60 sliding scale):" heading said the same
   // thing twice. Only the details that aren't already in the letter go here.
-  if (sendPayment && settings.paymentDetails.trim()) {
-    sections.push(settings.paymentDetails.trim());
-    includes.push(`Payment details — ${CLINIC_PRICE[clinic]}`);
+  if (sendPayment) {
+    const payment = paymentBlock(settings, paymentRef);
+    if (payment) {
+      sections.push(payment);
+      includes.push(
+        paymentRef ? `Payment details & their reference ${paymentRef}` : `Payment details — ${CLINIC_PRICE[clinic]}`,
+      );
+    }
   }
+
+  // Their booking page. This is the piece that turns the first email into the
+  // only one they need: every session after this one is booked from here, and
+  // the payment details and reference live on the same page — so it's described
+  // by what it's for, not as "your account".
+  if (portalLink && !template.includes("{portalLink}")) {
+    sections.push(
+      [
+        "This is your own page for everything after today:",
+        portalLink,
+        "Book your next session from there whenever you're ready, move or cancel this one, and find my payment details and your reference any time. No login — just keep the link, it's worth bookmarking.",
+      ].join("\n"),
+    );
+  }
+  if (portalLink) includes.push("Their own booking page — rebooking & payment details");
 
   // The one thing the client has to *do*, kept last so it's the final ask —
   // unless the template already positioned it with {intakeLink}.
@@ -185,6 +274,24 @@ export function composeBookingEmail(
 
   sections.push(signOff || "See you soon,\nPhoenix");
   return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
+}
+
+/**
+ * Swap the preview stand-ins in a hand-edited email body for the real thing.
+ *
+ * Applied on the way out to whatever body the booking panel sends, edited or
+ * not. Without it the preview's own placeholder text is what the client
+ * receives — an email politely telling them to visit "(your personal intake
+ * link)".
+ */
+export function fillPreviewLinks(body: string, links: ClientLinks): string {
+  return body
+    .split(PREVIEW_INTAKE_LINK)
+    .join(links.intakeLink)
+    .split(PREVIEW_PORTAL_LINK)
+    .join(links.portalLink ?? "")
+    .split(PREVIEW_PAYMENT_REF)
+    .join(links.paymentRef ?? "");
 }
 
 const mapsSearchUrl = (address: string) =>

@@ -49,18 +49,36 @@ export function BookingFlow({
   const [phone, setPhone] = useState("");
   const [company, setCompany] = useState(""); // honeypot — real visitors never see or fill this
   const [submitting, setSubmitting] = useState(false);
+  // Set when the email they typed already has a record. We stop and ask rather
+  // than booking, so the same person doesn't end up as two clients (and so we
+  // never book into someone else's record off a mistyped address).
+  const [recognised, setRecognised] = useState<{ prompt: string; intakeDone: boolean } | null>(null);
   const [confirmed, setConfirmed] = useState<{
     whenLabel: string;
     email: string;
     intakeUrl: string;
     emailSent: boolean;
+    returning: boolean;
+    intakeDone: boolean;
   } | null>(null);
 
   const address = clinic === "waterloo" ? waterlooAddress : bethnalAddress;
   const note = clinic === "waterloo" ? waterlooNote : bethnalNote;
   const photo = clinic === "waterloo" ? waterlooPhoto : bethnalPhoto;
 
-  async function submit() {
+  interface BookResponse {
+    whenLabel: string;
+    clientName: string;
+    emailSent: boolean;
+    intakeUrl: string;
+    returning: boolean;
+    intakeDone: boolean;
+    /** the email is already on a record — confirm it's them before booking */
+    needsConfirm?: boolean;
+    prompt?: string;
+  }
+
+  async function submit(confirmReturning = false) {
     if (!selected) {
       toast("Pick a time first");
       return;
@@ -75,14 +93,22 @@ export function BookingFlow({
     }
     setSubmitting(true);
     try {
-      const result = await api<{ whenLabel: string; clientName: string; emailSent: boolean; intakeUrl: string }>(
-        "/api/public/book",
-        {
-          method: "POST",
-          body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company }),
-        },
-      );
-      setConfirmed({ whenLabel: result.whenLabel, email, intakeUrl: result.intakeUrl, emailSent: result.emailSent });
+      const result = await api<BookResponse>("/api/public/book", {
+        method: "POST",
+        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning }),
+      });
+      if (result.needsConfirm) {
+        setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
+        return;
+      }
+      setConfirmed({
+        whenLabel: result.whenLabel,
+        email,
+        intakeUrl: result.intakeUrl,
+        emailSent: result.emailSent,
+        returning: result.returning,
+        intakeDone: result.intakeDone,
+      });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't book that — please try again");
     } finally {
@@ -97,8 +123,48 @@ export function BookingFlow({
         emailSent={confirmed.emailSent}
         email={confirmed.email}
         intakeUrl={confirmed.intakeUrl}
+        returning={confirmed.returning}
+        intakeDone={confirmed.intakeDone}
         copy={copy}
       />
+    );
+  }
+
+  // Recognised them: one tap to book into the record they already have, one to
+  // back out if the address isn't theirs. Nothing is booked either way until
+  // they answer, so a wrong guess here costs nothing.
+  if (recognised) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-[520px] flex-col items-center justify-center gap-4 px-5 py-10 text-center">
+        <div className="font-serif text-2xl font-medium">{recognised.prompt}</div>
+        <p className="text-[13.5px] leading-relaxed text-muted">
+          {recognised.intakeDone
+            ? "If so, I'll add this session to your existing record — no intake form to fill in this time."
+            : "If so, I'll add this session to your existing record rather than starting a new one."}
+        </p>
+        <p className="text-[13px] leading-relaxed text-muted">
+          Booking as <span className="font-semibold text-ink-soft">{name.trim()}</span> · {email.trim()}
+        </p>
+        <div className="mt-1 flex w-full flex-col gap-2.5">
+          <PrimaryButton onClick={() => submit(true)} disabled={submitting} className="py-3">
+            {submitting ? "Booking…" : "Yes, that's me — book it"}
+          </PrimaryButton>
+          <button
+            onClick={() => {
+              // Clear the address rather than send them back to a form still
+              // holding the one we just told them belongs to someone else.
+              setEmail("");
+              setRecognised(null);
+            }}
+            className="cursor-pointer rounded-full border border-line bg-card px-4 py-2.5 text-[13px] font-semibold text-clay-text hover:bg-hoverbg"
+          >
+            No — let me use a different email
+          </button>
+        </div>
+        <p className="text-[12px] leading-relaxed text-muted">
+          If you&apos;re booking for someone else, please use their own email address so their notes stay theirs.
+        </p>
+      </div>
     );
   }
 

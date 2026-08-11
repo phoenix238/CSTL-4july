@@ -20,6 +20,31 @@ export async function findClientByEmail(email: string) {
 }
 
 /**
+ * How to greet someone the public booking page has recognised, without telling
+ * a stranger anything they didn't already know.
+ *
+ * The page has to ask "is this you?" before it books into an existing record —
+ * otherwise one person accumulates a record per email typo and their history
+ * scatters across all of them. But the confirmation is shown to whoever typed
+ * the address, and this is a therapy practice: the fact that a named person is
+ * a client is exactly the sort of thing that shouldn't be readable by anyone
+ * who can guess an email address.
+ *
+ * So the stored name is only ever echoed back when the visitor has already
+ * typed a matching first name — they knew it before we said it. Anyone else
+ * gets a prompt that confirms nothing: it names the address they themselves
+ * entered, and asks them to use their own if it isn't theirs.
+ */
+export function describeReturningClient(
+  storedName: string,
+  typedName: string,
+): { knownName?: string; nameMatches: boolean } {
+  const first = (s: string) => s.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const nameMatches = !!first(storedName) && first(storedName) === first(typedName);
+  return nameMatches ? { knownName: storedName.trim().split(/\s+/)[0], nameMatches } : { nameMatches };
+}
+
+/**
  * Single source of truth: before creating a client, look for an existing one
  * by email, phone, or (fuzzy) name — one client, one record.
  *

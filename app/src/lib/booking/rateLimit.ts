@@ -52,14 +52,26 @@ export function clientIp(req: Request): string {
  * folder, the calendar events and the email, not to undo them afterwards. The
  * attempt is recorded whether or not the booking then succeeds, so a script
  * that fails validation repeatedly still counts against its own ceiling.
+ *
+ * `record: false` checks the ceilings without adding to them. That's for the
+ * second half of a booking the visitor has already been counted for — a
+ * returning client confirming "yes, that's me" is finishing the attempt they
+ * started, and charging them twice would let two taps exhaust a limit set at
+ * three.
  */
-export async function assertBookingAllowed(req: Request, email: string): Promise<void> {
+export async function assertBookingAllowed(
+  req: Request,
+  email: string,
+  { record = true }: { record?: boolean } = {},
+): Promise<void> {
   const keys = { email: `email:${email.trim().toLowerCase()}`, ip: `ip:${clientIp(req)}` };
   const now = Date.now();
 
-  await prisma.bookingAttempt.createMany({
-    data: [{ key: keys.email }, { key: keys.ip }],
-  });
+  if (record) {
+    await prisma.bookingAttempt.createMany({
+      data: [{ key: keys.email }, { key: keys.ip }],
+    });
+  }
 
   for (const limit of LIMITS) {
     const count = await prisma.bookingAttempt.count({

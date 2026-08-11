@@ -41,16 +41,25 @@ export const POST = portalRoute(async (req, client) => {
     // Booking a next session must never quietly delete the session they already
     // have — /reschedule is the route that moves one.
     replaceUpcoming: false,
+    // Blind-copies Phoenix on that same confirmation. It used to be followed by
+    // a separate "X booked a session" note, so one client booking one session
+    // put two emails in his inbox.
+    notifyOwner: settings.portalNotifyEmail,
   });
 
-  await notifyPhoenix({
-    action: "booked",
-    clientName: result.clientName,
-    clientEmail: client.email,
-    clinic: clinic as Clinic,
-    whenLabel: result.whenLabel,
-    portalLink: portalUrl(settings, client.portalToken),
-  });
+  // …unless the client's copy never sent, in which case the Bcc didn't either
+  // and this is the only way he finds out.
+  if (!result.emailSent) {
+    await notifyPhoenix({
+      action: "booked",
+      clientName: result.clientName,
+      clientEmail: client.email,
+      clinic: clinic as Clinic,
+      whenLabel: result.whenLabel,
+      portalLink: portalUrl(settings, client.portalToken),
+      emailFailed: true,
+    });
+  }
 
   // Surface it in the in-app inbox too, so it isn't invisible if the notification
   // email is missed. Non-fatal — the booking has already happened.

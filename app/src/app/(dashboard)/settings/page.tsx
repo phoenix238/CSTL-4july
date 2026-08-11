@@ -36,6 +36,7 @@ export default async function SettingsPage() {
         roomCalendarId: settings.roomCalendarId,
         chalkFarmCalendarId: settings.chalkFarmCalendarId,
         googleConnected: !!settings.googleRefreshToken,
+        googleLastError: settings.googleLastError,
         intakeQuestions: resolveIntakeQuestions(settings.intakeQuestions),
         mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
         mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,

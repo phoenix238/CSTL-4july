@@ -77,4 +77,11 @@ describe("buildMessage", () => {
     expect(msg).toContain("In-Reply-To: <abc@mail.gmail.com>");
     expect(msg).toContain("References: <abc@mail.gmail.com>");
   });
+
+  it("blind-copies when asked, and not otherwise", () => {
+    // This is how Phoenix is told about a booking: the client's own
+    // confirmation, copied to him, rather than a second email about it.
+    expect(buildMessage({ ...base, bcc: "phoenix@example.com" })).toContain("Bcc: phoenix@example.com");
+    expect(buildMessage(base)).not.toContain("Bcc:");
+  });
 });

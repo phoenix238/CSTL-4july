@@ -2,13 +2,10 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
-import { isGoogleAuthError } from "@/lib/google/client";
+import { googleErrorMessage, googleFixFor } from "@/lib/google/health";
 import { composeReviewEmail } from "@/lib/booking/review";
 import type { Clinic } from "@/lib/booking/rules";
 import { getOrCreateIntakeToken, preferencesUrl } from "@/lib/intake";
-
-const RECONNECT_MSG =
-  "Google needs reconnecting — open Settings › Behind the scenes and tap “Reconnect Google”, then try again.";
 
 /** Send the post-session review + marketing opt-in email. */
 export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -22,8 +19,16 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
   try {
     await sendEmail(client.email, subject, body);
   } catch (err) {
-    if (isGoogleAuthError(err)) return NextResponse.json({ error: RECONNECT_MSG }, { status: 403 });
-    throw err;
+    // Google's own words plus the fix that matches them — see the intake-email
+    // route for why a blanket "reconnect Google" was worse than useless here.
+    const message = googleErrorMessage(err);
+    return NextResponse.json(
+      {
+        error: `Couldn't send it — ${message}. Settings › Behind the scenes › Google has the full details.`,
+        fix: googleFixFor(message),
+      },
+      { status: 502 },
+    );
   }
   const sentAt = new Date();
   await prisma.client.update({ where: { id }, data: { reviewEmailSentAt: sentAt } });

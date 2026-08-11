@@ -5,6 +5,7 @@ import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } fr
 import { shareCalendarInvite } from "@/lib/google/calendar";
 import { composeBookingEmail } from "@/lib/booking/email";
 import { intakeUrl } from "@/lib/intake";
+import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { sendEmail } from "@/lib/google/gmail";
 import { isValidEmail } from "@/lib/validate";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
@@ -74,8 +75,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           const clinic = booking.clinic as Clinic;
           const whenLabel = `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`;
           // Force the full welcome (welcomeSent:false) so a WhatsApp client who
-          // never got an email now receives the access note, address and payment.
-          const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings, intakeUrl(settings, token));
+          // never got an email now receives the access note, address, payment
+          // details and their own booking page — the one message that covers
+          // everything, exactly as a client booking online would get.
+          const { token: portalToken, paymentRef } = await getPortalIdentity(client.id);
+          const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings, {
+            intakeLink: intakeUrl(settings, token),
+            portalLink: portalUrl(settings, portalToken),
+            paymentRef,
+          });
           await sendEmail(finalEmail, welcome.subject, welcome.body);
           await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
           if (!client.welcomeSent) {

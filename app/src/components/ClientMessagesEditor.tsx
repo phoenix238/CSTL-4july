@@ -106,6 +106,11 @@ const GROUPS: Group[] = [
       { key: "confirmBodyPending", label: "Message (email didn't send)", multiline: true },
       { key: "confirmIntakeCardTitle", label: "Intake card heading" },
       { key: "confirmIntakeCardBody", label: "Intake card message", multiline: true },
+      {
+        key: "confirmReturningNote",
+        label: "Returning client (no intake form needed)",
+        multiline: true,
+      },
     ],
   },
   {

@@ -33,6 +33,11 @@ interface NotifyInput {
   paymentRef?: string;
   /** where they can pick a new time */
   portalLink?: string;
+  /**
+   * The client's own copy of this never sent. Turns the note from "here's what
+   * happened" into "here's what happened and they don't know it in writing".
+   */
+  emailFailed?: boolean;
 }
 
 const VERB: Record<PortalAction, string> = {
@@ -66,8 +71,20 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
   }
   lines.push("", `Contact: ${input.clientEmail || "no email on record"}`);
 
+  if (input.emailFailed) {
+    lines.push(
+      "",
+      "Their own confirmation email did NOT go out — they have nothing in writing, so please get in touch directly.",
+      "Check Settings › Behind the scenes › Google for the state of the connection.",
+    );
+  }
+
+  const subject = input.emailFailed
+    ? `${input.clientName} — ${VERB[input.action]}, but not emailed`
+    : `${input.clientName} — ${VERB[input.action]}`;
+
   try {
-    await sendEmail(to, `${input.clientName} — ${VERB[input.action]}`, lines.join("\n"));
+    await sendEmail(to, subject, lines.join("\n"));
   } catch (err) {
     console.error("Couldn't send the portal notification email to Phoenix", err);
   }

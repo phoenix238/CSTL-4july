@@ -8,7 +8,7 @@ import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./Availabili
 import { ClientMessagesEditor } from "./ClientMessagesEditor";
 import { PortalSettings } from "./PortalSettings";
 import { PaymentMatching } from "./PaymentMatching";
-import { reconnectGoogle } from "@/lib/googleActions";
+import { GoogleConnectionPanel } from "./GoogleConnectionPanel";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
@@ -31,6 +31,8 @@ export interface SettingsData {
   roomCalendarId: string;
   chalkFarmCalendarId: string;
   googleConnected: boolean;
+  /** the last error Google gave a real send — "" when the last one worked */
+  googleLastError: string;
   intakeQuestions: IntakeQuestion[];
   mapsReviewUrlWaterloo: string;
   mapsReviewUrlBethnal: string;
@@ -448,25 +450,9 @@ export function SettingsView({
             {editingGoogle ? "Cancel" : "Edit"}
           </button>
         </div>
-        <form action={reconnectGoogle} className="px-0.5 pb-1.5">
-          <button
-            type="submit"
-            className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-clay-text hover:bg-hoverbg"
-          >
-            Reconnect Google
-          </button>
-          <p className="mt-1.5 text-[11px] leading-[1.5] text-muted">
-            Use this if sending an email fails with a permissions error — it refreshes Google&apos;s
-            connection with the latest access (Calendar, Drive, Gmail, Sheets).
-          </p>
-        </form>
+        <GoogleConnectionPanel connected={settings.googleConnected} lastError={settings.googleLastError} />
         {!editingGoogle ? (
           <Card className="px-5 py-1.5">
-            <Row label="Connection">
-              <span className={settings.googleConnected ? "text-sage-text" : "text-amber-text"}>
-                {settings.googleConnected ? "✓ Connected — Drive · Calendar · Gmail · Sheets" : "Not connected — sign out and back in with Google"}
-              </span>
-            </Row>
             <Row label="Client folders & Docs">Drive › CSTL › Clients › (client name)</Row>
             <Row label="Marketing spreadsheet">Drive › CSTL › Clients › Docs</Row>
             <Row label="Intake form">In-app form — {baseUrl}/intake/…</Row>

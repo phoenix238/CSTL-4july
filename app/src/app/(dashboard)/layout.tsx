@@ -18,9 +18,19 @@ const getShellData = unstable_cache(
   async () => {
     const [enquiryBadge, settings] = await Promise.all([
       prisma.enquiry.count({ where: { status: { in: ["waiting", "offered", "booked_online"] } } }),
-      prisma.appSettings.findUnique({ where: { id: 1 }, select: { googleRefreshToken: true } }),
+      prisma.appSettings.findUnique({
+        where: { id: 1 },
+        select: { googleRefreshToken: true, googleLastError: true },
+      }),
     ]);
-    return { enquiryBadge, googleConnected: !!settings?.googleRefreshToken };
+    // "Connected" now means the last thing we asked Google to do actually
+    // worked — not merely that a refresh token is on file. The old check was
+    // the reason the sidebar could show a green tick while every email failed.
+    return {
+      enquiryBadge,
+      googleConnected: !!settings?.googleRefreshToken,
+      googleError: settings?.googleLastError ?? "",
+    };
   },
   ["shell-data"],
   { revalidate: 30, tags: ["shell"] },
@@ -30,11 +40,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
   if (!session) redirect("/signin");
 
-  const { enquiryBadge, googleConnected } = await getShellData();
+  const { enquiryBadge, googleConnected, googleError } = await getShellData();
 
   return (
     <ToastProvider>
-      <Shell enquiryBadge={enquiryBadge} googleConnected={googleConnected}>
+      <Shell enquiryBadge={enquiryBadge} googleConnected={googleConnected} googleError={googleError}>
         {children}
       </Shell>
     </ToastProvider>

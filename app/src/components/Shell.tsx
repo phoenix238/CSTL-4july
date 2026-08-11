@@ -71,20 +71,34 @@ function SidebarHeader() {
   );
 }
 
-function GoogleStatus({ connected }: { connected: boolean }) {
+/**
+ * Three states, not two. A connection can be linked and still broken — that's
+ * the case the old green/red pair had no way to show, so a token on file read
+ * as "Google connected" no matter how many emails Google was refusing.
+ */
+function GoogleStatus({ connected, error }: { connected: boolean; error?: string }) {
+  const state = !connected ? "off" : error ? "failing" : "ok";
+  const dot =
+    state === "ok" ? "bg-sage" : state === "failing" ? "bg-[oklch(0.75_0.14_75)]" : "bg-[oklch(0.62_0.15_30)]";
   return (
-    <div className="flex items-start gap-2 border-t border-line px-3 pt-3 pb-0.5">
-      <span
-        className={`mt-1 h-[7px] w-[7px] flex-none rounded-full ${connected ? "bg-sage" : "bg-[oklch(0.62_0.15_30)]"}`}
-      />
+    <Link href="/settings" className="flex items-start gap-2 border-t border-line px-3 pt-3 pb-0.5">
+      <span className={`mt-1 h-[7px] w-[7px] flex-none rounded-full ${dot}`} />
       <div className="text-[11px] leading-[1.45] text-muted">
-        {connected ? (
+        {state === "ok" && (
           <>
             Google connected
             <br />
             Drive · Calendar · Gmail
           </>
-        ) : (
+        )}
+        {state === "failing" && (
+          <>
+            Google is refusing us
+            <br />
+            tap to see why
+          </>
+        )}
+        {state === "off" && (
           <>
             Google not connected
             <br />
@@ -92,17 +106,20 @@ function GoogleStatus({ connected }: { connected: boolean }) {
           </>
         )}
       </div>
-    </div>
+    </Link>
   );
 }
 
 export function Shell({
   enquiryBadge,
   googleConnected,
+  googleError,
   children,
 }: {
   enquiryBadge: number;
   googleConnected: boolean;
+  /** the last thing Google refused, "" when the last call worked */
+  googleError?: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -131,7 +148,7 @@ export function Shell({
         <NavLinks enquiryBadge={enquiryBadge} />
         <div className="mt-auto flex flex-col gap-2.5">
           {settingsLink()}
-          <GoogleStatus connected={googleConnected} />
+          <GoogleStatus connected={googleConnected} error={googleError} />
         </div>
       </aside>
 
@@ -160,7 +177,7 @@ export function Shell({
             <ClientSearch onNavigate={() => setOpen(false)} />
             <NavLinks enquiryBadge={enquiryBadge} onNavigate={() => setOpen(false)} />
             {settingsLink(() => setOpen(false))}
-            <GoogleStatus connected={googleConnected} />
+            <GoogleStatus connected={googleConnected} error={googleError} />
           </div>
         </div>
       )}

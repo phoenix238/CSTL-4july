@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
-import { findClientByEmail } from "@/lib/clients";
+import { describeReturningClient, findClientByEmail } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
 import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
@@ -15,13 +15,15 @@ import { sendEmail } from "@/lib/google/gmail";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { clinic, startISO, name, email, phone, company } = body as {
+    const { clinic, startISO, name, email, phone, company, confirmReturning } = body as {
       clinic?: string;
       startISO?: string;
       name?: string;
       email?: string;
       phone?: string;
       company?: string; // honeypot
+      /** the visitor has answered "yes, that's me" to the returning-client prompt */
+      confirmReturning?: boolean;
     };
 
     if (company?.trim()) {
@@ -47,7 +49,9 @@ export async function POST(req: Request) {
 
     // Before anything that costs: a Drive folder, a Doc, calendar events and an
     // email all follow from here, so the ceiling is checked first, not after.
-    await assertBookingAllowed(req, cleanEmail);
+    // A confirming second pass is the same booking continuing, so it's checked
+    // against the ceiling but doesn't add to it.
+    await assertBookingAllowed(req, cleanEmail, { record: !confirmReturning });
 
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
@@ -56,6 +60,25 @@ export async function POST(req: Request) {
 
     // Email only — never the fuzzy name/phone match. See findClientByEmail.
     const existing = await findClientByEmail(cleanEmail);
+
+    // Recognised, and they haven't said so yet: stop and ask. Booking straight
+    // into someone else's record on a shared or mistyped address is worse than
+    // one extra tap, and the alternative — creating a second record for the
+    // same person — is what scatters one client's history across several.
+    if (existing && !confirmReturning) {
+      const { knownName, nameMatches } = describeReturningClient(existing.name, cleanName);
+      return NextResponse.json({
+        needsConfirm: true,
+        knownName,
+        // Whether they still owe us an intake form decides what the prompt can
+        // promise them about the next step.
+        intakeDone: existing.intakeDone,
+        prompt: nameMatches
+          ? `Welcome back${knownName ? `, ${knownName}` : ""} — is this you?`
+          : "We already have someone booking with that email address. Is this you?",
+      });
+    }
+
     const result = await bookSession({
       clientId: existing?.id,
       newClient: existing ? undefined : { name: cleanName, email: cleanEmail, phone: cleanPhone },
@@ -67,20 +90,34 @@ export async function POST(req: Request) {
       // A returning client booking here is arranging another session, not moving
       // the one they already have. Moving is what the portal's reschedule is for.
       replaceUpcoming: false,
+      // Phoenix is told by being blind-copied on the client's own confirmation
+      // below — one email about one booking, not a confirmation plus a summary.
+      notifyOwner: settings.bookingNotifyEmail,
     });
 
-    // Let Phoenix know a booking came in — non-fatal: the booking itself has
-    // already succeeded, so a notification hiccup shouldn't fail the visitor's
-    // confirmation. Email lands in Gmail, which already pushes to his phone.
-    if (settings.bookingNotifyEmail && process.env.ALLOWED_EMAIL) {
+    // The Bcc only exists if the client's email actually went out. When it
+    // didn't, the booking is real and Phoenix knows nothing about it — so this
+    // is the one case that still needs a message of its own, and it's the
+    // message that matters most: someone is booked and has nothing in writing.
+    if (settings.bookingNotifyEmail && process.env.ALLOWED_EMAIL && !result.emailSent) {
       try {
         await sendEmail(
           process.env.ALLOWED_EMAIL,
-          `New booking — ${result.clientName}`,
-          `${result.clientName} just booked online.\n\n${result.whenLabel}\nContact: ${cleanEmail}${cleanPhone ? ` · ${cleanPhone}` : ""}\n\nBooked via your public booking page.`,
+          `Booked, but not emailed — ${result.clientName}`,
+          [
+            `${result.clientName} booked online, and the confirmation email did not go out. They have nothing in writing — please get in touch with them directly.`,
+            "",
+            result.whenLabel,
+            `Contact: ${cleanEmail}${cleanPhone ? ` · ${cleanPhone}` : ""}`,
+            "",
+            result.emailError ? `Google said: ${result.emailError}` : "",
+            "Check Settings › Behind the scenes › Google for the current state of the connection.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
         );
       } catch (err) {
-        console.error("Couldn't send booking notification email", err);
+        console.error("Couldn't send the failed-confirmation alert", err);
       }
     }
 
@@ -92,7 +129,7 @@ export async function POST(req: Request) {
         data: {
           via: "ONLINE",
           name: result.clientName,
-          text: `Booked online — ${result.whenLabel}`,
+          text: `Booked online — ${result.whenLabel}${result.emailSent ? "" : " · confirmation email FAILED, please follow up"}`,
           status: "booked_online",
           clientId: result.clientId,
         },
@@ -107,6 +144,10 @@ export async function POST(req: Request) {
       clientName: result.clientName,
       emailSent: result.emailSent,
       intakeUrl: result.intakeUrl,
+      // A returning client who has already filled the form in is not asked for
+      // it again — the confirmation screen uses these to decide.
+      returning: result.returning,
+      intakeDone: result.intakeDone,
     });
   } catch (err) {
     // A slot going while they filled the form is normal, not a fault — tell them

@@ -8,9 +8,11 @@ import {
 import { syncChalkFarmDayBlock } from "@/lib/google/chalkFarm";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime, londonDateKey } from "@/lib/time";
-import { composeBookingEmail, resolveClinicPhoto } from "./email";
+import { composeBookingEmail, fillPreviewLinks, resolveClinicPhoto } from "./email";
 import { parseDataUrl } from "@/lib/google/mime";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
+import { getPortalIdentity, portalUrl } from "@/lib/portal";
+import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
 import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
 import { SlotTakenError } from "./slots";
@@ -41,6 +43,15 @@ export interface BookingRequest {
    * already have.
    */
   replaceUpcoming?: boolean;
+  /**
+   * Blind-copy Phoenix on the client's own confirmation.
+   *
+   * Set for the bookings he isn't present for (the public page, the client
+   * portal). He gets the exact email the client got — one message about one
+   * booking — instead of that email plus a separately-worded "someone booked"
+   * summary landing beside it.
+   */
+  notifyOwner?: boolean;
 }
 
 export interface BookingResult {
@@ -54,10 +65,16 @@ export interface BookingResult {
   emailTextForClipboard?: string;
   /** the client's personal intake-form link — already emailed, but also offered as a direct button */
   intakeUrl: string;
+  /** the client's permanent booking page — where they rebook from here on */
+  portalUrl: string;
   /** false if the confirmation email couldn't be sent (booking still stands) */
   emailSent: boolean;
   /** true if they'd already filled in their intake form before this booking — skips the "send it" nag */
   intakeDone: boolean;
+  /** false when this was the client's very first booking with us */
+  returning: boolean;
+  /** what Google said when the confirmation email failed — for Phoenix, never the client */
+  emailError?: string;
 }
 
 /** Retry a Gmail send through the usual transient failures before giving up. */
@@ -186,22 +203,34 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     );
   }
 
-  // The intake link is folded into the first welcome email (see composeBookingEmail)
-  // so it's one message, not two; it's also returned for the standalone resend button.
+  // Everything personal to this client, resolved before the letter is written.
+  // The intake link and the booking page are both folded into the first welcome
+  // email (see composeBookingEmail) so a new client gets one message rather than
+  // three; both are returned too, for the resend buttons on their profile.
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, intakeLink);
+  const { token: portalToken, paymentRef } = await getPortalIdentity(clientId);
+  const portalLink = portalUrl(settings, portalToken);
+  const links = { intakeLink, portalLink, paymentRef };
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.
   const photo = parseDataUrl(resolveClinicPhoto(req.clinic, settings));
   const attachments = photo
     ? [{ filename: `${req.clinic === "waterloo" ? "waterloo" : "bethnal-green"}-entrance.jpg`, ...photo, inline: true }]
     : undefined;
-  const body = req.emailBody?.trim() || email.body;
+  // A hand-edited body comes from the preview, which was composed before this
+  // client had tokens — so its placeholder links are swapped for the real ones
+  // rather than sent as written.
+  const body = req.emailBody?.trim() ? fillPreviewLinks(req.emailBody.trim(), links) : email.body;
   // Whether this is the client's very first welcome message — captured before we
   // flip welcomeSent, so the confirmation copy and the flip agree.
   const wasFirstEmail = !client.welcomeSent;
   let emailTextForClipboard: string | undefined;
   let emailSent = false;
+  let emailError: string | undefined;
+  // Blind copy for the bookings Phoenix isn't in the room for. Only ever his own
+  // address from the environment — never anything from the request.
+  const bcc = req.notifyOwner ? process.env.ALLOWED_EMAIL || undefined : undefined;
   // Did the welcome message actually reach the client (emailed by us, or handed
   // to Phoenix on the clipboard to send himself)? A failed send doesn't count.
   let firstContactMade = false;
@@ -221,6 +250,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
           body,
           req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
           attachments,
+          { bcc },
         ),
       );
       emailSent = true;
@@ -228,11 +258,15 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
       await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
       items.push(
         wasFirstEmail
-          ? "Welcome email sent — invite, access note" + (req.sendPayment ? ", payment details" : "")
+          ? "Welcome email sent — invite, access note, booking page" + (req.sendPayment ? ", payment details" : "")
           : "Email sent — calendar invite",
       );
+      if (bcc) items.push("Copied to you — the same email the client got");
     } catch (err) {
       console.error("Booking confirmed but the confirmation email failed to send", err);
+      // Kept so the caller can tell Phoenix what Google actually objected to,
+      // rather than leaving him with a booking that "just didn't email".
+      emailError = googleErrorMessage(err);
       emailTextForClipboard = body;
       // The booking stands and the client has nothing in writing. Record that
       // plainly on the row so it can be found and resent, rather than living
@@ -276,8 +310,11 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     items,
     emailTextForClipboard,
     intakeUrl: intakeLink,
+    portalUrl: portalLink,
     emailSent,
     intakeDone: client.intakeDone,
+    returning: !isNew,
+    emailError,
   };
 }
 

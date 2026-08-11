@@ -117,27 +117,41 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       );
     }
 
+    const settings = await getSettings();
     const result = await bookSession({
       clientId: enquiry.clientId,
       clinic: enquiry.clinic,
       startISO: start.toISOString(),
       sendEmail: true,
       sendPayment: true,
+      // Phoenix is blind-copied on the client's own confirmation rather than
+      // sent a second email summarising it.
+      notifyOwner: settings.bookingNotifyEmail,
     });
 
     await prisma.enquiry.update({ where: { id: enquiry.id }, data: { status: "booked" } });
     revalidateTag("shell");
 
-    const settings = await getSettings();
-    if (settings.bookingNotifyEmail && process.env.ALLOWED_EMAIL) {
+    // The Bcc rides on the client's email, so it only exists if that email
+    // sent. When it didn't, the client is booked with nothing in writing and
+    // this is the only way Phoenix learns of it.
+    if (settings.bookingNotifyEmail && process.env.ALLOWED_EMAIL && !result.emailSent) {
       try {
         await sendEmail(
           process.env.ALLOWED_EMAIL,
-          `New booking — ${result.clientName}`,
-          `${result.clientName} just booked one of the times you offered.\n\n${result.whenLabel}\n\nBooked via your offer link — nothing left to confirm.`,
+          `Booked, but not emailed — ${result.clientName}`,
+          [
+            `${result.clientName} booked one of the times you offered, and their confirmation email did not go out — they have nothing in writing, so please get in touch directly.`,
+            "",
+            result.whenLabel,
+            result.emailError ? `\nGoogle said: ${result.emailError}` : "",
+            "Check Settings › Behind the scenes › Google for the state of the connection.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
         );
       } catch (err) {
-        console.error("Couldn't send booking notification email", err);
+        console.error("Couldn't send the failed-confirmation alert", err);
       }
     }
 

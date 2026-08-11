@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { composeBookingEmail, type EmailSettings } from "./email";
+import { composeBookingEmail, fillPreviewLinks, type EmailSettings } from "./email";
 
 const settings: EmailSettings = {
   emailTemplateWaterloo: "Hi {name},\n\nWelcome to Waterloo.\n\n{accessNote}\n\nSee you soon,\nPhoenix",
@@ -13,6 +13,8 @@ const settings: EmailSettings = {
 };
 
 const INTAKE_LINK = "https://cstl.example/intake/tok-123";
+const PORTAL_LINK = "https://cstl.example/me/tok-abc";
+const PAYMENT_REF = "MO7";
 
 const compose = (over: Partial<EmailSettings> = {}, welcomeSent = false, sendPayment = true) =>
   composeBookingEmail(
@@ -21,7 +23,7 @@ const compose = (over: Partial<EmailSettings> = {}, welcomeSent = false, sendPay
     "Tue 5 Aug · 3:00 pm",
     sendPayment,
     { ...settings, ...over },
-    INTAKE_LINK,
+    { intakeLink: INTAKE_LINK, portalLink: PORTAL_LINK, paymentRef: PAYMENT_REF },
   );
 
 describe("composeBookingEmail", () => {
@@ -138,5 +140,90 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("https://maps.app.goo.gl/waterloo");
     expect(email.body).not.toContain(INTAKE_LINK);
     expect(email.body).not.toContain(settings.paymentDetails);
+  });
+
+  // — The first email is the only one a new client should need —
+
+  it("gives a new client their booking page, described by what it's for", () => {
+    const email = compose();
+    expect(email.body).toContain(PORTAL_LINK);
+    expect(email.body).toContain("Book your next session from there");
+    expect(email.includes.join(" ")).toContain("booking page");
+  });
+
+  it("carries the bank details and their own payment reference", () => {
+    const email = compose({
+      bankAccountName: "P Tanner",
+      bankSortCode: "12-34-56",
+      bankAccountNumber: "12345678",
+      bankPaymentNote: "Cash is fine too.",
+    });
+    expect(email.body).toContain("Account name: P Tanner");
+    expect(email.body).toContain("Sort code: 12-34-56");
+    expect(email.body).toContain(`Reference: ${PAYMENT_REF}`);
+    expect(email.body).toContain("Cash is fine too.");
+  });
+
+  it("puts everything a new client needs above one sign-off", () => {
+    // The whole point of folding the welcome, the booking-page email and the
+    // intake email into one message: all of it in a single letter, signed once.
+    const body = compose({ bankAccountName: "P Tanner" }).body;
+    for (const part of [settings.waterlooAddress, settings.paymentDetails, PORTAL_LINK, INTAKE_LINK]) {
+      expect(body.indexOf(part)).toBeGreaterThan(-1);
+      expect(body.indexOf(part)).toBeLessThan(body.indexOf("See you soon,"));
+    }
+    expect(body.split("See you soon,").length - 1).toBe(1);
+  });
+
+  it("doesn't repeat the booking page when the template already places it", () => {
+    const email = compose({
+      emailTemplate: "Hi {name},\n\nYour page: {portalLink}\n\nSee you soon,\nPhoenix",
+    });
+    expect(email.body.split(PORTAL_LINK).length - 1).toBe(1);
+  });
+
+  it("sends a returning client no booking page, payment details or reference — just the confirmation", () => {
+    // A rebooking that repeats the whole welcome is a rebooking people skim,
+    // and the address is the part they actually needed.
+    const email = compose({ bankAccountName: "P Tanner" }, true);
+    expect(email.body).not.toContain(PORTAL_LINK);
+    expect(email.body).not.toContain(PAYMENT_REF);
+    expect(email.body).not.toContain("Account name");
+  });
+
+  it("leaves the payment block out entirely when there's nothing to say", () => {
+    const email = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "waterloo",
+      "Tue 5 Aug",
+      true,
+      { ...settings, paymentDetails: "" },
+      { intakeLink: INTAKE_LINK },
+    );
+    expect(email.includes.join(" ")).not.toContain("Payment details");
+    expect(email.body).not.toContain("For bank transfers");
+  });
+
+  it("still sends the reference when the payment wording is blank — it's the part that has to travel", () => {
+    const email = compose({ paymentDetails: "", bankAccountNumber: "12345678" });
+    expect(email.body).toContain(`Reference: ${PAYMENT_REF}`);
+  });
+});
+
+describe("fillPreviewLinks", () => {
+  // The booking panel previews the email before the client's tokens exist, and
+  // sends whatever is in that box — so an unsubstituted preview was emailing
+  // clients the literal words "(your personal intake link)".
+  it("swaps the preview placeholders for the real links", () => {
+    const preview = composeBookingEmail({ name: "Sam", welcomeSent: false }, "bethnal", "Wed · 10:00 am", true, settings);
+    const sent = fillPreviewLinks(preview.body, {
+      intakeLink: INTAKE_LINK,
+      portalLink: PORTAL_LINK,
+      paymentRef: PAYMENT_REF,
+    });
+    expect(sent).toContain(INTAKE_LINK);
+    expect(sent).toContain(PORTAL_LINK);
+    expect(sent).not.toContain("(your personal");
+    expect(sent).not.toContain("(your payment reference)");
   });
 });
