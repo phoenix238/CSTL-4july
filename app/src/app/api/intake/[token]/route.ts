@@ -1,16 +1,24 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma, getSettings } from "@/lib/db";
 import { updateClientDetails } from "@/lib/clients";
-import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
+import { ensureClientFolderAndDoc } from "@/lib/google/drive";
+import {
+  refreshCaseHistoryDoc,
+  resolveCaseHistory,
+  seedFromIntake,
+  type IntakeItem,
+  type IntakeSnapshot,
+} from "@/lib/caseHistory";
 import { shareCalendarInvite } from "@/lib/google/calendar";
 import { composeBookingEmail } from "@/lib/booking/email";
 import { intakeUrl } from "@/lib/intake";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { sendEmail } from "@/lib/google/gmail";
 import { isValidEmail } from "@/lib/validate";
-import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
+import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { Clinic } from "@/lib/booking/rules";
-import { COLUMN_KEYS, CONSENT_PARAGRAPHS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
+import { COLUMN_KEYS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
 
 // Standard keys that read as short client-detail fields (vs. clinical paragraphs).
 const DETAIL_KEYS = new Set(["dob", "phone", "occupation", "doctor", "emergency", "referred"]);
@@ -95,55 +103,50 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       }
     }
 
-    const { docId } = await ensureClientFolderAndDoc(client.id);
+    // Keep the form exactly as it was answered — every question label, in the
+    // order it was asked. Section 1 of the case history is this, verbatim, so it
+    // has to survive the question set being edited in Settings afterwards.
+    const groupOf = (q: IntakeQuestion): IntakeItem["group"] =>
+      q.caseKey ? "caseHistory"
+      : HEALTH_KEYS.has(q.key) ? "health"
+      : DETAIL_KEYS.has(q.key) ? "details"
+      : "custom";
 
-    const detailQs = questions.filter((q) => DETAIL_KEYS.has(q.key));
-    const healthQs = questions.filter((q) => HEALTH_KEYS.has(q.key));
-    const caseHistoryQ = questions.find((q) => q.key === "caseHistory");
-    const customQs = questions.filter((q) => q.custom);
-    const line = (q: IntakeQuestion): { kind: "field"; label: string; value: string } => ({
-      kind: "field",
-      label: q.label,
-      value: str(a[q.key]),
-    });
-
-    const sections: DocSection[] = [
-      {
-        heading: "1. Client details",
-        lines: [{ kind: "field", label: "Full name", value: finalName }, ...detailQs.map(line)],
-      },
-    ];
-    if (healthQs.length) {
-      sections.push({
-        heading: "2. Health information",
-        lines: healthQs.map((q) => ({ kind: "paragraph", label: q.label, value: str(a[q.key]) })),
-      });
-    }
-    if (customQs.length) {
-      sections.push({
-        heading: "3. Additional questions",
-        lines: customQs.map((q) =>
-          q.type === "long"
-            ? { kind: "paragraph" as const, label: q.label, value: str(a[q.key]) }
-            : line(q),
-        ),
-      });
-    }
-    if (caseHistoryQ) {
-      sections.push({
-        heading: "4. What brings them to therapy",
-        lines: [{ kind: "paragraph", value: str(a[caseHistoryQ.key]) }],
-      });
-    }
-    sections.push({
-      heading: "5. Consent",
-      lines: [
-        { kind: "field", label: "Consent given", value: consent === true ? "Yes" : consent === false ? "No" : "Not answered" },
-        { kind: "paragraph", value: CONSENT_PARAGRAPHS.join("\n\n") },
+    const snapshot: IntakeSnapshot = {
+      items: [
+        { label: "Full name", value: finalName, group: "details" },
+        ...(finalEmail ? [{ label: "Email", value: finalEmail, group: "details" as const }] : []),
+        ...questions.map((q) => ({
+          label: q.label,
+          value: str(a[q.key]),
+          group: groupOf(q),
+          ...(q.caseKey ? { caseKey: q.caseKey } : {}),
+        })),
       ],
+      consent: typeof consent === "boolean" ? consent : null,
+    };
+    const submittedAt = new Date();
+
+    // Parts of the intake inform the case history: each answer seeds the box its
+    // question is mapped to, so nothing has to be asked for a second time in the
+    // room. Boxes already written into are left alone.
+    const history = seedFromIntake(resolveCaseHistory(client.caseHistory), snapshot, submittedAt);
+
+    await prisma.client.update({
+      where: { id: client.id },
+      data: {
+        intakeAnswers: snapshot as unknown as Prisma.InputJsonValue,
+        intakeSubmittedAt: submittedAt,
+        caseHistory: history as unknown as Prisma.InputJsonValue,
+      },
     });
 
-    await appendFormattedSections(docId, `INTAKE / CASE HISTORY — submitted ${fmtDate(new Date())}`, sections);
+    // Written after the record is saved, so the Doc renders the intake in. The
+    // refresh is unconditional: the Doc may be one that was already sitting in
+    // the client's folder, which ensureClientFolderAndDoc adopts as-is rather
+    // than writing over — anything it holds is kept as the original record.
+    const { docId } = await ensureClientFolderAndDoc(client.id);
+    await refreshCaseHistoryDoc(client.id, docId);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

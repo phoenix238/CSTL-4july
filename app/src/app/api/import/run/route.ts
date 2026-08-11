@@ -2,12 +2,8 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
 import { createClientWithDrive } from "@/lib/clients";
-import {
-  ensureClientFolderAndDoc,
-  appendFormattedSections,
-  uploadOriginalFile,
-  copyDriveFileTo,
-} from "@/lib/google/drive";
+import { ensureClientFolderAndDoc, uploadOriginalFile, copyDriveFileTo } from "@/lib/google/drive";
+import { refreshCaseHistoryDoc } from "@/lib/caseHistory";
 import { upsertMarketingRow } from "@/lib/google/sheets";
 import { fmtDate } from "@/lib/time";
 
@@ -115,12 +111,14 @@ export const POST = guarded(async (req: Request) => {
     const { folderId, docId } = await ensureClientFolderAndDoc(clientId);
 
     if (entry.client.notes?.trim()) {
-      await appendFormattedSections(docId, null, [
-        {
-          heading: `Imported case history — from ${entry.file}, ${fmtDate(new Date())}`,
-          lines: [{ kind: "paragraph", value: entry.client.notes }],
-        },
-      ]);
+      // The imported history goes in whole, under ORIGINAL RECORD, with the
+      // standard headers written around it — then the Case history screen sorts
+      // it into those sections. Importing never has to guess where text belongs.
+      await refreshCaseHistoryDoc(
+        clientId,
+        docId,
+        `From ${entry.file}, imported ${fmtDate(new Date())}\n\n${entry.client.notes.trim()}`,
+      );
       // A case history came in with this import — treat intake as covered.
       await prisma.client.update({ where: { id: clientId }, data: { intakeDone: true } });
     }

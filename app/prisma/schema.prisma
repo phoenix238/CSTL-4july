@@ -47,18 +47,52 @@ model Client {
   // Set when a client asks for a receipt before anything's confirmed paid yet —
   // the next booking that gets marked paid sends it automatically, then clears this.
   receiptPending Boolean      @default(false)
+  // The structured case history (see lib/caseHistory.ts). The client's Doc is a
+  // *rendering* of this plus their session notes — keeping the narrative here is
+  // what lets a Doc be rebuilt into the standard layout without re-reading it.
+  // Shape: { presenting: string, medical: string, …, priorSessions: [{date,text}] }.
+  caseHistory   Json?
+  // The intake form exactly as the client submitted it — every question label and
+  // answer, in order — so section 1 of the case history stays verbatim even after
+  // the question set is edited in Settings. Shape: { items: [{label,value,group}], consent }.
+  intakeAnswers Json?
+  intakeSubmittedAt DateTime?
+  // Last time this client's Doc was rebuilt into the standard case-history layout.
+  caseHistoryFormattedAt DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
   notes         SessionNote[]
   recordings    SessionRecording[]
   enquiries     Enquiry[]
+  reflections   Reflection[]
 
   @@index([name])
   @@index([email])
   @@index([intakeToken])
   @@index([portalToken])
   @@index([paymentRef])
+}
+
+// Phoenix's own writing — hers, not the client's record. Some reflections are
+// about a session, some are just thinking, and the Personal tab is where both
+// are written and read back. Also appended to the "Phoenix session reflections"
+// Doc in Drive; this table is what makes them readable in the app at all.
+model Reflection {
+  id         String   @id @default(cuid())
+  // Null = not about anyone in particular, just her own reflection.
+  clientId   String?
+  client     Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // The name as it was when written, so a deleted client doesn't leave the
+  // reflection unattributed.
+  clientName String   @default("")
+  date       DateTime @default(now())
+  text       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date])
+  @@index([clientId])
 }
 
 // Cached copy of a session note for instant profile views;
@@ -71,11 +105,8 @@ model SessionNote {
   clinic    String
   raw       String
   bullets   String[]
-  // Present in the shared production database from the case-history/reflections
-  // feature on another branch (claude/case-history-layout-8h40fq) — not wired
-  // into any code here, and holding 12 real, non-null session notes' worth of
-  // data as of Aug 2026. Declared so `prisma db push` never proposes dropping
-  // it. See calendarInviteSharedAt above for the same situation on Client.
+  // The rest of what's recorded each session, alongside the note itself. All
+  // optional in practice — a quick note is still just `raw`.
   between     String @default("") // how they'd been since the last session
   reflections String @default("") // Phoenix's reflections on this session
   nextSession String @default("") // thoughts to pick up next time

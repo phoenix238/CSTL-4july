@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { api, Card, OutlineButton, PrimaryButton, inputClass, useToast } from "./ui";
 import { COLUMN_KEYS, type IntakeQuestion } from "@/lib/intakeQuestions";
+import { entryLabel } from "@/lib/caseHistoryLayout";
 
 let customCounter = 0;
 
@@ -91,7 +92,15 @@ export function IntakeQuestionsEditor({ initial }: { initial: IntakeQuestion[] }
             <input type="checkbox" checked={q.enabled} onChange={(e) => update(i, { enabled: e.target.checked })} />
             Show
           </label>
-          {!COLUMN_KEYS.has(q.key) && q.key !== "caseHistory" ? (
+          {q.caseKey ? (
+            <span
+              className="rounded-full bg-clay-tint px-2 py-[2px] text-[10.5px] font-medium text-clay-text"
+              title={`The answer fills "${entryLabel(q.caseKey)}" in the case history`}
+            >
+              → {entryLabel(q.caseKey)}
+            </span>
+          ) : null}
+          {!COLUMN_KEYS.has(q.key) && !q.caseKey ? (
             <button
               onClick={() => remove(i)}
               className="cursor-pointer text-[12px] font-semibold text-muted hover:text-[oklch(0.55_0.15_25)]"
@@ -99,7 +108,10 @@ export function IntakeQuestionsEditor({ initial }: { initial: IntakeQuestion[] }
               Remove
             </button>
           ) : (
-            <span className="text-[10.5px] text-faint" title="Standard question — fills the client record">
+            <span
+              className="text-[10.5px] text-faint"
+              title="Standard question — fills the client record or the case history. Untick Show to stop asking it."
+            >
               standard
             </span>
           )}
@@ -113,9 +125,11 @@ export function IntakeQuestionsEditor({ initial }: { initial: IntakeQuestion[] }
           {saving ? "Saving…" : "Save questions"}
         </PrimaryButton>
       </div>
-      <div className="text-[11.5px] text-muted">
-        &quot;Standard&quot; questions fill the client&apos;s record (DOB, meds, etc.). Questions you add are saved
-        into the client&apos;s Doc. Untick <b>Show</b> to hide one without deleting it.
+      <div className="text-[11.5px] leading-[1.5] text-muted">
+        &quot;Standard&quot; questions fill the client&apos;s record (DOB, phone, etc.). A{" "}
+        <b>→ badge</b> means the answer also fills that box of their case history, so it doesn&apos;t
+        have to be asked again in the session. Questions you add are saved into the client&apos;s Doc.
+        Untick <b>Show</b> to stop asking one without losing it.
       </div>
     </Card>
   );

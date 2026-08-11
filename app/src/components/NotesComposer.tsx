@@ -15,6 +15,12 @@ export function NotesComposer({
 }) {
   const toast = useToast();
   const [text, setText] = useState("");
+  // The three fields either side of the note itself. Collapsed until asked for —
+  // a quick note between clients shouldn't have to scroll past four boxes.
+  const [between, setBetween] = useState("");
+  const [reflections, setReflections] = useState("");
+  const [nextSession, setNextSession] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const [bullets, setBullets] = useState<string[] | null>(null);
   const [busy, setBusy] = useState<"" | "summarise" | "save">("");
   const baseRef = useRef(""); // textarea content captured when the mic started
@@ -69,9 +75,13 @@ export function NotesComposer({
     try {
       await api(`/api/clients/${clientId}/notes`, {
         method: "POST",
-        body: JSON.stringify({ raw: text, bullets: bullets ?? undefined, clinic }),
+        body: JSON.stringify({ raw: text, bullets: bullets ?? undefined, clinic, between, reflections, nextSession }),
       });
       setText("");
+      setBetween("");
+      setReflections("");
+      setNextSession("");
+      setExpanded(false);
       setBullets(null);
       onSaved();
     } catch (err) {
@@ -81,14 +91,53 @@ export function NotesComposer({
     }
   };
 
+  const field = (
+    label: string,
+    value: string,
+    onChange: (v: string) => void,
+    placeholder: string,
+  ) => (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-[11.5px] font-semibold tracking-[0.04em] text-muted">{label}</span>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-h-[64px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-2.5 text-[13px] leading-[1.55] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+      />
+    </label>
+  );
+
+  const extras = [between, reflections, nextSession].filter((v) => v.trim()).length;
+
   return (
     <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-clay/35 bg-card px-[18px] py-4 shadow-card">
+      {expanded && field("HOW THEY'D BEEN BETWEEN SESSIONS", between, setBetween, "Since last time…")}
+
+      {expanded && (
+        <span className="text-[11.5px] font-semibold tracking-[0.04em] text-muted">SESSION NOTES</span>
+      )}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Type, or press Dictate and just talk…"
         className="min-h-[130px] w-full resize-y rounded-xl border border-line bg-inputbg px-3.5 py-3 text-sm leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
       />
+
+      {expanded &&
+        field("SESSION REFLECTIONS", reflections, setReflections, "What you noticed, for the record…")}
+      {expanded &&
+        field("THOUGHTS FOR NEXT SESSION", nextSession, setNextSession, "What to pick up next time…")}
+
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="cursor-pointer self-start text-[11.5px] font-semibold text-clay-text hover:text-clay"
+      >
+        {expanded
+          ? "Just the note"
+          : `+ Between sessions, reflections, next time${extras ? ` (${extras} filled)` : ""}`}
+      </button>
+
       {bullets && bullets.length > 0 && (
         <div className="rounded-xl border border-[oklch(0.85_0.05_148_/_0.5)] bg-[oklch(0.94_0.03_148_/_0.45)] px-4 py-3">
           <div className="mb-[7px] text-[10.5px] font-semibold tracking-[0.1em] text-sage-text">

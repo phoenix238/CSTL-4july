@@ -4,6 +4,7 @@ import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { resolveClientCopy } from "@/lib/clientCopy";
 import { ClientProfile, type ProfileNote, type ProfileRecording } from "@/components/ClientProfile";
+import { resolveCaseHistory } from "@/lib/caseHistory";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -96,6 +97,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         referred: client.referred,
         docId: client.docId,
       }}
+      caseHistory={resolveCaseHistory(client.caseHistory).entries}
       notes={notes}
       recordings={recordings}
       nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
