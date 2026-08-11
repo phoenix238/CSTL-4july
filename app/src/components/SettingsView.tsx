@@ -10,6 +10,7 @@ import { PortalSettings } from "./PortalSettings";
 import { PaymentMatching } from "./PaymentMatching";
 import { GoogleConnectionPanel } from "./GoogleConnectionPanel";
 import { RenameCalendarEventsButton } from "./RenameCalendarEventsButton";
+import { TestEmailPanel } from "./TestEmailPanel";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
@@ -434,6 +435,14 @@ export function SettingsView({
             bankPaymentNote: settings.bankPaymentNote,
           }}
         />
+      </Dropdown>
+
+      <Dropdown
+        label="SEND YOURSELF A TEST EMAIL"
+        open={!!open.testEmail}
+        onToggle={() => toggle("testEmail")}
+      >
+        <TestEmailPanel />
       </Dropdown>
 
       <Dropdown

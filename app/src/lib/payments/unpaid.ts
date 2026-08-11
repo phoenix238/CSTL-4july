@@ -111,6 +111,48 @@ export async function sweepUnpaidSessions({
   return { overdue, newlyFlagged };
 }
 
+/** Settings fields the reminder email reads — a plain shape so it stays pure. */
+export interface ReminderSettings {
+  bankAccountName?: string;
+  bankSortCode?: string;
+  bankAccountNumber?: string;
+  emailSignOff?: string;
+}
+
+/**
+ * The gentle payment-reminder email, as text. Pure, so the same wording is used
+ * by the real send and by the "send myself a test" panel.
+ */
+export function composePaymentReminder(
+  settings: ReminderSettings,
+  input: { clientName: string; whenLabel: string; clinic: Clinic; paymentRef?: string; portalLink?: string },
+): { subject: string; body: string } {
+  const first = input.clientName.split(" ")[0] || "there";
+  const lines = [
+    `Hi ${first},`,
+    "",
+    `Just a gentle note about your session on ${input.whenLabel} at ${CLINIC_LABEL[input.clinic]} — whenever you're able, here's how to settle it.`,
+  ];
+  const bank = [
+    settings.bankAccountName?.trim() && `  Account name: ${settings.bankAccountName.trim()}`,
+    settings.bankSortCode?.trim() && `  Sort code: ${settings.bankSortCode.trim()}`,
+    settings.bankAccountNumber?.trim() && `  Account number: ${settings.bankAccountNumber.trim()}`,
+    input.paymentRef && `  Reference: ${input.paymentRef}`,
+  ].filter(Boolean) as string[];
+  if (bank.length) {
+    lines.push("", "For a bank transfer:", ...bank);
+    if (input.paymentRef) lines.push("Please use that reference — it's how I match your payment to you.");
+  }
+  if (input.portalLink) lines.push("", "You can also see this any time on your own page:", input.portalLink);
+  lines.push(
+    "",
+    "This is a donation-based practice, so pay what feels right — and if now isn't a good time, that's completely okay.",
+    "",
+    ...resolveSignOff(settings).split("\n"),
+  );
+  return { subject: "Your craniosacral session", body: lines.join("\n") };
+}
+
 /**
  * Send one gentle payment reminder to a client for a specific session, and stamp
  * it so they're chased at most once. Returns who it went to.
@@ -124,35 +166,16 @@ export async function sendPaymentReminder(bookingId: string): Promise<{ sentTo: 
   if (!booking.client.email) throw new Error("No email on file for this client.");
 
   const settings = await getSettings();
-  const clinic = booking.clinic as Clinic;
-  const first = booking.client.name.split(" ")[0] || "there";
   const { token, paymentRef } = await getPortalIdentity(booking.client.id);
-  const portalLink = portalUrl(settings, token);
+  const { subject, body } = composePaymentReminder(settings, {
+    clientName: booking.client.name,
+    whenLabel: `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`,
+    clinic: booking.clinic as Clinic,
+    paymentRef,
+    portalLink: portalUrl(settings, token),
+  });
 
-  const lines = [
-    `Hi ${first},`,
-    "",
-    `Just a gentle note about your session on ${fmtDayLong(booking.startsAt)} at ${CLINIC_LABEL[clinic]} — whenever you're able, here's how to settle it.`,
-  ];
-  const bank = [
-    settings.bankAccountName?.trim() && `  Account name: ${settings.bankAccountName.trim()}`,
-    settings.bankSortCode?.trim() && `  Sort code: ${settings.bankSortCode.trim()}`,
-    settings.bankAccountNumber?.trim() && `  Account number: ${settings.bankAccountNumber.trim()}`,
-    paymentRef && `  Reference: ${paymentRef}`,
-  ].filter(Boolean) as string[];
-  if (bank.length) {
-    lines.push("", "For a bank transfer:", ...bank);
-    if (paymentRef) lines.push("Please use that reference — it's how I match your payment to you.");
-  }
-  if (portalLink) lines.push("", "You can also see this any time on your own page:", portalLink);
-  lines.push(
-    "",
-    "This is a donation-based practice, so pay what feels right — and if now isn't a good time, that's completely okay.",
-    "",
-    ...resolveSignOff(settings).split("\n"),
-  );
-
-  await sendEmail(booking.client.email, "Your craniosacral session", lines.join("\n"));
+  await sendEmail(booking.client.email, subject, body);
   await prisma.booking.update({ where: { id: bookingId }, data: { paymentReminderSentAt: new Date() } });
   return { sentTo: booking.client.email };
 }

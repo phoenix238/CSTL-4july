@@ -53,6 +53,20 @@ export function BookingFlow({
   // than booking, so the same person doesn't end up as two clients (and so we
   // never book into someone else's record off a mistyped address).
   const [recognised, setRecognised] = useState<{ prompt: string; intakeDone: boolean } | null>(null);
+  const [linkSending, setLinkSending] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+
+  async function sendMyLink() {
+    setLinkSending(true);
+    try {
+      await api("/api/portal/send-link", { method: "POST", body: JSON.stringify({ email: email.trim() }) });
+      setLinkSent(true);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't send that just now");
+    } finally {
+      setLinkSending(false);
+    }
+  }
   const [confirmed, setConfirmed] = useState<{
     whenLabel: string;
     email: string;
@@ -161,6 +175,19 @@ export function BookingFlow({
             No — let me use a different email
           </button>
         </div>
+        {linkSent ? (
+          <p className="text-[13px] font-medium text-sage-text">
+            Sent — check your email for your booking page link.
+          </p>
+        ) : (
+          <button
+            onClick={sendMyLink}
+            disabled={linkSending}
+            className="cursor-pointer text-[12.5px] font-semibold text-clay-text underline hover:text-clay disabled:cursor-default disabled:opacity-60"
+          >
+            {linkSending ? "Sending…" : "Or just email me my page link"}
+          </button>
+        )}
         <p className="text-[12px] leading-relaxed text-muted">
           If you&apos;re booking for someone else, please use their own email address so their notes stay theirs.
         </p>

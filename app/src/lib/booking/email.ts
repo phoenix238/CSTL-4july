@@ -42,7 +42,7 @@ export interface EmailSettings {
 }
 
 /** The one sign-off, from settings, with a safe default if it was cleared. */
-export function resolveSignOff(s: EmailSettings): string {
+export function resolveSignOff(s: { emailSignOff?: string }): string {
   return s.emailSignOff?.trim() || "with gratitude\nPhoenix";
 }
 
