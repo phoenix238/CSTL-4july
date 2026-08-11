@@ -224,6 +224,13 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       <Card className="flex flex-col gap-3 px-5 py-5">
         <SectionLabel>Payment</SectionLabel>
 
+        <details className="group flex flex-col">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[13px] font-medium text-clay-text [&::-webkit-details-marker]:hidden">
+            <span>Payment details &amp; your reference</span>
+            <span aria-hidden className="text-[11px] text-muted transition-transform group-open:rotate-180">▾</span>
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
+
         <div className="rounded-lg bg-clay-tint px-3.5 py-3">
           <div className="text-[12px] font-semibold text-clay-text">Your payment reference</div>
           <div className="mt-1 flex items-center justify-between gap-2">
@@ -274,6 +281,8 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         {view.bank.note && (
           <p className="text-[12.5px] leading-relaxed whitespace-pre-line text-muted">{view.bank.note}</p>
         )}
+          </div>
+        </details>
 
         <div className="flex flex-col gap-1 border-t border-hairline pt-3 text-[13px]">
           <div className="flex justify-between gap-4">

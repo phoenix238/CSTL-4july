@@ -43,20 +43,20 @@ export interface ClientCopy {
 export const CLIENT_COPY_DEFAULTS: ClientCopy = {
   offerEmailSubject: "Some session times — {clinic}",
   offerEmailBody:
-    "Hi {name},\n\nLovely to hear from you. I've got a few times that could work at {clinic} — let me know which suits and I'll confirm it:\n\n{times}\n\n{pickLink}Warm wishes,\nPhoenix",
+    "Hi {name},\n\nLovely to hear from you. I've got a few times that could work at {clinic} — let me know which suits and I'll confirm it:\n\n{times}\n\n{pickLink}with gratitude\nPhoenix",
   offerPickLinkLine: "Or click here to pick one yourself and it'll be booked straight away:\n{link}\n\n",
 
   intakeEmailSubject: "Your intake form — Phoenix Tanner CSTL",
   intakeEmailBody:
-    "Hi {name},\n\nWhen you get a moment, please fill in your short intake form — it takes a couple of minutes and goes straight into your confidential record:\n\n{link}\n\nSee you soon,\nPhoenix",
+    "Hi {name},\n\nWhen you get a moment, please fill in your short intake form — it takes a couple of minutes and goes straight into your confidential record:\n\n{link}\n\nwith gratitude\nPhoenix",
 
   intakePageTitle: "Your intake form",
   intakePageIntro:
-    "A few details before your craniosacral session with Phoenix Tanner — it takes a couple of minutes and helps him prepare so you can settle in quickly on the day. Once it's done, you'll get your Google Calendar invite and everything you need for the session. Everything here is private and kept in your confidential record.",
-  intakeEmailHelp: "So Phoenix can send your Google Calendar invite and session details.",
+    "A few details before your craniosacral session with Phoenix Tanner — it takes a couple of minutes and helps him prepare so you can settle in quickly on the day. Everything here is private and kept in your confidential record.",
+  intakeEmailHelp: "So Phoenix can send your session details.",
   intakeThanksTitle: "Thank you",
   intakeThanksBody:
-    "Your details are with Phoenix. Your Google Calendar invite and session details are on their way to your email — looking forward to seeing you.",
+    "Your details are with Phoenix — looking forward to seeing you.",
 
   bookPageTitle: "Book a session",
   bookPageIntro:

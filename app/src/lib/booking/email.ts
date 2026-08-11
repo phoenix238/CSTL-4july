@@ -202,7 +202,7 @@ export function composeBookingEmail(
       `Hi ${client.name},`,
       `Just confirming your next session: ${whenLabel} at ${CLINIC_LABEL[clinic]}.`,
       whereBlock,
-      "See you soon,\nPhoenix",
+      "with gratitude\nPhoenix",
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -272,7 +272,7 @@ export function composeBookingEmail(
   includes.push("Intake form link");
   if (settings.accessNote.trim()) includes.push("Access note — stairs, no step-free access");
 
-  sections.push(signOff || "See you soon,\nPhoenix");
+  sections.push(signOff || "with gratitude\nPhoenix");
   return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
 }
 

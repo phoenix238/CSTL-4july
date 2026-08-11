@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma, getSettings } from "@/lib/db";
 import { updateClientDetails } from "@/lib/clients";
 import { ensureClientFolderAndDoc, appendFormattedSections, type DocSection } from "@/lib/google/drive";
-import { shareCalendarInvite } from "@/lib/google/calendar";
 import { composeBookingEmail } from "@/lib/booking/email";
 import { intakeUrl } from "@/lib/intake";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
@@ -57,15 +56,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     await updateClientDetails(client.id, columnUpdate);
 
     // Now that we (may) have their email, close the loop on any upcoming session
-    // they were booked into without one — invite them to the calendar event and
-    // send the welcome/confirmation email. Both are non-fatal: the intake itself
-    // has already saved, so a Google/Gmail hiccup shouldn't fail the submission.
+    // they were booked into without one — send the welcome/confirmation email.
+    // Non-fatal: the intake itself has already saved, so a Gmail hiccup shouldn't
+    // fail the submission.
     if (emailChanged) {
-      try {
-        await shareCalendarInvite(client.id);
-      } catch (err) {
-        console.error("shareCalendarInvite failed during intake submit", err);
-      }
       try {
         const booking = await prisma.booking.findFirst({
           where: { clientId: client.id, status: "confirmed", startsAt: { gte: new Date() } },

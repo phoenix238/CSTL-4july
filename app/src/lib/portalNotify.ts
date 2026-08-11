@@ -101,7 +101,7 @@ export async function confirmToClient(input: NotifyInput): Promise<void> {
 
   if (input.action === "cancelled") {
     subject = "Your session has been cancelled";
-    lines.push(`Your session on ${input.whenLabel} at ${clinic} has been cancelled. That's absolutely fine.`);
+    lines.push(`Your session on ${input.whenLabel} at ${clinic} has been cancelled.`);
     if (input.goodwillPence) {
       lines.push(
         "",
@@ -133,7 +133,7 @@ export async function confirmToClient(input: NotifyInput): Promise<void> {
   if (input.portalLink && input.action !== "cancelled") {
     lines.push("", "You can change or cancel this any time from your page:", input.portalLink);
   }
-  lines.push("", "Warm wishes,", "Phoenix");
+  lines.push("", "with gratitude", "Phoenix");
 
   try {
     await sendEmail(input.clientEmail, subject, lines.join("\n"));
@@ -196,7 +196,7 @@ export async function sendReceipt({
       `(${unpricedCount} sliding-scale ${unpricedCount === 1 ? "session is" : "sessions are"} listed without an amount — just reply and I'll add what you paid.)`,
     );
   }
-  body.push("", "Any questions, just reply to this email.", "", "Warm wishes,", "Phoenix");
+  body.push("", "Any questions, just reply to this email.", "", "with gratitude", "Phoenix");
 
   try {
     await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"));

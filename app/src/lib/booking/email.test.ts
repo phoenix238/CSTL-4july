@@ -140,6 +140,9 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("https://maps.app.goo.gl/waterloo");
     expect(email.body).not.toContain(INTAKE_LINK);
     expect(email.body).not.toContain(settings.paymentDetails);
+    // Signs off once, in the new voice, at the very end.
+    expect(email.body.trimEnd().endsWith("with gratitude\nPhoenix")).toBe(true);
+    expect(email.body.split("with gratitude").length - 1).toBe(1);
   });
 
   // — The first email is the only one a new client should need —
