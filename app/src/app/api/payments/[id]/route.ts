@@ -30,7 +30,10 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
     where: { clientId },
     select: { id: true, startsAt: true, paid: true, amountPence: true, status: true },
   });
-  const target = chooseBookingToSettle(bookings);
+  // A hand-assignment: the person has already decided this payment is theirs, so
+  // don't apply the ±window that guards the automatic path — place it on the best
+  // session whatever its age, dated from the transfer.
+  const target = chooseBookingToSettle(bookings, tx.transactedAt, Infinity);
   if (!target) {
     // Recorded against them even with nothing to settle — better a payment
     // attributed to the right person than one left looking anonymous.

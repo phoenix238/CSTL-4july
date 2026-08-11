@@ -86,12 +86,15 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
       where: { clientId: result.clientId },
       select: { id: true, startsAt: true, paid: true, amountPence: true, status: true },
     });
-    const target = chooseBookingToSettle(bookings);
+    // Relative to when the money actually moved, and only sessions within the
+    // window around it — a transfer shouldn't settle a session weeks away.
+    const target = chooseBookingToSettle(bookings, payment.transactedAt);
 
     if (!target) {
-      // Their reference, but nothing outstanding to put it against — a prepayment
-      // for a session not yet booked, most likely. Recorded against the client so
-      // it isn't lost, but no session is invented for it.
+      // Their reference, but nothing outstanding within the window to put it
+      // against — a prepayment for a session not yet booked, or a session too far
+      // from the transfer to be sure. Recorded against the client so it isn't
+      // lost, but no session is settled automatically.
       summary.unmatchedCount++;
       needsAttention.push(payment);
       await recordTransaction(payment, { status: "unmatched", clientId: result.clientId });

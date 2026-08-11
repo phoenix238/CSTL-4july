@@ -14,6 +14,9 @@ interface PendingTx {
   counterParty: string;
   status: string;
   clientId: string | null;
+  /** a one-tap suggestion from the sender's name — never applied automatically */
+  suggestedClientId?: string | null;
+  suggestedClientName?: string | null;
 }
 
 export interface PaymentSettingsData {
@@ -203,9 +206,26 @@ export function PaymentMatching({
                 <span className="font-mono">{tx.reference || "none given"}</span>
                 {tx.status === "ambiguous" && " · matched more than one client"}
               </div>
+              {tx.suggestedClientId && tx.suggestedClientName && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg bg-sage-tint px-2.5 py-1.5 text-[12px] text-sage-text">
+                  <span>
+                    Looks like <span className="font-semibold">{tx.suggestedClientName}</span>?
+                  </span>
+                  <button
+                    onClick={() =>
+                      resolve(tx.id, { clientId: tx.suggestedClientId }, `Assigned to ${tx.suggestedClientName} ✓`)
+                    }
+                    disabled={busyId === tx.id}
+                    className="cursor-pointer rounded-full bg-sage px-2.5 py-0.5 text-[11.5px] font-semibold text-cream hover:opacity-90 disabled:cursor-default"
+                  >
+                    Confirm
+                  </button>
+                  <span className="text-[11px] text-muted">or choose below</span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <select
-                  defaultValue=""
+                  defaultValue={tx.suggestedClientId ?? ""}
                   onChange={(e) => {
                     if (e.target.value) resolve(tx.id, { clientId: e.target.value }, "Payment assigned ✓");
                   }}

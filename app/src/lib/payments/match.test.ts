@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { chooseBookingToSettle, matchReference, normaliseRef, type PayableBooking } from "./match";
+import {
+  chooseBookingToSettle,
+  matchReference,
+  normaliseRef,
+  suggestClientByName,
+  type PayableBooking,
+} from "./match";
 
 const CANDIDATES = [
   { clientId: "jono", paymentRef: "JS4" },
@@ -57,6 +63,35 @@ describe("matchReference", () => {
   });
 });
 
+describe("suggestClientByName", () => {
+  const clients = [
+    { clientId: "a", name: "Jono Smith" },
+    { clientId: "b", name: "Sarah Kimani" },
+  ];
+
+  it("suggests the client whose whole name is in the sender's name", () => {
+    expect(suggestClientByName("MR JONO SMITH", clients)).toBe("a");
+    expect(suggestClientByName("Sarah Kimani", clients)).toBe("b");
+  });
+
+  it("suggests no one on a first name alone — too weak to guess", () => {
+    expect(suggestClientByName("JONO", clients)).toBeNull();
+  });
+
+  it("suggests no one when two clients both fit", () => {
+    const two = [
+      { clientId: "a", name: "Jono Smith" },
+      { clientId: "b", name: "Jono Smith" },
+    ];
+    expect(suggestClientByName("JONO SMITH", two)).toBeNull();
+  });
+
+  it("suggests no one for an empty or symbol-only sender", () => {
+    expect(suggestClientByName("", clients)).toBeNull();
+    expect(suggestClientByName("—", clients)).toBeNull();
+  });
+});
+
 const NOW = new Date("2026-08-09T12:00:00Z");
 const day = (n: number) => new Date(NOW.getTime() + n * 86_400_000);
 
@@ -65,28 +100,44 @@ function bk(over: Partial<PayableBooking> = {}): PayableBooking {
 }
 
 describe("chooseBookingToSettle", () => {
-  it("settles the oldest unpaid session that has happened", () => {
+  it("settles the oldest unpaid session within the window before the transfer", () => {
     const chosen = chooseBookingToSettle(
-      [bk({ id: "recent", startsAt: day(-1) }), bk({ id: "old", startsAt: day(-30) })],
+      [bk({ id: "recent", startsAt: day(-1) }), bk({ id: "older", startsAt: day(-6) })],
       NOW,
     );
-    expect(chosen?.id).toBe("old");
+    expect(chosen?.id).toBe("older");
+  });
+
+  it("does not settle a session older than the window — it's left for a human", () => {
+    // A payment shouldn't quietly pay off a session from three weeks ago.
+    const chosen = chooseBookingToSettle([bk({ id: "ancient", startsAt: day(-30) })], NOW);
+    expect(chosen).toBeNull();
+  });
+
+  it("still settles an old session when the window is lifted (a hand-assignment)", () => {
+    const chosen = chooseBookingToSettle([bk({ id: "ancient", startsAt: day(-30) })], NOW, Infinity);
+    expect(chosen?.id).toBe("ancient");
   });
 
   it("skips sessions already paid", () => {
     const chosen = chooseBookingToSettle(
-      [bk({ id: "old", startsAt: day(-30), paid: true }), bk({ id: "recent", startsAt: day(-1) })],
+      [bk({ id: "old", startsAt: day(-6), paid: true }), bk({ id: "recent", startsAt: day(-1) })],
       NOW,
     );
     expect(chosen?.id).toBe("recent");
   });
 
-  it("falls to an upcoming session when everything past is settled", () => {
+  it("falls to an upcoming session within the window when everything past is settled", () => {
     const chosen = chooseBookingToSettle(
       [bk({ id: "done", startsAt: day(-5), paid: true }), bk({ id: "soon", startsAt: day(3) })],
       NOW,
     );
     expect(chosen?.id).toBe("soon");
+  });
+
+  it("does not settle an upcoming session further out than the window", () => {
+    const chosen = chooseBookingToSettle([bk({ id: "far", startsAt: day(20) })], NOW);
+    expect(chosen).toBeNull();
   });
 
   it("never settles a cancelled session — that would be a goodwill call, not an automatic one", () => {
