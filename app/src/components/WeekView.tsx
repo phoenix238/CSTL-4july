@@ -9,6 +9,8 @@ export interface WeekRow {
   time: string;
   name: string;
   isNew: boolean;
+  /** 1-based position of this session in the client's non-cancelled history */
+  sessionNumber: number;
   clinic: string;
 }
 
@@ -65,10 +67,12 @@ export function WeekView({
                   >
                     {r.name}
                   </Link>
-                  {r.isNew && (
+                  {r.isNew ? (
                     <span className="flex-none text-[10.5px] font-semibold tracking-[0.06em] text-clay">
-                      NEW CLIENT
+                      NEW · 1ST
                     </span>
+                  ) : (
+                    <span className="flex-none text-[11px] text-muted">session {r.sessionNumber}</span>
                   )}
                   <Chip color={clinic.color} bg={clinic.bg}>
                     {clinic.label}

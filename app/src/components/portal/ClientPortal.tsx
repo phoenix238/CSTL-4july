@@ -118,6 +118,16 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       )}
       {mode === "book" && <div className="text-[12.5px] text-muted">{CLINIC_PRICE[clinic]} · 60 minutes</div>}
 
+      {mode === "reschedule" && upcoming && (
+        <div className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12.5px] text-clay-text">
+          Your current time is{" "}
+          <span className="font-semibold">
+            {fmtDayLong(new Date(upcoming.startsAtISO))}, {fmtTime(new Date(upcoming.startsAtISO))}
+          </span>
+          . Pick a new time below.
+        </div>
+      )}
+
       <BookSlotPicker
         clinic={mode === "reschedule" && upcoming ? upcoming.clinic : clinic}
         selected={selected}

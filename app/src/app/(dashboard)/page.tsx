@@ -1,5 +1,6 @@
 import { prisma, getSettings } from "@/lib/db";
 import { fmtDayLong, fmtTime, londonDayStart } from "@/lib/time";
+import { sessionOrdinals } from "@/lib/sessionOrdinals";
 import { TodayView, type AttentionItem, type TodayRow } from "@/components/TodayView";
 
 export default async function TodayPage() {
@@ -13,15 +14,20 @@ export default async function TodayPage() {
     orderBy: { startsAt: "asc" },
   });
 
-  const rows: TodayRow[] = bookings.map((b) => ({
-    id: b.id,
-    clientId: b.clientId,
-    time: fmtTime(b.startsAt),
-    name: b.client.name,
-    isNew: !b.client.welcomeSent,
-    clinic: b.clinic,
-    intakeDone: b.client.intakeDone,
-  }));
+  const ordinals = await sessionOrdinals(bookings.map((b) => b.clientId));
+  const rows: TodayRow[] = bookings.map((b) => {
+    const n = ordinals.get(b.id) ?? 1;
+    return {
+      id: b.id,
+      clientId: b.clientId,
+      time: fmtTime(b.startsAt),
+      name: b.client.name,
+      isNew: n === 1,
+      sessionNumber: n,
+      clinic: b.clinic,
+      intakeDone: b.client.intakeDone,
+    };
+  });
 
   const [waitingEnquiries, pendingIntake] = await Promise.all([
     prisma.enquiry.findMany({ where: { status: "waiting" }, orderBy: { createdAt: "asc" }, take: 8 }),

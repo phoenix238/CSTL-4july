@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { fmtDate, fmtDayLong, fmtTime, londonAddDays, londonDateKey, londonWeekStart } from "@/lib/time";
+import { sessionOrdinals } from "@/lib/sessionOrdinals";
 import { WeekView, type WeekDay, type WeekRow } from "@/components/WeekView";
 
 export default async function WeekPage() {
@@ -12,19 +13,24 @@ export default async function WeekPage() {
     orderBy: { startsAt: "asc" },
   });
 
+  const ordinals = await sessionOrdinals(bookings.map((b) => b.clientId));
   const days: WeekDay[] = Array.from({ length: 7 }, (_, i) => {
     const day = londonAddDays(weekStart, i);
     const dateKey = londonDateKey(day);
     const rows: WeekRow[] = bookings
       .filter((b) => londonDateKey(b.startsAt) === dateKey)
-      .map((b) => ({
-        id: b.id,
-        clientId: b.clientId,
-        time: fmtTime(b.startsAt),
-        name: b.client.name,
-        isNew: !b.client.welcomeSent,
-        clinic: b.clinic,
-      }));
+      .map((b) => {
+        const n = ordinals.get(b.id) ?? 1;
+        return {
+          id: b.id,
+          clientId: b.clientId,
+          time: fmtTime(b.startsAt),
+          name: b.client.name,
+          isNew: n === 1,
+          sessionNumber: n,
+          clinic: b.clinic,
+        };
+      });
     return { dateKey, label: fmtDayLong(day), rows };
   });
 

@@ -17,7 +17,10 @@ export const dynamic = "force-dynamic";
 const getShellData = unstable_cache(
   async () => {
     const [enquiryBadge, settings] = await Promise.all([
-      prisma.enquiry.count({ where: { status: { in: ["waiting", "offered", "booked_online"] } } }),
+      // Only enquiries needing a reply — someone looking for a time. Online
+      // bookings ("booked_online") are already done, and have their own strip,
+      // so they no longer nag the nav badge.
+      prisma.enquiry.count({ where: { status: { in: ["waiting", "offered"] } } }),
       prisma.appSettings.findUnique({
         where: { id: 1 },
         select: { googleRefreshToken: true, googleLastError: true },

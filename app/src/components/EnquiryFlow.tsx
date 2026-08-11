@@ -71,6 +71,12 @@ export function EnquiryFlow({
 
   const [waiting, setWaiting] = useState<WaitingEnquiry[]>(initialWaiting);
   const [showWaiting, setShowWaiting] = useState(false);
+  const [showBooked, setShowBooked] = useState(false);
+  // The inbox is people looking for a time; online bookings are a separate,
+  // already-done thing — split so responding to enquiries isn't cluttered with
+  // notices about clients who've already booked themselves.
+  const actionable = waiting.filter((w) => w.status !== "booked_online");
+  const newBookings = waiting.filter((w) => w.status === "booked_online");
 
   // paste-a-message popup
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -123,6 +129,7 @@ export function EnquiryFlow({
 
   useEscapeKey(() => setPasteOpen(false), pasteOpen);
   useEscapeKey(() => setShowWaiting(false), showWaiting);
+  useEscapeKey(() => setShowBooked(false), showBooked);
 
   useEffect(() => {
     if (openEnquiryId) {
@@ -652,15 +659,35 @@ export function EnquiryFlow({
         <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Enquiries</h1>
         <div className="flex items-center gap-2">
           <OutlineButton onClick={openPasteModal}>Paste a message</OutlineButton>
-          <TintButton onClick={() => setShowWaiting((v) => !v)}>Waiting ({waiting.length})</TintButton>
+          <TintButton onClick={() => setShowWaiting((v) => !v)}>Waiting ({actionable.length})</TintButton>
+          {newBookings.length > 0 && (
+            <TintButton onClick={() => setShowBooked((v) => !v)}>Booked online ({newBookings.length})</TintButton>
+          )}
           {showWaiting && (
             <>
               <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={() => setShowWaiting(false)} />
               <div className="fixed top-20 left-1/2 z-50 w-[min(330px,calc(100vw-32px))] -translate-x-1/2 lg:top-24 lg:left-auto lg:right-[30px] lg:translate-x-0">
                 <Inbox
-                  waiting={waiting}
+                  waiting={actionable}
                   onOpen={(id) => {
                     setShowWaiting(false);
+                    void loadEnquiry(id);
+                  }}
+                  onDelete={(id) => void deleteWaitingEnquiry(id)}
+                />
+              </div>
+            </>
+          )}
+          {showBooked && (
+            <>
+              <div className="fixed inset-0 z-40 bg-[oklch(0.3_0.02_60_/_0.18)]" onClick={() => setShowBooked(false)} />
+              <div className="fixed top-20 left-1/2 z-50 w-[min(330px,calc(100vw-32px))] -translate-x-1/2 lg:top-24 lg:left-auto lg:right-[30px] lg:translate-x-0">
+                <Inbox
+                  title="BOOKED ONLINE"
+                  emptyLabel="No online bookings"
+                  waiting={newBookings}
+                  onOpen={(id) => {
+                    setShowBooked(false);
                     void loadEnquiry(id);
                   }}
                   onDelete={(id) => void deleteWaitingEnquiry(id)}

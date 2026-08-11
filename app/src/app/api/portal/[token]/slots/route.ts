@@ -24,7 +24,7 @@ export const GET = portalRoute(async (req, client) => {
     ? await prisma.booking.findFirst({
         where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
         orderBy: { startsAt: "asc" },
-        select: { id: true },
+        select: { id: true, startsAt: true },
       })
     : null;
 
@@ -36,5 +36,12 @@ export const GET = portalRoute(async (req, client) => {
     excludeBookingId: own?.id,
   });
 
-  return NextResponse.json({ slots: slots.map((d) => d.toISOString()) });
+  // Excluding their own booking above frees its time again, so it would otherwise
+  // reappear as a bookable slot — "move to the time you're already on". Drop it
+  // from the options and hand it back separately, so the page can show it as
+  // their current time rather than a choice.
+  const currentSlotISO = own?.startsAt.toISOString() ?? null;
+  const offered = currentSlotISO ? slots.filter((d) => d.toISOString() !== currentSlotISO) : slots;
+
+  return NextResponse.json({ slots: offered.map((d) => d.toISOString()), currentSlotISO });
 });

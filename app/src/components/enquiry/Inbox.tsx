@@ -27,22 +27,33 @@ export function viaChip(via: string) {
   }
 }
 
-/** The WAITING list — every enquiry that hasn't been booked or dismissed yet. */
+/**
+ * A list of enquiry cards. Used twice: the WAITING inbox (people looking for a
+ * time — waiting/offered) and, separately, the BOOKED ONLINE strip (clients who
+ * booked themselves — notices, not something to action). Keeping them apart is
+ * the point: the inbox is work to do, the strip is a heads-up.
+ */
 export function Inbox({
   waiting,
   onOpen,
   onDelete,
+  title = "WAITING",
+  emptyLabel = "Inbox clear ✓",
 }: {
   waiting: WaitingEnquiry[];
   onOpen: (id: string) => void;
   onDelete: (id: string) => void;
+  title?: string;
+  emptyLabel?: string;
 }) {
   return (
     <div className="flex w-full flex-none flex-col gap-2 lg:w-[330px]">
-      <SectionLabel>WAITING ({waiting.length})</SectionLabel>
+      <SectionLabel>
+        {title} ({waiting.length})
+      </SectionLabel>
       {waiting.length === 0 ? (
         <Card className="flex items-center justify-center px-4 py-8 text-[13.5px] text-muted">
-          Inbox clear ✓
+          {emptyLabel}
         </Card>
       ) : (
         waiting.map((q) => {

@@ -10,6 +10,8 @@ export interface TodayRow {
   time: string;
   name: string;
   isNew: boolean;
+  /** 1-based position of this session in the client's non-cancelled history */
+  sessionNumber: number;
   clinic: string;
   intakeDone: boolean;
 }
@@ -85,10 +87,12 @@ export function TodayView({
                     >
                       {r.name}
                     </Link>
-                    {r.isNew && (
+                    {r.isNew ? (
                       <span className="text-[10.5px] font-semibold tracking-[0.06em] text-clay">
-                        NEW CLIENT
+                        NEW CLIENT · 1ST SESSION
                       </span>
+                    ) : (
+                      <span className="text-[11px] text-muted">session {r.sessionNumber}</span>
                     )}
                   </div>
                   <div className="mt-[7px] flex flex-wrap gap-[7px]">
