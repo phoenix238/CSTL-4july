@@ -127,6 +127,16 @@ model Booking {
   paidAt        DateTime?
   // Free-text note on the payment — "cash on the day", "bank transfer 12 Aug", etc.
   paymentNote   String    @default("")
+  // Set when Phoenix has been told this session is still unpaid a day after it
+  // happened, so the hourly sweep flags each one once rather than every hour.
+  unpaidNotifiedAt DateTime?
+  // Set when a payment-reminder email has been sent to the client for this
+  // session — so they're gently chased at most once.
+  paymentReminderSentAt DateTime?
+  // Set when Phoenix has been alerted that this session's calendar event is
+  // missing or has been moved out from under the booking; cleared when the event
+  // lines up again, so the reconcile alert fires once per problem.
+  calendarAlertAt DateTime?
 
   // — Cancellation / no-show —
   cancelledAt   DateTime?

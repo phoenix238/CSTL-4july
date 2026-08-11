@@ -1,6 +1,7 @@
 import { prisma, getSettings } from "@/lib/db";
 import { fmtDayLong, fmtTime, londonDayStart } from "@/lib/time";
 import { sessionOrdinals } from "@/lib/sessionOrdinals";
+import { findUnpaidSessions } from "@/lib/payments/unpaid";
 import { TodayView, type AttentionItem, type TodayRow } from "@/components/TodayView";
 
 export default async function TodayPage() {
@@ -29,7 +30,7 @@ export default async function TodayPage() {
     };
   });
 
-  const [waitingEnquiries, pendingIntake] = await Promise.all([
+  const [waitingEnquiries, pendingIntake, unpaid] = await Promise.all([
     prisma.enquiry.findMany({ where: { status: "waiting" }, orderBy: { createdAt: "asc" }, take: 8 }),
     prisma.client.findMany({
       where: {
@@ -38,6 +39,7 @@ export default async function TodayPage() {
       },
       take: 8,
     }),
+    findUnpaidSessions(),
   ]);
 
   const attention: AttentionItem[] = [
@@ -46,6 +48,13 @@ export default async function TodayPage() {
       id: e.id,
       name: e.name || "New enquiry",
       desc: e.text.slice(0, 60),
+    })),
+    ...unpaid.slice(0, 8).map((s) => ({
+      kind: "unpaid" as const,
+      id: s.bookingId,
+      name: s.clientName,
+      desc: `Unpaid — session ${s.whenLabel}`,
+      reminded: s.paymentReminderSentAt != null,
     })),
     ...pendingIntake.map((c) => ({
       kind: "intake" as const,

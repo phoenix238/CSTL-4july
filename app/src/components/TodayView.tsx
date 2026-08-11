@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, Chip, clinicChip, SectionLabel, useToast } from "./ui";
 
@@ -17,10 +18,12 @@ export interface TodayRow {
 }
 
 export interface AttentionItem {
-  kind: "enquiry" | "intake";
+  kind: "enquiry" | "intake" | "unpaid";
   id: string;
   name: string;
   desc: string;
+  /** unpaid only: a reminder has already been sent to the client */
+  reminded?: boolean;
 }
 
 export function TodayView({
@@ -38,6 +41,8 @@ export function TodayView({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set());
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -149,6 +154,30 @@ export function TodayView({
                   >
                     Book
                   </button>
+                ) : a.kind === "unpaid" ? (
+                  (() => {
+                    const done = a.reminded || remindedIds.has(a.id);
+                    return (
+                      <button
+                        disabled={done || busyId === a.id}
+                        onClick={async () => {
+                          setBusyId(a.id);
+                          try {
+                            await api(`/api/bookings/${a.id}/payment-reminder`, { method: "POST" });
+                            setRemindedIds((s) => new Set(s).add(a.id));
+                            toast(`Reminder sent to ${a.name.split(" ")[0]} ✓`);
+                          } catch (err) {
+                            toast(err instanceof Error ? err.message : "Couldn't send");
+                          } finally {
+                            setBusyId(null);
+                          }
+                        }}
+                        className="flex-none cursor-pointer rounded-full bg-clay-tint px-3 py-1.5 text-xs font-semibold text-clay-text disabled:cursor-default disabled:opacity-60"
+                      >
+                        {done ? "Reminded" : busyId === a.id ? "Sending…" : "Remind"}
+                      </button>
+                    );
+                  })()
                 ) : (
                   <button
                     onClick={async () => {
