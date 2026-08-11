@@ -25,6 +25,7 @@ import { getOAuthClient } from "./client";
 /** Every scope the app asks for, with what breaks when it's missing. */
 export const REQUIRED_SCOPES: Record<string, string> = {
   "https://www.googleapis.com/auth/gmail.send": "Sending email",
+  "https://www.googleapis.com/auth/gmail.metadata": "Connection diagnostics (checking Gmail is reachable)",
   "https://www.googleapis.com/auth/calendar": "Calendar events",
   "https://www.googleapis.com/auth/drive": "Client folders in Drive",
   "https://www.googleapis.com/auth/documents": "Session notes in Google Docs",

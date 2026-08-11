@@ -12,6 +12,11 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/documents",
   "https://www.googleapis.com/auth/gmail.send",
+  // gmail.send alone can't call users.getProfile — Google requires readonly,
+  // modify, or metadata access for that method even though sending mail
+  // never touches it. Requested only so the health check can ask "who am I
+  // sending as" without gaining any ability to read message content.
+  "https://www.googleapis.com/auth/gmail.metadata",
   "https://www.googleapis.com/auth/spreadsheets",
 ].join(" ");
 
