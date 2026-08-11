@@ -71,6 +71,14 @@ model SessionNote {
   clinic    String
   raw       String
   bullets   String[]
+  // Present in the shared production database from the case-history/reflections
+  // feature on another branch (claude/case-history-layout-8h40fq) — not wired
+  // into any code here, and holding 12 real, non-null session notes' worth of
+  // data as of Aug 2026. Declared so `prisma db push` never proposes dropping
+  // it. See calendarInviteSharedAt above for the same situation on Client.
+  between     String @default("") // how they'd been since the last session
+  reflections String @default("") // Phoenix's reflections on this session
+  nextSession String @default("") // thoughts to pick up next time
   createdAt DateTime @default(now())
 
   @@index([clientId, date])
