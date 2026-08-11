@@ -4,6 +4,25 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, PrimaryButton, useToast } from "./ui";
 import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } from "@/lib/clientCopy";
+import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
+import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+
+// The saved clinic + bank settings the exact-email preview needs but doesn't edit
+// here (addresses live under Map Pin, bank details under Client Pages). The preview
+// reads the editable parts (letter, access note, payment, sign-off) live from the
+// draft, and these from the last save.
+export interface PreviewContext {
+  waterlooAddress: string;
+  bethnalAddress: string;
+  waterlooLocationUrl: string;
+  bethnalLocationUrl: string;
+  waterlooFindIt: string;
+  bethnalFindIt: string;
+  bankAccountName: string;
+  bankSortCode: string;
+  bankAccountNumber: string;
+  bankPaymentNote: string;
+}
 
 // The settings-backed messages (plain AppSettings columns, not part of clientCopy)
 // that also belong in "every word a client reads" — so this one editor genuinely
@@ -11,6 +30,7 @@ import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } fr
 // in separate Settings dropdowns.
 export interface SettingsMessages {
   emailTemplate: string;
+  emailSignOff: string;
   accessNote: string;
   paymentDetails: string;
   reviewEmailSubjectWaterloo: string;
@@ -55,6 +75,13 @@ const GROUPS: Group[] = [
     blurb: "Added to the welcome email only when you tick “include payment details” for a new client.",
     source: "settings",
     fields: [{ key: "paymentDetails", label: "Payment details", multiline: true }],
+  },
+  {
+    title: "Your sign-off",
+    blurb:
+      "How every email ends. Written once here and added to the very end of each message — so you don't sign off inside the letters above, and no email ever ends twice.",
+    source: "settings",
+    fields: [{ key: "emailSignOff", label: "Sign-off", multiline: true }],
   },
   {
     title: "The offer email",
@@ -212,12 +239,73 @@ function FieldEditor({
   );
 }
 
+// The exact welcome email, composed the same way the real send is, from the
+// live draft — so the duplication a client used to see (the same directions
+// twice, a second sign-off) is visible here before anyone gets it.
+function WelcomeEmailPreview({ settings }: { settings: EmailSettings }) {
+  const [clinic, setClinic] = useState<Clinic>("bethnal");
+  const [which, setWhich] = useState<"first" | "returning">("first");
+  const links = {
+    intakeLink: "https://your-site/intake/ab12cd",
+    portalLink: "https://your-site/me/ab12cd",
+    paymentRef: "MAYA-4K2",
+  };
+  const email = composeBookingEmail(
+    { name: "Maya", welcomeSent: which === "returning" },
+    clinic,
+    "Fri 14 Aug · 12:15",
+    true,
+    settings,
+    links,
+  );
+  const tab = (active: boolean) =>
+    `cursor-pointer rounded-full px-3 py-1 text-[11px] font-semibold ${
+      active ? "bg-clay-text text-white" : "bg-[oklch(0.94_0.01_80)] text-muted hover:text-ink"
+    }`;
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[12px] font-semibold text-ink-soft">Preview the exact email</span>
+        <div className="flex gap-1.5">
+          <button className={tab(which === "first")} onClick={() => setWhich("first")}>
+            First time
+          </button>
+          <button className={tab(which === "returning")} onClick={() => setWhich("returning")}>
+            Returning
+          </button>
+        </div>
+      </div>
+      <div className="flex gap-1.5">
+        {(["bethnal", "waterloo"] as Clinic[]).map((c) => (
+          <button key={c} className={tab(clinic === c)} onClick={() => setClinic(c)}>
+            {CLINIC_LABEL[c]}
+          </button>
+        ))}
+      </div>
+      <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5">
+        <div className="border-b border-line pb-1.5 text-[12px] font-semibold text-ink">{email.subject}</div>
+        <div className="whitespace-pre-line pt-2 text-[12px] leading-[1.55] text-[oklch(0.4_0.02_60)]">
+          {email.body}
+        </div>
+      </div>
+      <p className="text-[10.5px] text-faint">
+        Sample data (Maya, a Bethnal Green session). {which === "first" ? "A new" : "A returning"} client sees this —
+        the address, map pin, how-to-find, payment and sign-off are placed once, in order.
+      </p>
+    </div>
+  );
+}
+
+const WELCOME_TITLE = GROUPS[0].title;
+
 export function ClientMessagesEditor({
   initial,
   settingsInitial,
+  previewContext,
 }: {
   initial: ClientCopy;
   settingsInitial: SettingsMessages;
+  previewContext: PreviewContext;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -233,6 +321,16 @@ export function ClientMessagesEditor({
 
   const setCopy = (k: keyof ClientCopy, v: string) => setDraft((d) => ({ ...d, [k]: v }));
   const setSetting = (k: keyof SettingsMessages, v: string) => setSDraft((d) => ({ ...d, [k]: v }));
+
+  // The composer's view of the draft — editable letter/access/payment/sign-off
+  // from here, the rest of the clinic + bank details from the last save.
+  const previewSettings: EmailSettings = {
+    emailTemplate: sDraft.emailTemplate,
+    emailSignOff: sDraft.emailSignOff,
+    accessNote: sDraft.accessNote,
+    paymentDetails: sDraft.paymentDetails,
+    ...previewContext,
+  };
 
   async function saveAll() {
     setSaving(true);
@@ -321,6 +419,7 @@ export function ClientMessagesEditor({
                         onChange={(v) => setSetting(f.key, v)}
                       />
                     ))}
+                {g.title === WELCOME_TITLE && <WelcomeEmailPreview settings={previewSettings} />}
               </Card>
             )}
           </div>

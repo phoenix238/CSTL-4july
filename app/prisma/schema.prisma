@@ -198,7 +198,14 @@ model AppSettings {
   // price, address, map pin, how to find the door — is filled in around it, so
   // the wording only has to be written and edited once.
   // Placeholders: {name} {when} {clinic} {price} {accessNote} {intakeLink}
-  emailTemplate         String @default("Hi {name},\n\nYou're booked in for {when} at {clinic} — 60 minutes, {price}.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
+  // Voice only — the composer places the address, map, payment, booking page,
+  // intake link and sign-off around it, so the letter carries no facts and no
+  // sign-off of its own (emailSignOff below is appended once, at the very end).
+  emailTemplate         String @default("Hi {name},\n\nYou're booked in for {when} at {clinic} — 60 minutes, {price}.\n\n{accessNote}")
+  // The one sign-off every email ends on. Appended by the composer after any
+  // sign-off in the letter is stripped, so a template that still ends "See you
+  // soon, Phoenix" can't produce a second ending.
+  emailSignOff          String @default("with gratitude\nPhoenix")
   // Legacy per-clinic letters, superseded by emailTemplate above. Kept (rather
   // than dropped) so `prisma db push` never touches existing wording, and used
   // as the fallback for whichever clinic until emailTemplate is saved.
@@ -257,14 +264,14 @@ model AppSettings {
   // (kept in place rather than dropped, so `prisma db push` never has to touch existing data).
   mapsReviewUrl         String @default("") // Google Maps "leave a review" link
   reviewEmailSubject    String @default("How was your session?")
-  reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
+  reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix")
   // Post-session review email, one per clinic — each clinic has its own Google Business review link.
   mapsReviewUrlWaterloo    String @default("") // Google Maps "leave a review" link — Waterloo
   mapsReviewUrlBethnal     String @default("") // Google Maps "leave a review" link — Bethnal Green
   reviewEmailSubjectWaterloo String @default("How was your session?")
   reviewEmailSubjectBethnal  String @default("How was your session?")
-  reviewEmailBodyWaterloo  String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
-  reviewEmailBodyBethnal   String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nWarm wishes,\nPhoenix")
+  reviewEmailBodyWaterloo  String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix")
+  reviewEmailBodyBethnal   String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix")
 
   // Public self-booking (/book) — recurring weekly hours per clinic; null/empty = nothing
   // bookable yet, until configured in Settings › Availability. Shape: WeeklyHours in

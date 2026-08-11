@@ -2,6 +2,7 @@ import { getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { resolveSignOff } from "@/lib/booking/email";
 
 /**
  * Telling both sides what just happened.
@@ -93,6 +94,7 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
 /** Confirm to the client, so they have it in writing. */
 export async function confirmToClient(input: NotifyInput): Promise<void> {
   if (!input.clientEmail) return;
+  const settings = await getSettings();
   const clinic = CLINIC_LABEL[input.clinic];
   const first = input.clientName.split(" ")[0] || "there";
 
@@ -133,7 +135,7 @@ export async function confirmToClient(input: NotifyInput): Promise<void> {
   if (input.portalLink && input.action !== "cancelled") {
     lines.push("", "You can change or cancel this any time from your page:", input.portalLink);
   }
-  lines.push("", "with gratitude", "Phoenix");
+  lines.push("", ...resolveSignOff(settings).split("\n"));
 
   try {
     await sendEmail(input.clientEmail, subject, lines.join("\n"));
@@ -177,6 +179,7 @@ export async function sendReceipt({
   totalPence: number;
   unpricedCount: number;
 }): Promise<{ sent: boolean }> {
+  const settings = await getSettings();
   const first = clientName.split(" ")[0] || "there";
   const body: string[] = [
     `Hi ${first},`,
@@ -196,7 +199,7 @@ export async function sendReceipt({
       `(${unpricedCount} sliding-scale ${unpricedCount === 1 ? "session is" : "sessions are"} listed without an amount — just reply and I'll add what you paid.)`,
     );
   }
-  body.push("", "Any questions, just reply to this email.", "", "with gratitude", "Phoenix");
+  body.push("", "Any questions, just reply to this email.", "", ...resolveSignOff(settings).split("\n"));
 
   try {
     await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"));

@@ -16,6 +16,7 @@ import type { WeeklyHours } from "@/lib/booking/availability";
 export interface SettingsData {
   accessNote: string;
   emailTemplate: string;
+  emailSignOff: string;
   paymentDetails: string;
   waterlooAddress: string;
   bethnalAddress: string;
@@ -409,6 +410,7 @@ export function SettingsView({
           initial={settings.clientCopy}
           settingsInitial={{
             emailTemplate: settings.emailTemplate,
+            emailSignOff: settings.emailSignOff,
             accessNote: settings.accessNote,
             paymentDetails: settings.paymentDetails,
             reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
@@ -417,6 +419,18 @@ export function SettingsView({
             reviewEmailSubjectBethnal: settings.reviewEmailSubjectBethnal,
             reviewEmailBodyBethnal: settings.reviewEmailBodyBethnal,
             mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
+          }}
+          previewContext={{
+            waterlooAddress: settings.waterlooAddress,
+            bethnalAddress: settings.bethnalAddress,
+            waterlooLocationUrl: settings.waterlooLocationUrl,
+            bethnalLocationUrl: settings.bethnalLocationUrl,
+            waterlooFindIt: settings.waterlooFindIt,
+            bethnalFindIt: settings.bethnalFindIt,
+            bankAccountName: settings.bankAccountName,
+            bankSortCode: settings.bankSortCode,
+            bankAccountNumber: settings.bankAccountNumber,
+            bankPaymentNote: settings.bankPaymentNote,
           }}
         />
       </Dropdown>

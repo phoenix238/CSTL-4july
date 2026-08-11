@@ -20,6 +20,7 @@ export default async function SettingsPage() {
       settings={{
         accessNote: settings.accessNote,
         emailTemplate: settings.emailTemplate,
+        emailSignOff: settings.emailSignOff,
         paymentDetails: settings.paymentDetails,
         waterlooAddress: settings.waterlooAddress,
         bethnalAddress: settings.bethnalAddress,

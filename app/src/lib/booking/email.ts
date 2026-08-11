@@ -37,6 +37,27 @@ export interface EmailSettings {
   bankSortCode?: string;
   bankAccountNumber?: string;
   bankPaymentNote?: string;
+  /** the one sign-off every email ends on — appended after any sign-off in the letter is stripped */
+  emailSignOff?: string;
+}
+
+/** The one sign-off, from settings, with a safe default if it was cleared. */
+export function resolveSignOff(s: EmailSettings): string {
+  return s.emailSignOff?.trim() || "with gratitude\nPhoenix";
+}
+
+/**
+ * The map pin as a bare link.
+ *
+ * The pin field is meant to hold a URL, but a link pasted with a sentence around
+ * it ("park round the back — https://maps…") used to drop the whole sentence into
+ * the email as the map line. Pull the first http(s) link out when there is one;
+ * otherwise keep the field as-is, so a what3words or bare-token pin still works.
+ */
+export function firstUrl(raw: string): string {
+  const t = raw.trim();
+  const m = t.match(/https?:\/\/\S+/);
+  return m ? m[0] : t;
 }
 
 /**
@@ -101,7 +122,7 @@ function clinicDetails(clinic: Clinic, s: EmailSettings) {
     // The pin Phoenix curated in Settings, if he set one. A generated
     // "search Google Maps for this address" link is the fallback, not the
     // default — it was landing people on a search page rather than the door.
-    locationUrl: (w ? s.waterlooLocationUrl : s.bethnalLocationUrl)?.trim() ?? "",
+    locationUrl: firstUrl((w ? s.waterlooLocationUrl : s.bethnalLocationUrl) ?? ""),
     directions: resolveFindIt(clinic, s),
   };
 }
@@ -202,7 +223,7 @@ export function composeBookingEmail(
       `Hi ${client.name},`,
       `Just confirming your next session: ${whenLabel} at ${CLINIC_LABEL[clinic]}.`,
       whereBlock,
-      "with gratitude\nPhoenix",
+      resolveSignOff(settings),
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -230,7 +251,9 @@ export function composeBookingEmail(
     .join(portalLink ?? "")
     .split("{paymentRef}")
     .join(paymentRef ?? "");
-  const { main, signOff } = splitSignOff(filled);
+  // Any sign-off the letter carries is dropped here and replaced by the single
+  // emailSignOff below, so every email ends the same way and can't end twice.
+  const { main } = splitSignOff(filled);
 
   const sections = [main, whereBlock];
 
@@ -272,7 +295,7 @@ export function composeBookingEmail(
   includes.push("Intake form link");
   if (settings.accessNote.trim()) includes.push("Access note — stairs, no step-free access");
 
-  sections.push(signOff || "with gratitude\nPhoenix");
+  sections.push(resolveSignOff(settings));
   return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
 }
 

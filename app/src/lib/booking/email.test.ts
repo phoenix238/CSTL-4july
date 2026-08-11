@@ -37,16 +37,24 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain(settings.paymentDetails);
   });
 
-  it("signs off once, at the very end", () => {
-    // The template ends with a sign-off, and the composer used to append the
-    // address and payment details after it — so the email signed off halfway
-    // down and then carried on.
+  it("signs off once, at the very end, in the one configured sign-off", () => {
+    // The letter's own sign-off ("See you soon,") is stripped and replaced by
+    // the single emailSignOff, so the email can't sign off halfway down and then
+    // carry on, and every email ends the same way.
     const body = compose().body;
-    expect(body.trimEnd().endsWith("See you soon,\nPhoenix")).toBe(true);
-    expect(body.split("See you soon,").length - 1).toBe(1);
+    expect(body.trimEnd().endsWith("with gratitude\nPhoenix")).toBe(true);
+    expect(body.split("with gratitude").length - 1).toBe(1);
+    expect(body).not.toContain("See you soon,");
     // Everything factual sits above the signature.
-    expect(body.indexOf(settings.waterlooAddress)).toBeLessThan(body.indexOf("See you soon,"));
-    expect(body.indexOf(settings.paymentDetails)).toBeLessThan(body.indexOf("See you soon,"));
+    expect(body.indexOf(settings.waterlooAddress)).toBeLessThan(body.indexOf("with gratitude"));
+    expect(body.indexOf(settings.paymentDetails)).toBeLessThan(body.indexOf("with gratitude"));
+  });
+
+  it("uses emailSignOff when set, replacing whatever the letter ends with", () => {
+    const body = compose({ emailSignOff: "with love\nPhoenix x" }).body;
+    expect(body.trimEnd().endsWith("with love\nPhoenix x")).toBe(true);
+    expect(body).not.toContain("See you soon,");
+    expect(body).not.toContain("with gratitude");
   });
 
   it("uses the map pin from Settings rather than a generated Maps search link", () => {
@@ -61,6 +69,16 @@ describe("composeBookingEmail", () => {
     const body = compose({ waterlooLocationUrl: "" }).body;
     expect(body).toContain("maps/search");
     expect(body).toContain(settings.waterlooAddress);
+  });
+
+  it("pulls just the link out of a map-pin field that has a sentence around it", () => {
+    // A pin pasted as prose ("park round the back — <link>") used to drop the
+    // whole sentence into the email as the map line.
+    const body = compose({
+      waterlooLocationUrl: "Park round the back and buzz — https://maps.app.goo.gl/realpin",
+    }).body;
+    expect(body).toContain("https://maps.app.goo.gl/realpin");
+    expect(body).not.toContain("Park round the back");
   });
 
   it("includes how to find the door", () => {
@@ -173,9 +191,9 @@ describe("composeBookingEmail", () => {
     const body = compose({ bankAccountName: "P Tanner" }).body;
     for (const part of [settings.waterlooAddress, settings.paymentDetails, PORTAL_LINK, INTAKE_LINK]) {
       expect(body.indexOf(part)).toBeGreaterThan(-1);
-      expect(body.indexOf(part)).toBeLessThan(body.indexOf("See you soon,"));
+      expect(body.indexOf(part)).toBeLessThan(body.indexOf("with gratitude"));
     }
-    expect(body.split("See you soon,").length - 1).toBe(1);
+    expect(body.split("with gratitude").length - 1).toBe(1);
   });
 
   it("doesn't repeat the booking page when the template already places it", () => {
