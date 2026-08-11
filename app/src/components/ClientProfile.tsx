@@ -454,7 +454,7 @@ export function ClientProfile({
 
           {reflectionOpen && (
             <ReflectionComposer
-              clientId={client.id}
+              endpoint={`/api/clients/${client.id}/reflection`}
               onSaved={() => {
                 setReflectionOpen(false);
                 router.refresh();

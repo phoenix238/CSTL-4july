@@ -10,6 +10,7 @@ const NAV = [
   { label: "Today", href: "/" },
   { label: "This week", href: "/week" },
   { label: "Session", href: "/session" },
+  { label: "Reflect", href: "/reflect" },
   { label: "Clients", href: "/clients" },
   { label: "Enquiries", href: "/enquiries" },
   { label: "Calendar", href: "/calendar" },

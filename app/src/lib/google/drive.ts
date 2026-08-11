@@ -126,14 +126,18 @@ export async function ensureReflectionsDoc(): Promise<string> {
   return docId;
 }
 
-/** Append a personal reflection (date + client) to the shared reflections Doc. */
+/**
+ * Append a reflection to the shared Doc, headed by date and who/what it's
+ * about — a client's name, or "Personal" for a reflection with no session
+ * attached.
+ */
 export async function appendReflectionToDoc(
   docId: string,
-  reflection: { date: string; client: string; text: string },
+  reflection: { date: string; about: string; text: string },
 ) {
   await appendFormattedSections(docId, null, [
     {
-      heading: `${reflection.date} — ${reflection.client}`,
+      heading: `${reflection.date} — ${reflection.about}`,
       lines: [{ kind: "paragraph", value: reflection.text }],
     },
   ]);

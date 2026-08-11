@@ -4,12 +4,21 @@ import { useState } from "react";
 import { api, PrimaryButton, useToast } from "./ui";
 
 /**
- * Phoenix's own private reflections on a session — separate from the
- * client-facing session note. Saved into one shared "Phoenix session
- * reflections" Doc (dated, tagged with the client) rather than the
- * client's own Doc.
+ * Phoenix's own private reflections — separate from the client-facing
+ * session note. Saved into one shared "Phoenix session reflections" Doc
+ * (dated, headed by client name or "Personal") rather than the client's
+ * own Doc.
  */
-export function ReflectionComposer({ clientId, onSaved }: { clientId: string; onSaved: () => void }) {
+export function ReflectionComposer({
+  endpoint,
+  placeholder,
+  onSaved,
+}: {
+  /** where this reflection posts to — a client's own route, or the standalone one */
+  endpoint: string;
+  placeholder?: string;
+  onSaved: () => void;
+}) {
   const toast = useToast();
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -21,7 +30,7 @@ export function ReflectionComposer({ clientId, onSaved }: { clientId: string; on
     }
     setSaving(true);
     try {
-      await api(`/api/clients/${clientId}/reflection`, {
+      await api(endpoint, {
         method: "POST",
         body: JSON.stringify({ text }),
       });
@@ -39,7 +48,7 @@ export function ReflectionComposer({ clientId, onSaved }: { clientId: string; on
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Your own reflections on this session — for you, not the client's Doc…"
+        placeholder={placeholder ?? "Your own reflections on this session — for you, not the client's Doc…"}
         className="min-h-[110px] w-full resize-y rounded-xl border border-line bg-card px-3.5 py-3 text-sm leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
       />
       <div className="flex items-center justify-end">
