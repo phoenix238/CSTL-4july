@@ -1,16 +1,21 @@
 // Phoenix's booking rules — the heart of the control tower.
 //
 //   Waterloo (£80 · 60 min):
-//     1h  "(Client) — Waterloo"  on the personal calendar
-//     1h  "R5 - Phoenix"         on the room calendar
+//     1h  "Craniosacral therapy"  on the personal calendar (location: Waterloo)
+//     1h  "R5 - Phoenix"          on the room calendar
 //
 //   Bethnal Green (£30–60 sliding · 60 min):
-//     1h  "(Client) — Bethnal Green"   on the personal calendar
+//     1h  "Craniosacral therapy"  on the personal calendar (location: Bethnal Green)
 //     A single shared "Phoenix" block on the Chalk Farm calendar, one per day,
 //     auto-sized to span that day's Bethnal sessions — see
 //     src/lib/google/chalkFarm.ts. Not part of planBookingEvents: it's kept in
 //     sync separately whenever a Bethnal booking is created/moved/cancelled,
 //     so sessions can sit as close together as the schedule allows.
+//
+// No client name goes on any calendar event — not the title, not the location.
+// Who a session is with is looked up in the app (Today / This Week), which reads
+// from the database, so the Google calendars stay anonymous. The client is still
+// invited to their own session as an attendee, so they get the invite + reminders.
 //
 // All events get reminders: email 24h before, popup 1h before.
 
@@ -34,6 +39,10 @@ export interface PlannedEvent {
 
 export const SESSION_MINUTES = 60;
 
+/** The title on every session's calendar event — deliberately generic, so no
+ *  client name ever appears on a Google calendar. */
+export const SESSION_EVENT_TITLE = "Craniosacral therapy";
+
 export const CLINIC_LABEL: Record<Clinic, string> = {
   waterloo: "Waterloo",
   bethnal: "Bethnal Green",
@@ -46,12 +55,16 @@ export const CLINIC_PRICE: Record<Clinic, string> = {
 
 const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 
-/** The exact calendar events a booking creates. Pure — unit-tested. */
+/**
+ * The exact calendar events a booking creates. Pure — unit-tested.
+ *
+ * No client name is passed in or placed on any event: the session title is
+ * always the generic SESSION_EVENT_TITLE and the location is the clinic name,
+ * so the Google calendars never carry who a session is with.
+ */
 export function planBookingEvents(
   clinic: Clinic,
-  clientName: string,
   sessionStart: Date,
-  address?: string,
   /** venue-facing note for the room event's description (session time + contact
    * line); the caller composes it since it needs settings + London-time formatting */
   venueNote?: string,
@@ -61,11 +74,11 @@ export function planBookingEvents(
     return [
       {
         calendar: "personal",
-        summary: `${clientName} — Waterloo`,
+        summary: SESSION_EVENT_TITLE,
         start: sessionStart,
         end: sessionEnd,
         inviteClient: true,
-        location: address || undefined,
+        location: CLINIC_LABEL.waterloo,
       },
       {
         calendar: "room",
@@ -82,11 +95,11 @@ export function planBookingEvents(
   return [
     {
       calendar: "personal",
-      summary: `${clientName} — Bethnal Green`,
+      summary: SESSION_EVENT_TITLE,
       start: sessionStart,
       end: sessionEnd,
       inviteClient: true,
-      location: address || undefined,
+      location: CLINIC_LABEL.bethnal,
     },
   ];
 }

@@ -48,7 +48,7 @@ export function QuickBook({
     return () => clearTimeout(t);
   }, [query, client]);
 
-  const plan = client ? planBookingEvents(clinic, client.name, slot) : [];
+  const plan = client ? planBookingEvents(clinic, slot) : [];
 
   async function book() {
     if (!client) return;

@@ -1,6 +1,8 @@
 import { prisma, getSettings } from "@/lib/db";
 import {
+  CLINIC_LABEL,
   EVENT_REMINDERS,
+  SESSION_EVENT_TITLE,
   planBookingEvents,
   type Clinic,
 } from "@/lib/booking/rules";
@@ -23,7 +25,6 @@ export async function createBookingEvents(bookingId: string) {
   const calendar = await getCalendarApi();
   const settings = await getSettings();
   const clinic = booking.clinic as Clinic;
-  const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
   // Venue-facing note for the room event — what the clinic needs (the session time
   // and how to reach Phoenix), without the client's name on the shared calendar.
   const sessionEnd = new Date(booking.startsAt.getTime() + 60 * 60_000);
@@ -33,7 +34,7 @@ export async function createBookingEvents(bookingId: string) {
   ]
     .filter(Boolean)
     .join("\n");
-  const plan = planBookingEvents(clinic, booking.client.name, booking.startsAt, address, venueNote);
+  const plan = planBookingEvents(clinic, booking.startsAt, venueNote);
 
   let personalEventId = "";
   let secondaryEventId = "";
@@ -122,6 +123,41 @@ export async function shareCalendarInvite(clientId: string) {
   if (shared) {
     await prisma.client.update({ where: { id: clientId }, data: { calendarInviteSharedAt: new Date() } });
   }
+}
+
+/**
+ * One-off: rename existing upcoming session events to the anonymous title +
+ * clinic location, for bookings made before names came off the calendar. New
+ * bookings already get this from planBookingEvents; this is the back-catalogue.
+ * Idempotent — safe to run repeatedly.
+ */
+export async function renameExistingSessionEvents(): Promise<{ scanned: number; updated: number }> {
+  const calendar = await getCalendarApi();
+  const calId = await calendarId("personal");
+  const bookings = await prisma.booking.findMany({
+    where: { status: "confirmed", startsAt: { gte: new Date() }, personalEventId: { not: "" } },
+    select: { id: true, clinic: true, personalEventId: true },
+  });
+
+  let updated = 0;
+  for (const b of bookings) {
+    try {
+      await withRetry(() =>
+        calendar.events.patch({
+          calendarId: calId,
+          eventId: b.personalEventId,
+          requestBody: {
+            summary: SESSION_EVENT_TITLE,
+            location: b.clinic === "waterloo" ? CLINIC_LABEL.waterloo : CLINIC_LABEL.bethnal,
+          },
+        }),
+      );
+      updated++;
+    } catch (err) {
+      console.error("renameExistingSessionEvents: failed for booking", b.id, err);
+    }
+  }
+  return { scanned: bookings.length, updated };
 }
 
 /** Delete a booking's Google events (tolerates already-deleted events). */

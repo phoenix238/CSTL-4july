@@ -9,6 +9,7 @@ import { ClientMessagesEditor } from "./ClientMessagesEditor";
 import { PortalSettings } from "./PortalSettings";
 import { PaymentMatching } from "./PaymentMatching";
 import { GoogleConnectionPanel } from "./GoogleConnectionPanel";
+import { RenameCalendarEventsButton } from "./RenameCalendarEventsButton";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
@@ -507,6 +508,7 @@ export function SettingsView({
             </PrimaryButton>
           </Card>
         )}
+        <RenameCalendarEventsButton />
       </Dropdown>
 
       <Dropdown

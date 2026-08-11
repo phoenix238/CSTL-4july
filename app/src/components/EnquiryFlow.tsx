@@ -646,10 +646,7 @@ export function EnquiryFlow({
 
   /* ---------------- grid / book ---------------- */
 
-  const clinicAddress = settings ? (clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress) : undefined;
-  const plan = confirmSlot
-    ? planBookingEvents(clinic, (activeClient?.name || name || "New client").trim(), confirmSlot, clinicAddress)
-    : [];
+  const plan = confirmSlot ? planBookingEvents(clinic, confirmSlot) : [];
   const isReturning = !!activeClient?.welcomeSent;
   const canStartOver = !!(saved || match || name.trim() || enquiryId);
 
