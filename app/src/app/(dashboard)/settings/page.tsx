@@ -31,6 +31,13 @@ export default async function SettingsPage() {
         bethnalPhoto: settings.bethnalPhoto,
         waterlooLocationUrl: settings.waterlooLocationUrl,
         bethnalLocationUrl: settings.bethnalLocationUrl,
+        // Superseded by waterlooFindIt/bethnalFindIt above — kept here only so
+        // Settings can show you what's still saved in them if the new field is
+        // empty, since that's the wording still going out until you copy it over.
+        waterlooDirections: settings.waterlooDirections,
+        bethnalDirections: settings.bethnalDirections,
+        waterlooArrivalNote: settings.waterlooArrivalNote,
+        bethnalArrivalNote: settings.bethnalArrivalNote,
 
         appUrl: settings.appUrl,
         personalCalendarId: settings.personalCalendarId,

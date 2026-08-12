@@ -193,7 +193,8 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   });
   await createBookingEvents(booking.id);
 
-  const plan = planBookingEvents(req.clinic, start);
+  const address = req.clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
+  const plan = planBookingEvents(req.clinic, start, address);
   for (const ev of plan) {
     const calName =
       ev.calendar === "personal" ? "Personal calendar" : ev.calendar === "room" ? "Room calendar" : "Chalk Farm calendar";

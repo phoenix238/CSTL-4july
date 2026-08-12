@@ -1,11 +1,5 @@
 import { prisma, getSettings } from "@/lib/db";
-import {
-  CLINIC_LABEL,
-  EVENT_REMINDERS,
-  SESSION_EVENT_TITLE,
-  planBookingEvents,
-  type Clinic,
-} from "@/lib/booking/rules";
+import { EVENT_REMINDERS, SESSION_EVENT_TITLE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
 import { fmtTime, londonDateKey } from "@/lib/time";
@@ -25,6 +19,7 @@ export async function createBookingEvents(bookingId: string) {
   const calendar = await getCalendarApi();
   const settings = await getSettings();
   const clinic = booking.clinic as Clinic;
+  const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
   // Venue-facing note for the room event — what the clinic needs (the session time
   // and how to reach Phoenix), without the client's name on the shared calendar.
   const sessionEnd = new Date(booking.startsAt.getTime() + 60 * 60_000);
@@ -34,7 +29,7 @@ export async function createBookingEvents(bookingId: string) {
   ]
     .filter(Boolean)
     .join("\n");
-  const plan = planBookingEvents(clinic, booking.startsAt, venueNote);
+  const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
 
   let personalEventId = "";
   let secondaryEventId = "";
@@ -126,8 +121,10 @@ export async function shareCalendarInvite(clientId: string) {
 }
 
 /**
- * One-off: rename existing upcoming session events to the anonymous title +
- * clinic location, for bookings made before names came off the calendar. New
+ * One-off: rename existing upcoming session events to the anonymous title, for
+ * bookings made before names came off the calendar. Only the title (summary) is
+ * touched — the location is left exactly as it is, since it already holds the
+ * real address and was never the thing that carried a client's name. New
  * bookings already get this from planBookingEvents; this is the back-catalogue.
  * Idempotent — safe to run repeatedly.
  */
@@ -136,7 +133,7 @@ export async function renameExistingSessionEvents(): Promise<{ scanned: number; 
   const calId = await calendarId("personal");
   const bookings = await prisma.booking.findMany({
     where: { status: "confirmed", startsAt: { gte: new Date() }, personalEventId: { not: "" } },
-    select: { id: true, clinic: true, personalEventId: true },
+    select: { id: true, personalEventId: true },
   });
 
   let updated = 0;
@@ -146,10 +143,7 @@ export async function renameExistingSessionEvents(): Promise<{ scanned: number; 
         calendar.events.patch({
           calendarId: calId,
           eventId: b.personalEventId,
-          requestBody: {
-            summary: SESSION_EVENT_TITLE,
-            location: b.clinic === "waterloo" ? CLINIC_LABEL.waterloo : CLINIC_LABEL.bethnal,
-          },
+          requestBody: { summary: SESSION_EVENT_TITLE },
         }),
       );
       updated++;

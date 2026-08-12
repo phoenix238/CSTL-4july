@@ -27,6 +27,12 @@ export interface SettingsData {
   bethnalLocationUrl: string;
   waterlooFindIt: string;
   bethnalFindIt: string;
+  // Superseded by waterlooFindIt/bethnalFindIt — shown read-only when the new
+  // field is still empty, so there's something to copy from rather than a blank box.
+  waterlooDirections: string;
+  bethnalDirections: string;
+  waterlooArrivalNote: string;
+  bethnalArrivalNote: string;
   waterlooPhoto: string;
   bethnalPhoto: string;
   appUrl: string;
@@ -138,6 +144,17 @@ export function SettingsView({
     bethnalAddress: settings.bethnalAddress,
   });
   const [editingLocations, setEditingLocations] = useState(false);
+  // The wording still saved in the old direction/arrival-note fields the "How to
+  // find it" box replaced — joined the same way the email composer joins them, so
+  // what's shown here is exactly what's still going out until it's copied over.
+  const legacyFindIt = (clinic: "waterloo" | "bethnal") =>
+    [
+      clinic === "waterloo" ? settings.waterlooDirections : settings.bethnalDirections,
+      clinic === "waterloo" ? settings.waterlooArrivalNote : settings.bethnalArrivalNote,
+    ]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join("\n");
   const [locationsDraft, setLocationsDraft] = useState({
     waterlooLocationUrl: settings.waterlooLocationUrl,
     bethnalLocationUrl: settings.bethnalLocationUrl,
@@ -572,7 +589,12 @@ export function SettingsView({
                 </div>
                 <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
                   <span className="font-semibold">How to find it: </span>
-                  {directions || <span className="text-faint">not set yet</span>}
+                  {directions || (
+                    <span className="text-faint">
+                      not set yet
+                      {legacyFindIt(clinic) && " — open Edit below to see the old wording still going out"}
+                    </span>
+                  )}
                 </div>
                 {photo && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -616,6 +638,27 @@ export function SettingsView({
                     className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
                   />
                 </label>
+                {!locationsDraft[dirKey].trim() && legacyFindIt(dirKey === "waterlooFindIt" ? "waterloo" : "bethnal") && (
+                  <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5 text-[12px] leading-[1.55] text-[oklch(0.45_0.02_60)]">
+                    <div className="mb-1 font-semibold text-ink-soft">
+                      Still going out — from the old fields this box replaces:
+                    </div>
+                    <div className="whitespace-pre-line">
+                      {legacyFindIt(dirKey === "waterlooFindIt" ? "waterloo" : "bethnal")}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setLocationsDraft({
+                          ...locationsDraft,
+                          [dirKey]: legacyFindIt(dirKey === "waterlooFindIt" ? "waterloo" : "bethnal"),
+                        })
+                      }
+                      className="mt-1.5 cursor-pointer text-[11.5px] font-semibold text-clay-text underline hover:text-clay"
+                    >
+                      Use this wording — then edit or trim it above
+                    </button>
+                  </div>
+                )}
                 <PhotoField
                   label={`PHOTO OF THE ${clinicLabel.toUpperCase()} ENTRANCE`}
                   clinicLabel={clinicLabel}

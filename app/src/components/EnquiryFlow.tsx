@@ -646,7 +646,8 @@ export function EnquiryFlow({
 
   /* ---------------- grid / book ---------------- */
 
-  const plan = confirmSlot ? planBookingEvents(clinic, confirmSlot) : [];
+  const clinicAddress = settings ? (clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress) : undefined;
+  const plan = confirmSlot ? planBookingEvents(clinic, confirmSlot, clinicAddress) : [];
   const isReturning = !!activeClient?.welcomeSent;
   const canStartOver = !!(saved || match || name.trim() || enquiryId);
 

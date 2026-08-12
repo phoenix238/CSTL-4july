@@ -1,11 +1,11 @@
 // Phoenix's booking rules — the heart of the control tower.
 //
 //   Waterloo (£80 · 60 min):
-//     1h  "Craniosacral therapy"  on the personal calendar (location: Waterloo)
+//     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
 //     1h  "R5 - Phoenix"          on the room calendar
 //
 //   Bethnal Green (£30–60 sliding · 60 min):
-//     1h  "Craniosacral therapy"  on the personal calendar (location: Bethnal Green)
+//     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
 //     A single shared "Phoenix" block on the Chalk Farm calendar, one per day,
 //     auto-sized to span that day's Bethnal sessions — see
 //     src/lib/google/chalkFarm.ts. Not part of planBookingEvents: it's kept in
@@ -13,9 +13,13 @@
 //     so sessions can sit as close together as the schedule allows.
 //
 // No client name goes on any calendar event — not the title, not the location.
-// Who a session is with is looked up in the app (Today / This Week), which reads
-// from the database, so the Google calendars stay anonymous. The client is still
-// invited to their own session as an attendee, so they get the invite + reminders.
+// The location DOES stay the real street address, same as before: Google
+// geocodes a plain address into a map pin (a URL in this field wouldn't), and
+// that's what lets Phoenix and the client tap through to navigate. Anonymising
+// the calendar was only ever about the client's *name* — who a session is with
+// is looked up in the app (Today / This Week), which reads from the database.
+// The client is still invited to their own session as an attendee, so they get
+// the invite + reminders.
 //
 // All events get reminders: email 24h before, popup 1h before.
 
@@ -59,17 +63,21 @@ const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
  * The exact calendar events a booking creates. Pure — unit-tested.
  *
  * No client name is passed in or placed on any event: the session title is
- * always the generic SESSION_EVENT_TITLE and the location is the clinic name,
- * so the Google calendars never carry who a session is with.
+ * always the generic SESSION_EVENT_TITLE. `address`, if given, is the real
+ * street address — used as-is for `location`, so Google can still geocode a
+ * pin and both Phoenix and the client can tap through to navigate. Falls back
+ * to the clinic name only when no address has been set yet in Settings.
  */
 export function planBookingEvents(
   clinic: Clinic,
   sessionStart: Date,
+  address?: string,
   /** venue-facing note for the room event's description (session time + contact
    * line); the caller composes it since it needs settings + London-time formatting */
   venueNote?: string,
 ): PlannedEvent[] {
   const sessionEnd = addMinutes(sessionStart, SESSION_MINUTES);
+  const location = address?.trim() || CLINIC_LABEL[clinic];
   if (clinic === "waterloo") {
     return [
       {
@@ -78,7 +86,7 @@ export function planBookingEvents(
         start: sessionStart,
         end: sessionEnd,
         inviteClient: true,
-        location: CLINIC_LABEL.waterloo,
+        location,
       },
       {
         calendar: "room",
@@ -99,7 +107,7 @@ export function planBookingEvents(
       start: sessionStart,
       end: sessionEnd,
       inviteClient: true,
-      location: CLINIC_LABEL.bethnal,
+      location,
     },
   ];
 }
