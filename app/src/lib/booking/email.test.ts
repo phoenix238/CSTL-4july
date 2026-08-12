@@ -185,6 +185,21 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("Cash is fine too.");
   });
 
+  it("doesn't repeat bank numbers when they're in both the free-text and the bank fields", () => {
+    // The free-text box holds prose AND a copy of the numbers; the structured
+    // fields hold the same numbers. Only one copy should go out.
+    const email = compose({
+      paymentDetails: "Pay what feels fair, card or transfer.\nSort 12-34-56\nAccount 12345678",
+      bankSortCode: "12-34-56",
+      bankAccountNumber: "12345678",
+    });
+    // The prose survives…
+    expect(email.body).toContain("Pay what feels fair, card or transfer.");
+    // …and the numbers appear once, from the structured block only.
+    expect(email.body.split("12345678").length - 1).toBe(1);
+    expect(email.body).toContain("Account number: 12345678");
+  });
+
   it("puts everything a new client needs above one sign-off", () => {
     // The whole point of folding the welcome, the booking-page email and the
     // intake email into one message: all of it in a single letter, signed once.

@@ -154,13 +154,36 @@ function splitSignOff(body: string): { main: string; signOff: string } {
  * that was easy to miss.
  */
 function paymentBlock(s: EmailSettings, paymentRef?: string): string {
-  const lines = [s.paymentDetails.trim()].filter(Boolean);
   const bank = [
     s.bankAccountName?.trim() && `  Account name: ${s.bankAccountName.trim()}`,
     s.bankSortCode?.trim() && `  Sort code: ${s.bankSortCode.trim()}`,
     s.bankAccountNumber?.trim() && `  Account number: ${s.bankAccountNumber.trim()}`,
     paymentRef && `  Reference: ${paymentRef}`,
   ].filter(Boolean) as string[];
+
+  // The free-text note, minus any line that just repeats the structured bank
+  // numbers below — so the same sort code / account number typed into both the
+  // free-text box and the bank fields doesn't go out twice. Prose ("card on the
+  // day", "pay what feels fair") is kept; a line carrying the account number or
+  // sort code is dropped once the structured fields are filling it in properly.
+  const digits = (x?: string) => (x ?? "").replace(/\D/g, "");
+  const acct = digits(s.bankAccountNumber);
+  const sort = digits(s.bankSortCode);
+  const freeText =
+    bank.length && s.paymentDetails.trim()
+      ? s.paymentDetails
+          .split("\n")
+          .filter((line) => {
+            const d = digits(line);
+            if (acct.length >= 6 && d.includes(acct)) return false;
+            if (sort.length >= 6 && d.includes(sort)) return false;
+            return true;
+          })
+          .join("\n")
+          .trim()
+      : s.paymentDetails.trim();
+
+  const lines = [freeText].filter(Boolean);
   if (bank.length) {
     lines.push(["For bank transfers:", ...bank].join("\n"));
     if (paymentRef) lines.push("Please use that reference every time — it's how I match your payment to you.");
