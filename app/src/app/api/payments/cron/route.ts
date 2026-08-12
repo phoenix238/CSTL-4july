@@ -4,7 +4,7 @@ import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
 
 /**
- * The hourly heartbeat: pull new bank payments and match them, flag sessions
+ * The daily heartbeat: pull new bank payments and match them, flag sessions
  * that are overdue for payment, and check upcoming bookings still have their
  * calendar event.
  *
@@ -13,9 +13,12 @@ import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
  * refuses outright rather than falling open: an unauthenticated endpoint that
  * reads the bank feed is not something to leave running by accident.
  *
- * Vercel's scheduler sends `Authorization: Bearer <CRON_SECRET>`. It runs hourly
- * (see vercel.json) because the unpaid sweep works to a 25-hour boundary a daily
- * run can't resolve.
+ * Vercel's scheduler sends `Authorization: Bearer <CRON_SECRET>`. It runs once a
+ * day (see vercel.json) — the Hobby plan doesn't allow more often. The unpaid
+ * sweep's 25-hour boundary still resolves correctly at this cadence (each
+ * booking is flagged once via unpaidNotifiedAt regardless of how often the sweep
+ * runs); it just means a session can sit unflagged for up to ~24h longer than an
+ * hourly sweep would allow, since the run only happens once a day.
  *
  * `?dryRun=1&asOf=<ISO>` reports what the unpaid sweep and calendar reconcile
  * *would* do at that moment, without emailing, flagging, or touching payments —
