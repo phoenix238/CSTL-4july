@@ -221,7 +221,7 @@ model AppSettings {
   // as the fallback for whichever clinic until emailTemplate is saved.
   emailTemplateWaterloo String @default("Hi {name},\n\nYou're booked in for {when} at Waterloo — 60 minutes, £80, payable on the day by card or bank transfer.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
   emailTemplateBethnal  String @default("Hi {name},\n\nYou're booked in for {when} at Bethnal Green — 60 minutes on a £30–60 sliding scale, pay what feels fair on the day.\n\n{accessNote}\n\nSee you soon,\nPhoenix")
-  paymentDetails        String @default("Payment on the day by card or bank transfer. Bank details: (add yours in Settings).")
+  paymentDetails        String @default("You can pay on the day by card, or by bank transfer using the details below.")
   waterlooAddress       String @default("") // full address — calendar invite location + Maps link in the first email
   bethnalAddress        String @default("") // full address — calendar invite location + Maps link in the first email
   // A short line the venues can reach Phoenix on — added to the description of the

@@ -164,6 +164,25 @@ const GROUPS: Group[] = [
   },
 ];
 
+// Recommended wording for the settings-backed message fields — the clean,
+// voice-only starting point the composer is built around (facts placed for you,
+// signed once). Used by the per-field reset and the "fill everything" button.
+// Deliberately excludes the map-review LINKS, which are yours to paste in.
+const SETTINGS_MESSAGE_DEFAULTS: Partial<Record<keyof SettingsMessages, string>> = {
+  emailTemplate:
+    "Hi {name},\n\nLovely to hear from you — you're booked in for {when} at {clinic}, {price}. Everything you need for the day is below; there's nothing to print or bring.\n\n{accessNote}",
+  emailSignOff: "with gratitude\nPhoenix",
+  accessNote:
+    "My treatment space has no step-free access at either location — there are stairs. Please let me know if mobility or access is a concern and I'll do my best to accommodate you.",
+  paymentDetails: "You can pay on the day by card, or by bank transfer using the details below.",
+  reviewEmailSubjectWaterloo: "How was your session?",
+  reviewEmailSubjectBethnal: "How was your session?",
+  reviewEmailBodyWaterloo:
+    "Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix",
+  reviewEmailBodyBethnal:
+    "Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix",
+};
+
 // Sample values so the preview reads like a real message.
 const SAMPLE: Record<string, string> = {
   name: "Maya",
@@ -359,13 +378,33 @@ export function ClientMessagesEditor({
     }
   }
 
+  // Drop the recommended wording into the draft — clean, voice-only, one of
+  // everything. Doesn't save on its own: you review it in the preview and Save
+  // (or Discard). Your clinic links and bank details aren't touched.
+  function fillRecommended() {
+    setDraft({ ...CLIENT_COPY_DEFAULTS });
+    setSDraft((d) => ({ ...d, ...SETTINGS_MESSAGE_DEFAULTS }));
+    setOpenGroup(WELCOME_TITLE);
+    toast("Recommended wording filled in — review below, then Save");
+  }
+
   return (
     <div className="flex flex-col gap-2.5">
-      <Card className="flex flex-col gap-2 px-4 py-3.5">
+      <Card className="flex flex-col gap-3 px-4 py-3.5">
         <div className="text-[12.5px] leading-relaxed text-muted">
           Every word a client reads, in one place — from their welcome email to the review request. Open each
           moment of their journey, check it reads the way you want, and edit anything. Placeholders in {"{ }"} fill
           in automatically.
+        </div>
+        <div className="flex flex-col gap-1.5 border-t border-hairline pt-3">
+          <PrimaryButton onClick={fillRecommended} className="self-start px-4 py-1.5 text-[12.5px]">
+            Fill everything with recommended wording
+          </PrimaryButton>
+          <p className="text-[11.5px] text-muted">
+            Starts you from clean, up-to-date wording — one welcome letter in your voice, one sign-off, tidy payment
+            and review emails. Nothing is sent or saved until you press Save; your addresses, map pins and bank
+            details aren&apos;t changed. Edit anything afterwards.
+          </p>
         </div>
       </Card>
 
@@ -408,17 +447,21 @@ export function ClientMessagesEditor({
                         onReset={() => setCopy(f.key, CLIENT_COPY_DEFAULTS[f.key])}
                       />
                     ))
-                  : g.fields.map((f) => (
-                      <FieldEditor
-                        key={f.key}
-                        label={f.label}
-                        value={sDraft[f.key]}
-                        isDefault={sDraft[f.key] === settingsInitial[f.key]}
-                        placeholders={f.placeholders}
-                        multiline={f.multiline}
-                        onChange={(v) => setSetting(f.key, v)}
-                      />
-                    ))}
+                  : g.fields.map((f) => {
+                      const recommended = SETTINGS_MESSAGE_DEFAULTS[f.key];
+                      return (
+                        <FieldEditor
+                          key={f.key}
+                          label={f.label}
+                          value={sDraft[f.key]}
+                          isDefault={recommended !== undefined && sDraft[f.key].trim() === recommended.trim()}
+                          placeholders={f.placeholders}
+                          multiline={f.multiline}
+                          onChange={(v) => setSetting(f.key, v)}
+                          onReset={recommended !== undefined ? () => setSetting(f.key, recommended) : undefined}
+                        />
+                      );
+                    })}
                 {g.title === WELCOME_TITLE && <WelcomeEmailPreview settings={previewSettings} />}
               </Card>
             )}
