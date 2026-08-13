@@ -57,6 +57,21 @@ describe("composeBookingEmail", () => {
     expect(body).not.toContain("with gratitude");
   });
 
+  it("drops a bank-payment note that's just the sign-off, so it isn't sent twice", () => {
+    // The note is welcome on the client's personal page, which reads
+    // bankPaymentNote independently of this composer — it just shouldn't also
+    // land in the email, on top of the one sign-off already appended at the end.
+    const body = compose({ bankPaymentNote: "with gratitude\nPhoenix", bankAccountNumber: "12345678" }).body;
+    expect(body.split("with gratitude").length - 1).toBe(1);
+    expect(body.trimEnd().endsWith("with gratitude\nPhoenix")).toBe(true);
+  });
+
+  it("drops only the sign-off paragraph from payment wording that ends with one, keeping the rest", () => {
+    const body = compose({ paymentDetails: "Pay on the day by card.\n\nwith gratitude\nPhoenix" }).body;
+    expect(body.split("with gratitude").length - 1).toBe(1);
+    expect(body).toContain("Pay on the day by card.");
+  });
+
   it("uses the map pin from Settings rather than a generated Maps search link", () => {
     const body = compose().body;
     expect(body).toContain("https://maps.app.goo.gl/waterloo");

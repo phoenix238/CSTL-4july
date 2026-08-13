@@ -185,6 +185,24 @@ function splitSignOff(body: string): { main: string; signOff: string } {
 }
 
 /**
+ * Drop a paragraph that's an exact match for the sign-off from a free-text
+ * field that feeds into the email body ahead of it — so a sign-off saved into
+ * the payment wording or bank note (it's welcome on the client's personal
+ * page, which reads these same fields independently) can't also land in the
+ * email, on top of the one canonical sign-off appended once, always, at the
+ * end.
+ */
+function withoutSignOffParagraph(text: string, signOff: string): string {
+  if (!text.trim() || !signOff.trim()) return text;
+  const target = signOff.trim().toLowerCase();
+  return text
+    .split(/\n\s*\n/)
+    .filter((p) => p.trim().toLowerCase() !== target)
+    .join("\n\n")
+    .trim();
+}
+
+/**
  * How to pay, as two regions: the wording from Settings (kept editable as its
  * own block, source `paymentDetails`), and the structured bank details — the
  * account, the reference that makes a transfer matchable, and the free-text
@@ -212,7 +230,8 @@ function paymentBlock(s: EmailSettings, paymentRef?: string): { freeText: string
   const digits = (x?: string) => (x ?? "").replace(/\D/g, "");
   const acct = digits(s.bankAccountNumber);
   const sort = digits(s.bankSortCode);
-  const freeText =
+  const signOff = resolveSignOff(s);
+  const freeText = withoutSignOffParagraph(
     bank.length && s.paymentDetails.trim()
       ? s.paymentDetails
           .split("\n")
@@ -224,14 +243,19 @@ function paymentBlock(s: EmailSettings, paymentRef?: string): { freeText: string
           })
           .join("\n")
           .trim()
-      : s.paymentDetails.trim();
+      : s.paymentDetails.trim(),
+    signOff,
+  );
 
   const bankLines: string[] = [];
   if (bank.length) {
     bankLines.push(["For bank transfers:", ...bank].join("\n"));
     if (paymentRef) bankLines.push("Please use that reference every time — it's how I match your payment to you.");
   }
-  if (s.bankPaymentNote?.trim()) bankLines.push(s.bankPaymentNote.trim());
+  // Welcome on the client's personal page (read independently, straight from
+  // the setting) — just not repeated here on top of the one sign-off below.
+  const bankPaymentNote = withoutSignOffParagraph(s.bankPaymentNote?.trim() ?? "", signOff);
+  if (bankPaymentNote) bankLines.push(bankPaymentNote);
   return { freeText, bank: bankLines.join("\n\n") };
 }
 

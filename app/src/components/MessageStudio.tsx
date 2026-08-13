@@ -379,15 +379,30 @@ export function MessageStudio({
             .map((block) => {
               if (block.id === "letter") {
                 return (
-                  <LetterRegion
-                    key="letter"
-                    text={block.text}
-                    accessNote={sDraft.accessNote}
-                    isLetterOpen={openId === "letter"}
-                    isAccessOpen={openId === "accessNote"}
-                    onOpenLetter={() => setOpenId(openId === "letter" ? null : "letter")}
-                    onOpenAccessNote={() => setOpenId(openId === "accessNote" ? null : "accessNote")}
-                  />
+                  <div key="letter">
+                    <LetterRegion
+                      text={block.text}
+                      accessNote={sDraft.accessNote}
+                      isLetterOpen={openId === "letter"}
+                      isAccessOpen={openId === "accessNote"}
+                      onOpenLetter={() => setOpenId(openId === "letter" ? null : "letter")}
+                      onOpenAccessNote={() => setOpenId(openId === "accessNote" ? null : "accessNote")}
+                    />
+                    {openId === "letter" && (
+                      <TextEditor
+                        value={which === "first" ? sDraft.emailTemplate : sDraft.emailTemplateReturning}
+                        onChange={(v) => setSetting(which === "first" ? "emailTemplate" : "emailTemplateReturning", v)}
+                      />
+                    )}
+                    {openId === "accessNote" && (
+                      <TextEditor
+                        value={sDraft.accessNote}
+                        onChange={(v) => setSetting("accessNote", v)}
+                        minHeight={70}
+                        suggestion={SETTINGS_MESSAGE_DEFAULTS.accessNote}
+                      />
+                    )}
+                  </div>
                 );
               }
               const editableField =
@@ -428,20 +443,6 @@ export function MessageStudio({
                 </div>
               );
             })}
-          {openId === "letter" && (
-            <TextEditor
-              value={which === "first" ? sDraft.emailTemplate : sDraft.emailTemplateReturning}
-              onChange={(v) => setSetting(which === "first" ? "emailTemplate" : "emailTemplateReturning", v)}
-            />
-          )}
-          {openId === "accessNote" && (
-            <TextEditor
-              value={sDraft.accessNote}
-              onChange={(v) => setSetting("accessNote", v)}
-              minHeight={70}
-              suggestion={SETTINGS_MESSAGE_DEFAULTS.accessNote}
-            />
-          )}
         </div>
       </Card>
 
