@@ -218,6 +218,34 @@ describe("composeBookingEmail", () => {
     expect(email.body.split(PORTAL_LINK).length - 1).toBe(1);
   });
 
+  it("uses the editable returning template, with the clinic and price filled in", () => {
+    // The returning confirmation used to be hardcoded in this file — the email
+    // Phoenix sends most often was the only one he couldn't change a word of.
+    const email = compose(
+      { emailTemplateReturning: "{name} — see you {when} at {clinic}, {price} as always." },
+      true,
+    );
+    expect(email.body).toContain("Maya Okonkwo — see you Tue 5 Aug · 3:00 pm at Waterloo, £80 as always.");
+    expect(email.body).not.toContain("confirming your next session");
+    // Still gets the address block and one sign-off underneath.
+    expect(email.body).toContain(settings.waterlooAddress);
+    expect(email.body.trimEnd().endsWith("with gratitude\nPhoenix")).toBe(true);
+  });
+
+  it("keeps the old hardcoded returning wording when the template is blank", () => {
+    const email = compose({ emailTemplateReturning: "   " }, true);
+    expect(email.body).toContain("Just confirming your next session: Tue 5 Aug · 3:00 pm at Waterloo.");
+  });
+
+  it("strips a sign-off left inside the returning template, so it can't end twice", () => {
+    const email = compose(
+      { emailTemplateReturning: "Hi {name},\n\nYou're in for {when}.\n\nSee you soon,\nPhoenix" },
+      true,
+    );
+    expect(email.body).not.toContain("See you soon");
+    expect(email.body.split("Phoenix").length - 1).toBe(1);
+  });
+
   it("sends a returning client no booking page, payment details or reference — just the confirmation", () => {
     // A rebooking that repeats the whole welcome is a rebooking people skim,
     // and the address is the part they actually needed.

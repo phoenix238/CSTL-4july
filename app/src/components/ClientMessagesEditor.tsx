@@ -30,14 +30,15 @@ export interface PreviewContext {
 // in separate Settings dropdowns.
 export interface SettingsMessages {
   emailTemplate: string;
+  emailTemplateReturning: string;
   emailSignOff: string;
   accessNote: string;
   paymentDetails: string;
-  reviewEmailSubjectWaterloo: string;
-  reviewEmailBodyWaterloo: string;
+  /** the review wording, written once for both clinics */
+  reviewEmailSubject: string;
+  reviewEmailBody: string;
+  /** the only part of the review email that differs per clinic */
   mapsReviewUrlWaterloo: string;
-  reviewEmailSubjectBethnal: string;
-  reviewEmailBodyBethnal: string;
   mapsReviewUrlBethnal: string;
 }
 
@@ -48,12 +49,23 @@ type Group =
   | { title: string; blurb: string; source: "copy"; fields: CopyField[] }
   | { title: string; blurb: string; source: "settings"; fields: SettingsField[] };
 
-// The client's journey, in order — every word they might read, grouped by moment.
-const GROUPS: Group[] = [
+// The emails you actually send, in the order a client meets them. These are the
+// ones worth reading through; the page wording below is set-and-forget.
+const EMAIL_GROUPS: Group[] = [
   {
-    title: "The welcome email (a new client's first email)",
+    title: "1 · The offer email — “here are some times”",
+    blurb: "Sent when you offer a few times. The times you picked drop into {times}, and the link lets them book one themselves.",
+    source: "copy",
+    fields: [
+      { key: "offerEmailSubject", label: "Subject", placeholders: ["clinic"] },
+      { key: "offerEmailBody", label: "Message", multiline: true, placeholders: ["name", "clinic", "times", "pickLink"] },
+      { key: "offerPickLinkLine", label: "The self-book link line", multiline: true, placeholders: ["link"] },
+    ],
+  },
+  {
+    title: "2 · The welcome email — a new client's first booking",
     blurb:
-      "Sent the moment you book a new client. Write it once — the clinic name, price, address, map pin and how to find the door are filled in for whichever clinic they booked, and the intake link and your sign-off are added at the end.",
+      "Sent the moment you book someone for the first time. Write the words; the address, map pin, how to find the door, payment details, their booking page, the intake link and your sign-off are all placed around it for whichever clinic they booked.",
     source: "settings",
     fields: [
       {
@@ -65,43 +77,71 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    title: "The access note",
-    blurb: "Slots into the welcome email wherever you put {accessNote} — stairs, access needs, etc.",
-    source: "settings",
-    fields: [{ key: "accessNote", label: "Access note", multiline: true }],
-  },
-  {
-    title: "Payment / bank details",
-    blurb: "Added to the welcome email only when you tick “include payment details” for a new client.",
-    source: "settings",
-    fields: [{ key: "paymentDetails", label: "Payment details", multiline: true }],
-  },
-  {
-    title: "Your sign-off",
+    title: "3 · The returning confirmation — every booking after that",
     blurb:
-      "How every email ends. Written once here and added to the very end of each message — so you don't sign off inside the letters above, and no email ever ends twice.",
+      "The short one, for someone who already has their booking page and knows how to pay. The address, map pin, how to find the door and your sign-off are added underneath, same as the welcome email.",
     source: "settings",
-    fields: [{ key: "emailSignOff", label: "Sign-off", multiline: true }],
-  },
-  {
-    title: "The offer email",
-    blurb: "Sent when you offer a few times. The link lets them book one themselves.",
-    source: "copy",
     fields: [
-      { key: "offerEmailSubject", label: "Subject", placeholders: ["clinic"] },
-      { key: "offerEmailBody", label: "Message", multiline: true, placeholders: ["name", "clinic", "times", "pickLink"] },
-      { key: "offerPickLinkLine", label: "The self-book link line", multiline: true, placeholders: ["link"] },
+      {
+        key: "emailTemplateReturning",
+        label: "Returning confirmation",
+        multiline: true,
+        placeholders: ["name", "when", "clinic", "price"],
+      },
     ],
   },
   {
-    title: "The intake email (a resend, on its own)",
-    blurb: "The intake link now rides along in the welcome email; this is the standalone resend.",
+    title: "4 · The intake email — a resend, on its own",
+    blurb: "The intake link already rides along in the welcome email; this is the standalone resend.",
     source: "copy",
     fields: [
       { key: "intakeEmailSubject", label: "Subject" },
       { key: "intakeEmailBody", label: "Message", multiline: true, placeholders: ["name", "link"] },
     ],
   },
+  {
+    title: "5 · The review email — after a session",
+    blurb:
+      "Asks for a Google review and offers a one-tap marketing opt-in. Written once for both clinics — only the review link differs, because each clinic is its own Google listing.",
+    source: "settings",
+    fields: [
+      { key: "reviewEmailSubject", label: "Subject" },
+      { key: "reviewEmailBody", label: "Message", multiline: true, placeholders: ["name", "mapsUrl", "optInLink"] },
+      { key: "mapsReviewUrlWaterloo", label: "Google review link — Waterloo" },
+      { key: "mapsReviewUrlBethnal", label: "Google review link — Bethnal Green" },
+    ],
+  },
+];
+
+// Written once, dropped into the emails above — not messages in their own right.
+const BUILDING_BLOCK_GROUPS: Group[] = [
+  {
+    title: "The access note",
+    blurb:
+      "Slots into the welcome email wherever you put {accessNote} — stairs, access needs. Don't paste map links in here; the map pin is added for you from Settings › Where each clinic is.",
+    source: "settings",
+    fields: [{ key: "accessNote", label: "Access note", multiline: true }],
+  },
+  {
+    title: "Payment wording",
+    blurb:
+      "Added to the welcome email when you tick “include payment details”. Your account name, sort code, account number and the client's reference are added under it automatically — set those in Settings › Client pages.",
+    source: "settings",
+    fields: [{ key: "paymentDetails", label: "Payment details", multiline: true }],
+  },
+  {
+    title: "Your sign-off",
+    blurb:
+      "How every email ends. Written once here and added to the very end of each one — so you don't sign off inside the letters above, and no email ever ends twice.",
+    source: "settings",
+    fields: [{ key: "emailSignOff", label: "Sign-off", multiline: true }],
+  },
+];
+
+// The wording on the pages a client opens, rather than the emails they're sent.
+// Set once and rarely touched, so it sits behind its own toggle instead of
+// doubling the length of the list you scroll through to reach the emails.
+const PAGE_GROUPS: Group[] = [
   {
     title: "The intake form page",
     blurb: "What a client sees when they open their intake link.",
@@ -149,20 +189,10 @@ const GROUPS: Group[] = [
       { key: "offerPickIntro", label: "Intro", placeholders: ["clinic"] },
     ],
   },
-  {
-    title: "The review email (after a session)",
-    blurb: "Asks for a Google review and offers a one-tap marketing opt-in, per location.",
-    source: "settings",
-    fields: [
-      { key: "reviewEmailSubjectWaterloo", label: "Waterloo — subject" },
-      { key: "reviewEmailBodyWaterloo", label: "Waterloo — message", multiline: true, placeholders: ["name", "mapsUrl", "optInLink"] },
-      { key: "mapsReviewUrlWaterloo", label: "Waterloo — Google review link" },
-      { key: "reviewEmailSubjectBethnal", label: "Bethnal Green — subject" },
-      { key: "reviewEmailBodyBethnal", label: "Bethnal Green — message", multiline: true, placeholders: ["name", "mapsUrl", "optInLink"] },
-      { key: "mapsReviewUrlBethnal", label: "Bethnal Green — Google review link" },
-    ],
-  },
 ];
+
+/** Every group, for the reset/fill-everything buttons that walk all fields. */
+const GROUPS: Group[] = [...EMAIL_GROUPS, ...BUILDING_BLOCK_GROUPS, ...PAGE_GROUPS];
 
 // Recommended wording for the settings-backed message fields — the clean,
 // voice-only starting point the composer is built around (facts placed for you,
@@ -171,15 +201,13 @@ const GROUPS: Group[] = [
 const SETTINGS_MESSAGE_DEFAULTS: Partial<Record<keyof SettingsMessages, string>> = {
   emailTemplate:
     "Hi {name},\n\nLovely to hear from you — you're booked in for {when} at {clinic}, {price}. Everything you need for the day is below; there's nothing to print or bring.\n\n{accessNote}",
+  emailTemplateReturning: "Hi {name},\n\nJust confirming your next session: {when} at {clinic}.",
   emailSignOff: "with gratitude\nPhoenix",
   accessNote:
     "My treatment space has no step-free access at either location — there are stairs. Please let me know if mobility or access is a concern and I'll do my best to accommodate you.",
   paymentDetails: "You can pay on the day by card, or by bank transfer using the details below.",
-  reviewEmailSubjectWaterloo: "How was your session?",
-  reviewEmailSubjectBethnal: "How was your session?",
-  reviewEmailBodyWaterloo:
-    "Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix",
-  reviewEmailBodyBethnal:
+  reviewEmailSubject: "How was your session?",
+  reviewEmailBody:
     "Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix",
 };
 
@@ -261,9 +289,9 @@ function FieldEditor({
 // The exact welcome email, composed the same way the real send is, from the
 // live draft — so the duplication a client used to see (the same directions
 // twice, a second sign-off) is visible here before anyone gets it.
-function WelcomeEmailPreview({ settings }: { settings: EmailSettings }) {
+function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSettings; start?: "first" | "returning" }) {
   const [clinic, setClinic] = useState<Clinic>("bethnal");
-  const [which, setWhich] = useState<"first" | "returning">("first");
+  const [which, setWhich] = useState<"first" | "returning">(start);
   const links = {
     intakeLink: "https://your-site/intake/ab12cd",
     portalLink: "https://your-site/me/ab12cd",
@@ -315,7 +343,20 @@ function WelcomeEmailPreview({ settings }: { settings: EmailSettings }) {
   );
 }
 
-const WELCOME_TITLE = GROUPS[0].title;
+/** A quiet divider between the three kinds of thing in this list. */
+function SubHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-2 px-1 text-[10.5px] font-semibold tracking-[0.09em] text-faint uppercase first:mt-0">
+      {children}
+    </div>
+  );
+}
+
+// The two groups that get the live email preview under them, each opening on
+// the matching tab — so "what does a returning client actually get" is answered
+// in the same place you edit it.
+const WELCOME_TITLE = EMAIL_GROUPS[1].title;
+const RETURNING_TITLE = EMAIL_GROUPS[2].title;
 
 export function ClientMessagesEditor({
   initial,
@@ -331,6 +372,7 @@ export function ClientMessagesEditor({
   const [draft, setDraft] = useState<ClientCopy>(initial);
   const [sDraft, setSDraft] = useState<SettingsMessages>(settingsInitial);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [showPages, setShowPages] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const S_KEYS = Object.keys(settingsInitial) as (keyof SettingsMessages)[];
@@ -345,6 +387,7 @@ export function ClientMessagesEditor({
   // from here, the rest of the clinic + bank details from the last save.
   const previewSettings: EmailSettings = {
     emailTemplate: sDraft.emailTemplate,
+    emailTemplateReturning: sDraft.emailTemplateReturning,
     emailSignOff: sDraft.emailSignOff,
     accessNote: sDraft.accessNote,
     paymentDetails: sDraft.paymentDetails,
@@ -378,6 +421,69 @@ export function ClientMessagesEditor({
     }
   }
 
+  /** One collapsible group — header, its fields, and the preview where it belongs. */
+  function renderGroup(g: Group) {
+    const groupEdited =
+      g.source === "copy"
+        ? g.fields.some((f) => draft[f.key].trim() !== CLIENT_COPY_DEFAULTS[f.key].trim())
+        : g.fields.some((f) => sDraft[f.key] !== settingsInitial[f.key]);
+    const isOpen = openGroup === g.title;
+    return (
+      <div key={g.title} className="flex flex-col gap-2.5">
+        <button
+          onClick={() => setOpenGroup(isOpen ? null : g.title)}
+          className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3 text-left hover:bg-hoverbg"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-[13.5px] font-semibold">{g.title}</span>
+            {groupEdited && (
+              <span className="rounded-full bg-sage-tint px-2 py-[1px] text-[10.5px] font-semibold text-sage-text">
+                edited
+              </span>
+            )}
+          </span>
+          <span className="flex-none text-[11px] font-semibold text-clay-text">{isOpen ? "Hide ▾" : "Show ›"}</span>
+        </button>
+
+        {isOpen && (
+          <Card className="flex flex-col gap-4 px-4 py-4">
+            <p className="text-[12px] leading-relaxed text-muted">{g.blurb}</p>
+            {g.source === "copy"
+              ? g.fields.map((f) => (
+                  <FieldEditor
+                    key={f.key}
+                    label={f.label}
+                    value={draft[f.key]}
+                    isDefault={draft[f.key].trim() === CLIENT_COPY_DEFAULTS[f.key].trim()}
+                    placeholders={f.placeholders}
+                    multiline={f.multiline}
+                    onChange={(v) => setCopy(f.key, v)}
+                    onReset={() => setCopy(f.key, CLIENT_COPY_DEFAULTS[f.key])}
+                  />
+                ))
+              : g.fields.map((f) => {
+                  const recommended = SETTINGS_MESSAGE_DEFAULTS[f.key];
+                  return (
+                    <FieldEditor
+                      key={f.key}
+                      label={f.label}
+                      value={sDraft[f.key]}
+                      isDefault={recommended !== undefined && sDraft[f.key].trim() === recommended.trim()}
+                      placeholders={f.placeholders}
+                      multiline={f.multiline}
+                      onChange={(v) => setSetting(f.key, v)}
+                      onReset={recommended !== undefined ? () => setSetting(f.key, recommended) : undefined}
+                    />
+                  );
+                })}
+            {g.title === WELCOME_TITLE && <WelcomeEmailPreview settings={previewSettings} start="first" />}
+            {g.title === RETURNING_TITLE && <WelcomeEmailPreview settings={previewSettings} start="returning" />}
+          </Card>
+        )}
+      </div>
+    );
+  }
+
   // Drop the recommended wording into the draft — clean, voice-only, one of
   // everything. Doesn't save on its own: you review it in the preview and Save
   // (or Discard). Your clinic links and bank details aren't touched.
@@ -408,66 +514,25 @@ export function ClientMessagesEditor({
         </div>
       </Card>
 
-      {GROUPS.map((g) => {
-        const groupEdited =
-          g.source === "copy"
-            ? g.fields.some((f) => draft[f.key].trim() !== CLIENT_COPY_DEFAULTS[f.key].trim())
-            : g.fields.some((f) => sDraft[f.key] !== settingsInitial[f.key]);
-        const isOpen = openGroup === g.title;
-        return (
-          <div key={g.title} className="flex flex-col gap-2.5">
-            <button
-              onClick={() => setOpenGroup(isOpen ? null : g.title)}
-              className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3 text-left hover:bg-hoverbg"
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-[13.5px] font-semibold">{g.title}</span>
-                {groupEdited && (
-                  <span className="rounded-full bg-sage-tint px-2 py-[1px] text-[10.5px] font-semibold text-sage-text">
-                    edited
-                  </span>
-                )}
-              </span>
-              <span className="text-[11px] font-semibold text-clay-text">{isOpen ? "Hide ▾" : "Show ›"}</span>
-            </button>
+      <SubHeading>The emails you send</SubHeading>
+      {EMAIL_GROUPS.map(renderGroup)}
 
-            {isOpen && (
-              <Card className="flex flex-col gap-4 px-4 py-4">
-                <p className="text-[12px] leading-relaxed text-muted">{g.blurb}</p>
-                {g.source === "copy"
-                  ? g.fields.map((f) => (
-                      <FieldEditor
-                        key={f.key}
-                        label={f.label}
-                        value={draft[f.key]}
-                        isDefault={draft[f.key].trim() === CLIENT_COPY_DEFAULTS[f.key].trim()}
-                        placeholders={f.placeholders}
-                        multiline={f.multiline}
-                        onChange={(v) => setCopy(f.key, v)}
-                        onReset={() => setCopy(f.key, CLIENT_COPY_DEFAULTS[f.key])}
-                      />
-                    ))
-                  : g.fields.map((f) => {
-                      const recommended = SETTINGS_MESSAGE_DEFAULTS[f.key];
-                      return (
-                        <FieldEditor
-                          key={f.key}
-                          label={f.label}
-                          value={sDraft[f.key]}
-                          isDefault={recommended !== undefined && sDraft[f.key].trim() === recommended.trim()}
-                          placeholders={f.placeholders}
-                          multiline={f.multiline}
-                          onChange={(v) => setSetting(f.key, v)}
-                          onReset={recommended !== undefined ? () => setSetting(f.key, recommended) : undefined}
-                        />
-                      );
-                    })}
-                {g.title === WELCOME_TITLE && <WelcomeEmailPreview settings={previewSettings} />}
-              </Card>
-            )}
-          </div>
-        );
-      })}
+      <SubHeading>Written once, used in all of them</SubHeading>
+      {BUILDING_BLOCK_GROUPS.map(renderGroup)}
+
+      <button
+        onClick={() => setShowPages(!showPages)}
+        className="mt-1 flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-dashed border-line bg-transparent px-4 py-3 text-left hover:bg-hoverbg"
+      >
+        <span className="flex flex-col gap-0.5">
+          <span className="text-[13px] font-semibold text-ink-soft">Wording on the pages clients open</span>
+          <span className="text-[11.5px] text-muted">
+            The intake form, your booking page, the “you&apos;re booked” screen. Set once — you rarely need these.
+          </span>
+        </span>
+        <span className="flex-none text-[11px] font-semibold text-clay-text">{showPages ? "Hide ▾" : "Show ›"}</span>
+      </button>
+      {showPages && PAGE_GROUPS.map(renderGroup)}
 
       {dirty && (
         <div className="sticky bottom-3 z-10 flex items-center gap-2 rounded-full border border-line bg-card px-3 py-2 shadow-card">

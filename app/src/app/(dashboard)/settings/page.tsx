@@ -20,6 +20,7 @@ export default async function SettingsPage() {
       settings={{
         accessNote: settings.accessNote,
         emailTemplate: settings.emailTemplate,
+        emailTemplateReturning: settings.emailTemplateReturning,
         emailSignOff: settings.emailSignOff,
         paymentDetails: settings.paymentDetails,
         waterlooAddress: settings.waterlooAddress,
@@ -48,6 +49,9 @@ export default async function SettingsPage() {
         intakeQuestions: resolveIntakeQuestions(settings.intakeQuestions),
         mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
         mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
+        reviewEmailSubject: settings.reviewEmailSubject,
+        reviewEmailBody: settings.reviewEmailBody,
+        // Legacy per-clinic wording — the fallback until the shared pair above is saved.
         reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
         reviewEmailSubjectBethnal: settings.reviewEmailSubjectBethnal,
         reviewEmailBodyWaterloo: settings.reviewEmailBodyWaterloo,

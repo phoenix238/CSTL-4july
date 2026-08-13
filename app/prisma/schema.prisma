@@ -212,6 +212,14 @@ model AppSettings {
   // intake link and sign-off around it, so the letter carries no facts and no
   // sign-off of its own (emailSignOff below is appended once, at the very end).
   emailTemplate         String @default("Hi {name},\n\nYou're booked in for {when} at {clinic} — 60 minutes, {price}.\n\n{accessNote}")
+  // The confirmation a *returning* client gets — the short one, for someone who
+  // already has their booking page, knows how to pay, and filled the form in
+  // long ago. Used to be hardcoded in the composer, which meant the one email
+  // Phoenix sends most often was the only one he couldn't change a word of.
+  // Placeholders: {name} {when} {clinic} {price}
+  // Voice only, same as emailTemplate — the address, map pin, how-to-find and
+  // sign-off are placed around it.
+  emailTemplateReturning String @default("Hi {name},\n\nJust confirming your next session: {when} at {clinic}.")
   // The one sign-off every email ends on. Appended by the composer after any
   // sign-off in the letter is stripped, so a template that still ends "See you
   // soon, Phoenix" can't produce a second ending.
@@ -270,14 +278,20 @@ model AppSettings {
   appUrl                String @default("") // base URL for building intake / share links
   intakeQuestions       Json? // configurable intake questions; null = built-in defaults
   clientCopy            Json? // editable client-facing message overrides; null/missing keys = built-in defaults (see lib/clientCopy.ts)
-  // Legacy single review-email fields — superseded by the per-clinic ones below
-  // (kept in place rather than dropped, so `prisma db push` never has to touch existing data).
-  mapsReviewUrl         String @default("") // Google Maps "leave a review" link
+  // The review email, written once. Only the review LINK differs per clinic
+  // (below) — each clinic is its own Google Business listing — so the wording
+  // lives here and both clinics share it. The per-clinic subject/body pair below
+  // is the legacy split; it stays as the fallback until this pair is saved.
+  mapsReviewUrl         String @default("") // legacy single review link, superseded by the per-clinic pair below
   reviewEmailSubject    String @default("How was your session?")
   reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix")
-  // Post-session review email, one per clinic — each clinic has its own Google Business review link.
+  // The review link per clinic — these two stay split, because Waterloo and
+  // Bethnal Green are separate Google Business listings with separate reviews.
   mapsReviewUrlWaterloo    String @default("") // Google Maps "leave a review" link — Waterloo
   mapsReviewUrlBethnal     String @default("") // Google Maps "leave a review" link — Bethnal Green
+  // Legacy per-clinic wording, superseded by the shared reviewEmailSubject /
+  // reviewEmailBody above. Kept for the data, and used as the fallback for
+  // whichever clinic until the shared pair is saved.
   reviewEmailSubjectWaterloo String @default("How was your session?")
   reviewEmailSubjectBethnal  String @default("How was your session?")
   reviewEmailBodyWaterloo  String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix")

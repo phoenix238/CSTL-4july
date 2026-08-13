@@ -18,6 +18,7 @@ import type { WeeklyHours } from "@/lib/booking/availability";
 export interface SettingsData {
   accessNote: string;
   emailTemplate: string;
+  emailTemplateReturning: string;
   emailSignOff: string;
   paymentDetails: string;
   waterlooAddress: string;
@@ -45,6 +46,9 @@ export interface SettingsData {
   intakeQuestions: IntakeQuestion[];
   mapsReviewUrlWaterloo: string;
   mapsReviewUrlBethnal: string;
+  reviewEmailSubject: string;
+  reviewEmailBody: string;
+  // Legacy per-clinic wording — the fallback until the shared pair above is saved.
   reviewEmailSubjectWaterloo: string;
   reviewEmailSubjectBethnal: string;
   reviewEmailBodyWaterloo: string;
@@ -138,11 +142,6 @@ export function SettingsView({
 
   const [editingContact, setEditingContact] = useState(false);
   const [contactDraft, setContactDraft] = useState("");
-  const [editingAddresses, setEditingAddresses] = useState(false);
-  const [addressesDraft, setAddressesDraft] = useState({
-    waterlooAddress: settings.waterlooAddress,
-    bethnalAddress: settings.bethnalAddress,
-  });
   const [editingLocations, setEditingLocations] = useState(false);
   // The wording still saved in the old direction/arrival-note fields the "How to
   // find it" box replaced — joined the same way the email composer joins them, so
@@ -155,7 +154,13 @@ export function SettingsView({
       .map((s) => s.trim())
       .filter(Boolean)
       .join("\n");
+  // Everything about where a clinic is, in one draft — address, map pin, how to
+  // find the door, entrance photo. These used to be two dropdowns under two
+  // different headings, which is how a map link ended up pasted into the access
+  // note instead: the box that said "arrival notes" on the label didn't contain one.
   const [locationsDraft, setLocationsDraft] = useState({
+    waterlooAddress: settings.waterlooAddress,
+    bethnalAddress: settings.bethnalAddress,
     waterlooLocationUrl: settings.waterlooLocationUrl,
     bethnalLocationUrl: settings.bethnalLocationUrl,
     waterlooFindIt: settings.waterlooFindIt,
@@ -185,13 +190,15 @@ export function SettingsView({
   };
 
   const copyLocation = async (clinic: "waterloo" | "bethnal") => {
+    const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
     const url = clinic === "waterloo" ? settings.waterlooLocationUrl : settings.bethnalLocationUrl;
     const directions = clinic === "waterloo" ? settings.waterlooFindIt : settings.bethnalFindIt;
-    // Map link on its own line, a blank line, then the directions (their own
-    // line breaks kept) — reads cleanly pasted into WhatsApp or an email.
-    const text = [url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
+    // Address, map link, then the directions (their own line breaks kept), each
+    // separated by a blank line — reads cleanly pasted into WhatsApp or an email,
+    // and matches the order the confirmation email puts them in.
+    const text = [address, url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
     if (!text) {
-      toast("Nothing to copy yet — add a location link or directions first");
+      toast("Nothing to copy yet — add an address, map pin or directions first");
       return;
     }
     try {
@@ -287,63 +294,170 @@ export function SettingsView({
         </div>
       </Dropdown>
 
-      <Dropdown label="CLINIC ADDRESSES & ARRIVAL NOTES" open={!!open.addresses} onToggle={() => toggle("addresses")}>
+      <Dropdown label="WHERE EACH CLINIC IS" open={!!open.locations} onToggle={() => toggle("locations")}>
         <div className="flex items-center justify-end px-0.5">
           <button
             onClick={() => {
-              if (!editingAddresses) {
-                setAddressesDraft({
+              if (!editingLocations) {
+                setLocationsDraft({
                   waterlooAddress: settings.waterlooAddress,
                   bethnalAddress: settings.bethnalAddress,
+                  waterlooLocationUrl: settings.waterlooLocationUrl,
+                  bethnalLocationUrl: settings.bethnalLocationUrl,
+                  waterlooFindIt: settings.waterlooFindIt,
+                  bethnalFindIt: settings.bethnalFindIt,
+                  waterlooPhoto: settings.waterlooPhoto,
+                  bethnalPhoto: settings.bethnalPhoto,
                 });
               }
-              setEditingAddresses(!editingAddresses);
+              setEditingLocations(!editingLocations);
             }}
             className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
           >
-            {editingAddresses ? "Cancel" : "Edit"}
+            {editingLocations ? "Cancel" : "Edit"}
           </button>
         </div>
-        {!editingAddresses ? (
-          <Card className="px-5 py-1.5">
-            <Row label="Waterloo">{settings.waterlooAddress || "not set yet"}</Row>
-            <Row label="Bethnal Green" last>
-              {settings.bethnalAddress || "not set yet"}
-            </Row>
-          </Card>
-        ) : (
-          <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
+        {!editingLocations ? (
+          <Card className="flex flex-col gap-3.5 px-5 py-4">
             {(
               [
-                ["waterlooAddress", "WATERLOO ADDRESS"],
-                ["bethnalAddress", "BETHNAL GREEN ADDRESS"],
+                [
+                  "waterloo",
+                  "Waterloo",
+                  settings.waterlooAddress,
+                  settings.waterlooLocationUrl,
+                  settings.waterlooFindIt,
+                  settings.waterlooPhoto,
+                ],
+                [
+                  "bethnal",
+                  "Bethnal Green",
+                  settings.bethnalAddress,
+                  settings.bethnalLocationUrl,
+                  settings.bethnalFindIt,
+                  settings.bethnalPhoto,
+                ],
               ] as const
-            ).map(([addrKey, addrLabel]) => (
-              <div key={addrKey} className="flex flex-col gap-[11px]">
+            ).map(([clinic, label, address, url, directions, photo], i) => (
+              <div key={clinic} className={`flex flex-col gap-2 ${i === 0 ? "border-b border-hairline pb-3.5" : ""}`}>
+                <div className="flex items-center justify-between gap-2.5">
+                  <span className="font-serif text-[15px] font-medium">{label}</span>
+                  <button
+                    onClick={() => copyLocation(clinic)}
+                    className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text hover:opacity-90"
+                  >
+                    Copy address &amp; directions
+                  </button>
+                </div>
+                <div className="text-[12.5px] leading-[1.55] text-[oklch(0.45_0.02_58)]">
+                  <span className="font-semibold">Address: </span>
+                  {address || <span className="text-faint">not set yet</span>}
+                </div>
+                <div className="text-[12.5px] leading-[1.55] text-[oklch(0.45_0.02_58)]">
+                  <span className="font-semibold">Map pin: </span>
+                  {url ? <span className="break-all">{url}</span> : <span className="text-faint">not set yet</span>}
+                </div>
+                <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
+                  <span className="font-semibold">How to find it: </span>
+                  {directions || (
+                    <span className="text-faint">
+                      not set yet
+                      {legacyFindIt(clinic) && " — open Edit below to see the old wording still going out"}
+                    </span>
+                  )}
+                </div>
+                {photo && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photo}
+                    alt={`The entrance at ${label}`}
+                    className="max-h-[150px] w-fit rounded-lg border border-line object-cover"
+                  />
+                )}
+              </div>
+            ))}
+          </Card>
+        ) : (
+          <Card className="flex flex-col gap-[18px] border-[1.5px] border-clay/35 px-4 py-3.5">
+            {(
+              [
+                ["Waterloo", "waterlooAddress", "waterlooLocationUrl", "waterlooFindIt", "waterlooPhoto", "waterloo"],
+                ["Bethnal Green", "bethnalAddress", "bethnalLocationUrl", "bethnalFindIt", "bethnalPhoto", "bethnal"],
+              ] as const
+            ).map(([clinicLabel, addrKey, urlKey, dirKey, photoKey, clinic], i) => (
+              <div
+                key={clinic}
+                className={`flex flex-col gap-[11px] ${i === 0 ? "border-b border-hairline pb-[18px]" : ""}`}
+              >
+                <div className="font-serif text-[15px] font-medium">{clinicLabel}</div>
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    {addrLabel}
+                    ADDRESS
                   </span>
                   <input
-                    value={addressesDraft[addrKey]}
-                    onChange={(e) => setAddressesDraft({ ...addressesDraft, [addrKey]: e.target.value })}
+                    value={locationsDraft[addrKey]}
+                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [addrKey]: e.target.value })}
+                    placeholder="The full street address, as you'd write it on an envelope."
                     className={inputClass}
                   />
                 </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                    MAP PIN
+                  </span>
+                  <input
+                    value={locationsDraft[urlKey]}
+                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [urlKey]: e.target.value })}
+                    placeholder="A Google Maps pin / share link, what3words, etc."
+                    className={inputClass}
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
+                    HOW TO FIND IT
+                  </span>
+                  <textarea
+                    value={locationsDraft[dirKey]}
+                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [dirKey]: e.target.value })}
+                    placeholder="Buzzer code, which door, the nearest station, where to wait — whatever helps a client find you."
+                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+                  />
+                </label>
+                {!locationsDraft[dirKey].trim() && legacyFindIt(clinic) && (
+                  <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5 text-[12px] leading-[1.55] text-[oklch(0.45_0.02_60)]">
+                    <div className="mb-1 font-semibold text-ink-soft">
+                      Still going out — from the old fields this box replaces:
+                    </div>
+                    <div className="whitespace-pre-line">{legacyFindIt(clinic)}</div>
+                    <button
+                      onClick={() => setLocationsDraft({ ...locationsDraft, [dirKey]: legacyFindIt(clinic) })}
+                      className="mt-1.5 cursor-pointer text-[11.5px] font-semibold text-clay-text underline hover:text-clay"
+                    >
+                      Use this wording — then edit or trim it above
+                    </button>
+                  </div>
+                )}
+                <PhotoField
+                  label="PHOTO OF THE ENTRANCE"
+                  clinicLabel={clinicLabel}
+                  value={locationsDraft[photoKey]}
+                  onChange={(v) => setLocationsDraft({ ...locationsDraft, [photoKey]: v })}
+                  onError={toast}
+                />
               </div>
             ))}
             <PrimaryButton
-              onClick={() => save({ ...addressesDraft }, () => setEditingAddresses(false), "Clinic addresses updated ✓")}
+              onClick={() => save({ ...locationsDraft }, () => setEditingLocations(false), "Clinic locations updated ✓")}
               className="self-start px-[18px] py-[9px] text-[13px]"
             >
               Save
             </PrimaryButton>
           </Card>
         )}
-        <div className="text-[11.5px] text-muted">
-          Addresses are used as the location on the calendar invite (Google adds a map link automatically) and for
-          the Google Maps link in a new client&apos;s welcome email and on the booking page. The note for each clinic
-          shows under its address on the public booking page — useful for parking, buzzer codes, or what to expect.
+        <div className="text-[11.5px] leading-[1.6] text-muted">
+          These four go out together, in this order, in every confirmation email and on the public booking page. The
+          address is also the location on the calendar invite. You don&apos;t need to paste a map link into any of your
+          messages — it&apos;s added from here, for whichever clinic they booked.
         </div>
       </Dropdown>
 
@@ -429,14 +543,16 @@ export function SettingsView({
           initial={settings.clientCopy}
           settingsInitial={{
             emailTemplate: settings.emailTemplate,
+            emailTemplateReturning: settings.emailTemplateReturning,
             emailSignOff: settings.emailSignOff,
             accessNote: settings.accessNote,
             paymentDetails: settings.paymentDetails,
-            reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
-            reviewEmailBodyWaterloo: settings.reviewEmailBodyWaterloo,
+            // The review wording, shared by both clinics — seeded from the old
+            // Waterloo copy if this pair has never been saved, so wording that
+            // was only in the per-clinic boxes isn't silently left behind.
+            reviewEmailSubject: settings.reviewEmailSubject || settings.reviewEmailSubjectWaterloo,
+            reviewEmailBody: settings.reviewEmailBody || settings.reviewEmailBodyWaterloo,
             mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
-            reviewEmailSubjectBethnal: settings.reviewEmailSubjectBethnal,
-            reviewEmailBodyBethnal: settings.reviewEmailBodyBethnal,
             mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
           }}
           previewContext={{
@@ -535,151 +651,6 @@ export function SettingsView({
           </Card>
         )}
         <RenameCalendarEventsButton />
-      </Dropdown>
-
-      <Dropdown
-        label="MAP PIN & HOW TO FIND IT"
-        open={!!open.locations}
-        onToggle={() => toggle("locations")}
-      >
-        <div className="flex items-center justify-end px-0.5">
-          <button
-            onClick={() => {
-              if (!editingLocations) {
-                setLocationsDraft({
-                  waterlooLocationUrl: settings.waterlooLocationUrl,
-                  bethnalLocationUrl: settings.bethnalLocationUrl,
-                  waterlooFindIt: settings.waterlooFindIt,
-                  bethnalFindIt: settings.bethnalFindIt,
-                  waterlooPhoto: settings.waterlooPhoto,
-                  bethnalPhoto: settings.bethnalPhoto,
-                });
-              }
-              setEditingLocations(!editingLocations);
-            }}
-            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-          >
-            {editingLocations ? "Cancel" : "Edit"}
-          </button>
-        </div>
-        {!editingLocations ? (
-          <Card className="flex flex-col gap-3.5 px-5 py-4">
-            {(
-              [
-                ["waterloo", "Waterloo", settings.waterlooLocationUrl, settings.waterlooFindIt, settings.waterlooPhoto],
-                ["bethnal", "Bethnal Green", settings.bethnalLocationUrl, settings.bethnalFindIt, settings.bethnalPhoto],
-              ] as const
-            ).map(([clinic, label, url, directions, photo], i) => (
-              <div
-                key={clinic}
-                className={`flex flex-col gap-2 ${i === 0 ? "border-b border-hairline pb-3.5" : ""}`}
-              >
-                <div className="flex items-center justify-between gap-2.5">
-                  <span className="font-serif text-[15px] font-medium">{label}</span>
-                  <button
-                    onClick={() => copyLocation(clinic)}
-                    className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text hover:opacity-90"
-                  >
-                    Copy location &amp; directions
-                  </button>
-                </div>
-                <div className="text-[12.5px] leading-[1.55] text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">Link: </span>
-                  {url ? <span className="break-all">{url}</span> : <span className="text-faint">not set yet</span>}
-                </div>
-                <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">How to find it: </span>
-                  {directions || (
-                    <span className="text-faint">
-                      not set yet
-                      {legacyFindIt(clinic) && " — open Edit below to see the old wording still going out"}
-                    </span>
-                  )}
-                </div>
-                {photo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photo}
-                    alt={`The entrance at ${label}`}
-                    className="max-h-[150px] w-fit rounded-lg border border-line object-cover"
-                  />
-                )}
-              </div>
-            ))}
-          </Card>
-        ) : (
-          <Card className="flex flex-col gap-[14px] border-[1.5px] border-clay/35 px-4 py-3.5">
-            {(
-              [
-                ["waterlooLocationUrl", "WATERLOO MAP PIN", "waterlooFindIt", "HOW TO FIND WATERLOO", "waterlooPhoto", "Waterloo"],
-                ["bethnalLocationUrl", "BETHNAL GREEN MAP PIN", "bethnalFindIt", "HOW TO FIND BETHNAL GREEN", "bethnalPhoto", "Bethnal Green"],
-              ] as const
-            ).map(([urlKey, urlLabel, dirKey, dirLabel, photoKey, clinicLabel]) => (
-              <div key={urlKey} className="flex flex-col gap-[11px]">
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    {urlLabel}
-                  </span>
-                  <input
-                    value={locationsDraft[urlKey]}
-                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [urlKey]: e.target.value })}
-                    placeholder="A Google Maps pin / share link, what3words, etc."
-                    className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    {dirLabel}
-                  </span>
-                  <textarea
-                    value={locationsDraft[dirKey]}
-                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [dirKey]: e.target.value })}
-                    placeholder="Buzzer code, which door, the nearest station, where to wait — whatever helps a client find you."
-                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-                  />
-                </label>
-                {!locationsDraft[dirKey].trim() && legacyFindIt(dirKey === "waterlooFindIt" ? "waterloo" : "bethnal") && (
-                  <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5 text-[12px] leading-[1.55] text-[oklch(0.45_0.02_60)]">
-                    <div className="mb-1 font-semibold text-ink-soft">
-                      Still going out — from the old fields this box replaces:
-                    </div>
-                    <div className="whitespace-pre-line">
-                      {legacyFindIt(dirKey === "waterlooFindIt" ? "waterloo" : "bethnal")}
-                    </div>
-                    <button
-                      onClick={() =>
-                        setLocationsDraft({
-                          ...locationsDraft,
-                          [dirKey]: legacyFindIt(dirKey === "waterlooFindIt" ? "waterloo" : "bethnal"),
-                        })
-                      }
-                      className="mt-1.5 cursor-pointer text-[11.5px] font-semibold text-clay-text underline hover:text-clay"
-                    >
-                      Use this wording — then edit or trim it above
-                    </button>
-                  </div>
-                )}
-                <PhotoField
-                  label={`PHOTO OF THE ${clinicLabel.toUpperCase()} ENTRANCE`}
-                  clinicLabel={clinicLabel}
-                  value={locationsDraft[photoKey]}
-                  onChange={(v) => setLocationsDraft({ ...locationsDraft, [photoKey]: v })}
-                  onError={toast}
-                />
-              </div>
-            ))}
-            <PrimaryButton
-              onClick={() => save({ ...locationsDraft }, () => setEditingLocations(false), "Location, directions & photo updated ✓")}
-              className="self-start px-[18px] py-[9px] text-[13px]"
-            >
-              Save
-            </PrimaryButton>
-          </Card>
-        )}
-        <div className="text-[11.5px] text-muted">
-          A quick &quot;where we are&quot; you can copy and paste into WhatsApp or an email. There&apos;s also a Copy
-          button on each client&apos;s profile that grabs the right clinic&apos;s details for you.
-        </div>
       </Dropdown>
 
       <SectionLabel className="pt-2">ADD TO YOUR IPHONE</SectionLabel>

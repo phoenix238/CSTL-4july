@@ -11,6 +11,8 @@ export interface ComposedEmail {
 export interface EmailSettings {
   /** the one welcome letter, shared by both clinics */
   emailTemplate?: string;
+  /** the short confirmation a returning client gets, shared by both clinics */
+  emailTemplateReturning?: string;
   /** legacy per-clinic letters — the fallback until `emailTemplate` is saved */
   emailTemplateWaterloo?: string;
   emailTemplateBethnal?: string;
@@ -107,11 +109,25 @@ export function resolveClinicPhoto(clinic: Clinic, s: EmailSettings): string {
   return ((clinic === "waterloo" ? s.waterlooPhoto : s.bethnalPhoto) ?? "").trim();
 }
 
+/** Fill {placeholders} from a template. Unknown ones are left alone, not blanked. */
+function fillTemplate(template: string, vars: Record<string, string>): string {
+  let out = template;
+  for (const [k, v] of Object.entries(vars)) out = out.split(`{${k}}`).join(v);
+  return out;
+}
+
 /** The welcome letter: the shared one, or the old per-clinic one until it's saved. */
 export function resolveTemplate(clinic: Clinic, s: EmailSettings): string {
   const shared = s.emailTemplate?.trim();
   if (shared) return shared;
   return (clinic === "waterloo" ? s.emailTemplateWaterloo : s.emailTemplateBethnal) ?? "";
+}
+
+/** The returning-client confirmation, with the old hardcoded wording as the floor. */
+export const RETURNING_TEMPLATE_FALLBACK = "Hi {name},\n\nJust confirming your next session: {when} at {clinic}.";
+
+export function resolveReturningTemplate(s: EmailSettings): string {
+  return s.emailTemplateReturning?.trim() || RETURNING_TEMPLATE_FALLBACK;
 }
 
 /** Everything that varies by clinic, resolved once. */
@@ -241,15 +257,20 @@ export function composeBookingEmail(
     .join("\n");
   if (address || locationUrl) includes.push(directions ? "Address, map link & how to find it" : "Address & map link");
 
+  // The placeholders both letters share. The first email adds its own below.
+  const common: Record<string, string> = {
+    name: client.name,
+    when: whenLabel,
+    clinic: CLINIC_LABEL[clinic],
+    price: CLINIC_PRICE[clinic],
+  };
+
   if (!isFirstEmail) {
-    const body = [
-      `Hi ${client.name},`,
-      `Just confirming your next session: ${whenLabel} at ${CLINIC_LABEL[clinic]}.`,
-      whereBlock,
-      resolveSignOff(settings),
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    // Same shape as the first email — voice on top, facts placed around it,
+    // signed once at the end — so a sign-off left in the template can't produce
+    // an email that ends twice.
+    const { main } = splitSignOff(fillTemplate(resolveReturningTemplate(settings), common));
+    const body = [main, whereBlock, resolveSignOff(settings)].filter(Boolean).join("\n\n");
     return { subject, body, includes };
   }
 
@@ -257,23 +278,13 @@ export function composeBookingEmail(
   // location block assembled above) is filled in around it, so the wording only
   // has to be written once.
   const template = resolveTemplate(clinic, settings);
-  const filled = template
-    .split("{name}")
-    .join(client.name)
-    .split("{accessNote}")
-    .join(settings.accessNote)
-    .split("{when}")
-    .join(whenLabel)
-    .split("{clinic}")
-    .join(CLINIC_LABEL[clinic])
-    .split("{price}")
-    .join(CLINIC_PRICE[clinic])
-    .split("{intakeLink}")
-    .join(intakeLink)
-    .split("{portalLink}")
-    .join(portalLink ?? "")
-    .split("{paymentRef}")
-    .join(paymentRef ?? "");
+  const filled = fillTemplate(template, {
+    ...common,
+    accessNote: settings.accessNote,
+    intakeLink,
+    portalLink: portalLink ?? "",
+    paymentRef: paymentRef ?? "",
+  });
   // Any sign-off the letter carries is dropped here and replaced by the single
   // emailSignOff below, so every email ends the same way and can't end twice.
   const { main } = splitSignOff(filled);

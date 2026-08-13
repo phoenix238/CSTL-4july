@@ -10,6 +10,7 @@ export const GET = guarded(async () => {
   return NextResponse.json({
     accessNote: s.accessNote,
     emailTemplate: s.emailTemplate,
+    emailTemplateReturning: s.emailTemplateReturning,
     emailSignOff: s.emailSignOff,
     // Legacy per-clinic letters — still sent so the composer can fall back to
     // them for a clinic until the shared letter is saved.
@@ -67,11 +68,13 @@ export const GET = guarded(async () => {
  */
 const EDITABLE_SETTINGS = [
   "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
-  "emailTemplate", "emailSignOff", "waterlooFindIt", "bethnalFindIt", "waterlooPhoto", "bethnalPhoto",
+  "emailTemplate", "emailTemplateReturning", "emailSignOff",
+  "waterlooFindIt", "bethnalFindIt", "waterlooPhoto", "bethnalPhoto",
   "waterlooAddress", "bethnalAddress", "waterlooArrivalNote", "bethnalArrivalNote",
   "waterlooLocationUrl", "bethnalLocationUrl", "waterlooDirections", "bethnalDirections",
   "clinicContactLine", "intakeFormUrl", "intakeQuestions", "clientCopy",
   "mapsReviewUrlWaterloo", "mapsReviewUrlBethnal",
+  "reviewEmailSubject", "reviewEmailBody",
   "reviewEmailSubjectWaterloo", "reviewEmailSubjectBethnal",
   "reviewEmailBodyWaterloo", "reviewEmailBodyBethnal",
   "weeklyHours", "bookingSlotMinutes", "bookingMinNoticeMins", "bookingHorizonDays",
