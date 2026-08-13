@@ -28,17 +28,12 @@ export function BookingFlow({
   bethnalAddress,
   waterlooNote,
   bethnalNote,
-  waterlooPhoto,
-  bethnalPhoto,
   copy,
 }: {
   waterlooAddress: string;
   bethnalAddress: string;
   waterlooNote: string;
   bethnalNote: string;
-  /** photo of the entrance, as a data: URL — empty when none is set */
-  waterlooPhoto?: string;
-  bethnalPhoto?: string;
   copy: ClientCopy;
 }) {
   const toast = useToast();
@@ -78,7 +73,6 @@ export function BookingFlow({
 
   const address = clinic === "waterloo" ? waterlooAddress : bethnalAddress;
   const note = clinic === "waterloo" ? waterlooNote : bethnalNote;
-  const photo = clinic === "waterloo" ? waterlooPhoto : bethnalPhoto;
 
   interface BookResponse {
     whenLabel: string;
@@ -228,16 +222,6 @@ export function BookingFlow({
             </div>
           )}
           {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
-          {photo && (
-            // The entrance, so a first-timer knows what they're looking for
-            // before they set off. eslint-disable-next-line @next/next/no-img-element
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={photo}
-              alt={`The entrance at ${CLINIC_LABEL[clinic]}`}
-              className="w-full max-w-[320px] rounded-lg border border-line object-cover"
-            />
-          )}
         </div>
 
         <BookSlotPicker clinic={clinic} selected={selected} onSelect={setSelected} />

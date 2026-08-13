@@ -17,8 +17,6 @@ export default async function BookPage() {
         bethnalAddress={settings.bethnalAddress}
         waterlooNote={resolveFindIt("waterloo", settings)}
         bethnalNote={resolveFindIt("bethnal", settings)}
-        waterlooPhoto={settings.waterlooPhoto}
-        bethnalPhoto={settings.bethnalPhoto}
         copy={copy}
       />
     </ToastProvider>
