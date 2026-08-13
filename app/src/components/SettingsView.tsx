@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api, Card, inputClass, PrimaryButton, SectionLabel, useToast } from "./ui";
 import { IntakeQuestionsEditor } from "./IntakeQuestionsEditor";
 import { AvailabilitySettings, type AvailabilityOverrideDTO } from "./AvailabilitySettings";
-import { ClientMessagesEditor } from "./ClientMessagesEditor";
+import { ClientMessagesPanel } from "./MessageStudio";
 import { PortalSettings } from "./PortalSettings";
 import { PaymentMatching } from "./PaymentMatching";
 import { GoogleConnectionPanel } from "./GoogleConnectionPanel";
@@ -539,7 +539,7 @@ export function SettingsView({
         open={!!open.clientMessages}
         onToggle={() => toggle("clientMessages")}
       >
-        <ClientMessagesEditor
+        <ClientMessagesPanel
           initial={settings.clientCopy}
           settingsInitial={{
             emailTemplate: settings.emailTemplate,

@@ -16,7 +16,8 @@ import {
   useToast,
 } from "./ui";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
-import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
+import { composeBookingEmail, type EmailBlock, type EmailSettings } from "@/lib/booking/email";
+import { checkEmail, type EmailIssue } from "@/lib/booking/emailChecks";
 import { composeOfferMessage, composeOfferTimesOnly } from "@/lib/booking/offer";
 import type { ClientCopy } from "@/lib/clientCopy";
 import { fmtDayLong, fmtTime, londonDayStart, londonWeekStart } from "@/lib/time";
@@ -187,6 +188,27 @@ export function EnquiryFlow({
   useEffect(() => {
     if (composed && !emailDirty) setEmailBody(composed.body);
   }, [composed, emailDirty]);
+
+  // Problems in whatever is about to be sent — the same checks Message Studio
+  // runs, caught here before the send instead of after. While the preview is
+  // untouched, they run against the real composed blocks (so the "map pin but
+  // no address" check can see which clinic block is which); once Phoenix has
+  // typed over it, they run against that text as one block instead — still
+  // catches a pasted duplicate link or a leftover {placeholder}, just not the
+  // per-clinic structural checks, which are about Settings, not his edit. The
+  // live preview's tokens aren't real yet (see PREVIEW_* in email.ts), so
+  // they're allowed here rather than reported as unfinished.
+  const confirmIssues: EmailIssue[] = useMemo(() => {
+    if (bookMode !== "confirm" || !settings) return [];
+    if (!emailDirty) {
+      if (!composed || !("blocks" in composed)) return [];
+      return checkEmail(composed.blocks, settings, { allowPreviewStandins: true });
+    }
+    const asOneBlock: EmailBlock[] = [
+      { id: "letter", label: "Confirmation message", source: { kind: "auto" }, text: emailBody },
+    ];
+    return checkEmail(asOneBlock, settings, { allowPreviewStandins: true });
+  }, [bookMode, emailDirty, settings, composed, emailBody]);
 
   function toggleSlot(slot: Date) {
     setEmailDirty(false);
@@ -1017,6 +1039,20 @@ export function EnquiryFlow({
             >
               Reset to template
             </button>
+          )}
+          {confirmIssues.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {confirmIssues.map((issue, i) => (
+                <div
+                  key={i}
+                  className={`rounded-lg px-2.5 py-1.5 text-[12px] leading-[1.4] ${
+                    issue.severity === "problem" ? "bg-amber-tint text-amber-text" : "bg-[oklch(0.96_0.01_85)] text-muted"
+                  }`}
+                >
+                  <span className="font-semibold">{issue.message}</span> — {issue.detail}
+                </div>
+              ))}
+            </div>
           )}
           {bookingHasEmail ? (
             <label className="flex items-center gap-2 text-[13px]">

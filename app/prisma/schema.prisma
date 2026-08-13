@@ -203,7 +203,7 @@ model BookingAttempt {
 // Single row (id = 1). Holds editable settings and the Google wiring.
 model AppSettings {
   id                    Int    @id @default(1)
-  accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
+  accessNote            String @default("My treatment rooms are up a flight of stairs — there's no step-free access at either location. I also have a space I use when stairs are a problem, so if access is a concern for you, just reply and let me know and I'll book you in there instead.")
   // The one welcome letter, shared by both clinics. What differs between them —
   // price, address, map pin, how to find the door — is filled in around it, so
   // the wording only has to be written and edited once.

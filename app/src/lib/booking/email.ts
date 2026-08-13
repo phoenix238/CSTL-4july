@@ -5,6 +5,30 @@ export interface ComposedEmail {
   body: string;
   /** the ✓-list shown in the booking panel and confirmation screen */
   includes: string[];
+  /**
+   * The pieces `body` is assembled from, in order — the same list `body` is
+   * derived from, not a separate description of it. Lets a UI show the real,
+   * composed email with each region traceable back to the setting that
+   * produced it, instead of a settings form that only hopes the result reads
+   * right. The access note isn't its own block: it's interpolated into the
+   * letter via {accessNote}, so it's found by matching that substring inside
+   * the letter block rather than split out here.
+   */
+  blocks: EmailBlock[];
+}
+
+/** Where one assembled region of the email came from, for "edit this" in the UI. */
+export type EmailBlockSource =
+  | { kind: "message"; field: "emailTemplate" | "emailTemplateReturning" | "paymentDetails" | "emailSignOff" }
+  | { kind: "location"; clinic: Clinic }
+  | { kind: "bank" }
+  | { kind: "auto" };
+
+export interface EmailBlock {
+  id: "letter" | "where" | "payment" | "bank" | "portal" | "intake" | "signoff";
+  label: string;
+  source: EmailBlockSource;
+  text: string;
 }
 
 /** The settings fields the email needs — plain shape so the browser can pass /api/settings JSON. */
@@ -131,7 +155,7 @@ export function resolveReturningTemplate(s: EmailSettings): string {
 }
 
 /** Everything that varies by clinic, resolved once. */
-function clinicDetails(clinic: Clinic, s: EmailSettings) {
+export function clinicDetails(clinic: Clinic, s: EmailSettings) {
   const w = clinic === "waterloo";
   return {
     address: (w ? s.waterlooAddress : s.bethnalAddress) ?? "",
@@ -161,15 +185,18 @@ function splitSignOff(body: string): { main: string; signOff: string } {
 }
 
 /**
- * How to pay, as one block: the wording from Settings, then the account details
- * and — the part that makes a bank transfer matchable — their own reference.
+ * How to pay, as two regions: the wording from Settings (kept editable as its
+ * own block, source `paymentDetails`), and the structured bank details — the
+ * account, the reference that makes a transfer matchable, and the free-text
+ * bank note — which all live under Client pages, so they're grouped as one
+ * `kind: "bank"` region rather than three.
  *
  * The reference used to go out in a separate "Your booking page" email, which
  * meant a new client's payment information arrived split across two messages
  * sent at different times, and the half with the reference in it was the half
  * that was easy to miss.
  */
-function paymentBlock(s: EmailSettings, paymentRef?: string): string {
+function paymentBlock(s: EmailSettings, paymentRef?: string): { freeText: string; bank: string } {
   const bank = [
     s.bankAccountName?.trim() && `  Account name: ${s.bankAccountName.trim()}`,
     s.bankSortCode?.trim() && `  Sort code: ${s.bankSortCode.trim()}`,
@@ -199,13 +226,13 @@ function paymentBlock(s: EmailSettings, paymentRef?: string): string {
           .trim()
       : s.paymentDetails.trim();
 
-  const lines = [freeText].filter(Boolean);
+  const bankLines: string[] = [];
   if (bank.length) {
-    lines.push(["For bank transfers:", ...bank].join("\n"));
-    if (paymentRef) lines.push("Please use that reference every time — it's how I match your payment to you.");
+    bankLines.push(["For bank transfers:", ...bank].join("\n"));
+    if (paymentRef) bankLines.push("Please use that reference every time — it's how I match your payment to you.");
   }
-  if (s.bankPaymentNote?.trim()) lines.push(s.bankPaymentNote.trim());
-  return lines.join("\n\n");
+  if (s.bankPaymentNote?.trim()) bankLines.push(s.bankPaymentNote.trim());
+  return { freeText, bank: bankLines.join("\n\n") };
 }
 
 /**
@@ -270,8 +297,16 @@ export function composeBookingEmail(
     // signed once at the end — so a sign-off left in the template can't produce
     // an email that ends twice.
     const { main } = splitSignOff(fillTemplate(resolveReturningTemplate(settings), common));
-    const body = [main, whereBlock, resolveSignOff(settings)].filter(Boolean).join("\n\n");
-    return { subject, body, includes };
+    const blocks: EmailBlock[] = [
+      { id: "letter", label: "Returning confirmation", source: { kind: "message", field: "emailTemplateReturning" }, text: main },
+      { id: "where", label: `Where it is — ${CLINIC_LABEL[clinic]}`, source: { kind: "location", clinic }, text: whereBlock },
+      { id: "signoff", label: "Your sign-off", source: { kind: "message", field: "emailSignOff" }, text: resolveSignOff(settings) },
+    ];
+    const body = blocks
+      .map((b) => b.text)
+      .filter(Boolean)
+      .join("\n\n");
+    return { subject, body, includes, blocks };
   }
 
   // One letter for both clinics — what differs between them (the price, and the
@@ -289,15 +324,23 @@ export function composeBookingEmail(
   // emailSignOff below, so every email ends the same way and can't end twice.
   const { main } = splitSignOff(filled);
 
-  const sections = [main, whereBlock];
+  const blocks: EmailBlock[] = [
+    { id: "letter", label: "Welcome message", source: { kind: "message", field: "emailTemplate" }, text: main },
+    { id: "where", label: `Where it is — ${CLINIC_LABEL[clinic]}`, source: { kind: "location", clinic }, text: whereBlock },
+  ];
 
   // Payment, once. The templates already name the price in their own words, so
   // repeating it as a "Payment (£30–60 sliding scale):" heading said the same
   // thing twice. Only the details that aren't already in the letter go here.
   if (sendPayment) {
-    const payment = paymentBlock(settings, paymentRef);
-    if (payment) {
-      sections.push(payment);
+    const { freeText, bank } = paymentBlock(settings, paymentRef);
+    if (freeText) {
+      blocks.push({ id: "payment", label: "Payment wording", source: { kind: "message", field: "paymentDetails" }, text: freeText });
+    }
+    if (bank) {
+      blocks.push({ id: "bank", label: "Bank details", source: { kind: "bank" }, text: bank });
+    }
+    if (freeText || bank) {
       includes.push(
         paymentRef ? `Payment details & their reference ${paymentRef}` : `Payment details — ${CLINIC_PRICE[clinic]}`,
       );
@@ -309,28 +352,39 @@ export function composeBookingEmail(
   // the payment details and reference live on the same page — so it's described
   // by what it's for, not as "your account".
   if (portalLink && !template.includes("{portalLink}")) {
-    sections.push(
-      [
+    blocks.push({
+      id: "portal",
+      label: "Their booking page",
+      source: { kind: "auto" },
+      text: [
         "This is your own page for everything after today:",
         portalLink,
         "Book your next session from there whenever you're ready, move or cancel this one, and find my payment details and your reference any time. No login — just keep the link, it's worth bookmarking.",
       ].join("\n"),
-    );
+    });
   }
   if (portalLink) includes.push("Their own booking page — rebooking & payment details");
 
   // The one thing the client has to *do*, kept last so it's the final ask —
   // unless the template already positioned it with {intakeLink}.
   if (!template.includes("{intakeLink}")) {
-    sections.push(
-      `Before we meet, please fill in your short intake form — a couple of minutes, and it goes straight into your confidential record:\n${intakeLink}`,
-    );
+    blocks.push({
+      id: "intake",
+      label: "The intake form",
+      source: { kind: "auto" },
+      text: `Before we meet, please fill in your short intake form — a couple of minutes, and it goes straight into your confidential record:\n${intakeLink}`,
+    });
   }
   includes.push("Intake form link");
   if (settings.accessNote.trim()) includes.push("Access note — stairs, no step-free access");
 
-  sections.push(resolveSignOff(settings));
-  return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
+  blocks.push({ id: "signoff", label: "Your sign-off", source: { kind: "message", field: "emailSignOff" }, text: resolveSignOff(settings) });
+
+  const body = blocks
+    .map((b) => b.text)
+    .filter(Boolean)
+    .join("\n\n");
+  return { subject, body, includes, blocks };
 }
 
 /**

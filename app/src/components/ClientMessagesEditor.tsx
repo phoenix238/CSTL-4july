@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Card, PrimaryButton, useToast } from "./ui";
+import { api, Card, inputClass, PrimaryButton, useToast } from "./ui";
 import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } from "@/lib/clientCopy";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
@@ -191,20 +191,17 @@ const PAGE_GROUPS: Group[] = [
   },
 ];
 
-/** Every group, for the reset/fill-everything buttons that walk all fields. */
-const GROUPS: Group[] = [...EMAIL_GROUPS, ...BUILDING_BLOCK_GROUPS, ...PAGE_GROUPS];
-
 // Recommended wording for the settings-backed message fields — the clean,
 // voice-only starting point the composer is built around (facts placed for you,
 // signed once). Used by the per-field reset and the "fill everything" button.
 // Deliberately excludes the map-review LINKS, which are yours to paste in.
-const SETTINGS_MESSAGE_DEFAULTS: Partial<Record<keyof SettingsMessages, string>> = {
+export const SETTINGS_MESSAGE_DEFAULTS: Partial<Record<keyof SettingsMessages, string>> = {
   emailTemplate:
     "Hi {name},\n\nLovely to hear from you — you're booked in for {when} at {clinic}, {price}. Everything you need for the day is below; there's nothing to print or bring.\n\n{accessNote}",
   emailTemplateReturning: "Hi {name},\n\nJust confirming your next session: {when} at {clinic}.",
   emailSignOff: "with gratitude\nPhoenix",
   accessNote:
-    "My treatment space has no step-free access at either location — there are stairs. Please let me know if mobility or access is a concern and I'll do my best to accommodate you.",
+    "My treatment rooms are up a flight of stairs — there's no step-free access at either location. I also have a space I use when stairs are a problem, so if access is a concern for you, just reply and let me know and I'll book you in there instead.",
   paymentDetails: "You can pay on the day by card, or by bank transfer using the details below.",
   reviewEmailSubject: "How was your session?",
   reviewEmailBody:
@@ -261,14 +258,10 @@ function FieldEditor({
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="min-h-[96px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-[1.55] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
+          className={`${inputClass} min-h-[96px] resize-y leading-[1.55]`}
         />
       ) : (
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-        />
+        <input value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} />
       )}
       {placeholders?.length ? (
         <div className="flex flex-wrap gap-1 text-[10.5px] text-muted">
