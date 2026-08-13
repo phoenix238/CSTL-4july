@@ -9,7 +9,7 @@
 import { useMemo, useRef, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
 import { fmtDayShort, fmtTime, londonAddDays, londonDateKey, londonMinutes, londonTime, londonYMD } from "@/lib/time";
-import { AVAIL_COLORS, layoutDayEvents, SPAN_COLORS, type AvailWindowDTO, type SpanDTO } from "./layout";
+import { AVAIL_COLORS, CLINIC_LABEL, layoutDayEvents, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO } from "./layout";
 
 const HOUR_PX = 48;
 // Choosing a time snaps to this (Google-Calendar-style 15-min steps).
@@ -41,6 +41,8 @@ export interface TimeGridProps {
   onAvailabilityClick?: (w: AvailWindowDTO) => void;
   /** true while the calendar is in availability-editing mode */
   availabilityMode?: boolean;
+  /** availability mode: the clinic a newly-drawn window will belong to, used to colour the drag ghost */
+  activeClinic?: AvailClinic;
   /** picker mode config */
   picker?: {
     clinic: Clinic;
@@ -88,8 +90,10 @@ export function TimeGrid({
   dayNotes,
   onAvailabilityClick,
   availabilityMode = false,
+  activeClinic = "bethnal",
   picker,
 }: TimeGridProps) {
+  const ghostColor = AVAIL_COLORS[activeClinic].open;
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => londonAddDays(weekStart, i)),
     [weekStart],
@@ -350,52 +354,66 @@ export function TimeGrid({
                   </div>
                 )}
 
-                {/* availability layer — green = bookable, red = closed. Weekly
-                    baseline is faint and untouchable; drawn overrides are clickable. */}
-                {dayAvail[di].map((w, wi) => {
-                  const c = AVAIL_COLORS[w.kind];
-                  const editable = w.kind !== "weekly" && !!w.id;
-                  const top = toY(w.startMin);
-                  const height = Math.max(((w.endMin - w.startMin) / 60) * HOUR_PX, 12);
-                  const label =
-                    (w.kind === "block"
-                      ? "Unavailable"
-                      : w.kind === "weekly"
-                        ? "Usual hours"
-                        : w.kind === "bookable"
-                          ? "Bookable"
-                          : w.exactStart
-                            ? "Slot"
-                            : "Available") + (w.repeatWeekly ? " ↻" : "");
-                  return (
-                    <div
-                      key={`${w.kind}-${w.id ?? wi}`}
-                      onClick={
-                        editable
-                          ? (e) => {
-                              e.stopPropagation();
-                              onAvailabilityClick?.(w);
-                            }
-                          : undefined
-                      }
-                      className={`absolute right-[3px] left-[3px] overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
-                        editable ? "cursor-pointer hover:brightness-[0.97]" : "pointer-events-none"
-                      }`}
-                      style={{
-                        top,
-                        height,
-                        background: c.bg,
-                        border: `1px ${w.kind === "block" ? "solid" : "dashed"} ${c.border}`,
-                        color: c.text,
-                        zIndex: 1,
-                      }}
-                    >
-                      <span className="tabular-nums">
-                        {label} · {fmtTime(slotAt(day, w.startMin))}–{fmtTime(slotAt(day, w.endMin))}
-                      </span>
-                    </div>
-                  );
-                })}
+                {/* availability layer — green = Bethnal Green, blue = Waterloo, red =
+                    closed. Weekly baseline is faint and untouchable; drawn overrides
+                    are clickable. When both clinics are drawn on the same day they get
+                    their own side-by-side column instead of overlapping, so both stay
+                    readable at once; within a clinic's column, its own weekly/bookable
+                    layers still deliberately overlay each other. */}
+                {(() => {
+                  const clinicsPresent = Array.from(new Set(dayAvail[di].map((w) => w.clinic)));
+                  const multi = clinicsPresent.length > 1;
+                  return dayAvail[di].map((w, wi) => {
+                    const c = AVAIL_COLORS[w.clinic][w.kind];
+                    const editable = w.kind !== "weekly" && !!w.id;
+                    const top = toY(w.startMin);
+                    const height = Math.max(((w.endMin - w.startMin) / 60) * HOUR_PX, 12);
+                    const kindLabel =
+                      (w.kind === "block"
+                        ? "Unavailable"
+                        : w.kind === "weekly"
+                          ? "Usual hours"
+                          : w.kind === "bookable"
+                            ? "Bookable"
+                            : w.exactStart
+                              ? "Slot"
+                              : "Available") + (w.repeatWeekly ? " ↻" : "");
+                    const label = multi ? `${CLINIC_LABEL[w.clinic]} · ${kindLabel}` : kindLabel;
+                    const laneIndex = multi ? clinicsPresent.indexOf(w.clinic) : 0;
+                    const laneCount = multi ? clinicsPresent.length : 1;
+                    return (
+                      <div
+                        key={`${w.clinic}-${w.kind}-${w.id ?? wi}`}
+                        onClick={
+                          editable
+                            ? (e) => {
+                                e.stopPropagation();
+                                onAvailabilityClick?.(w);
+                              }
+                            : undefined
+                        }
+                        className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
+                          editable ? "cursor-pointer hover:brightness-[0.97]" : "pointer-events-none"
+                        } ${multi ? "" : "right-[3px] left-[3px]"}`}
+                        style={{
+                          top,
+                          height,
+                          ...(multi
+                            ? { left: `calc(${(laneIndex / laneCount) * 100}% + 3px)`, width: `calc(${100 / laneCount}% - 6px)` }
+                            : {}),
+                          background: c.bg,
+                          border: `1px ${w.kind === "block" ? "solid" : "dashed"} ${c.border}`,
+                          color: c.text,
+                          zIndex: 1,
+                        }}
+                      >
+                        <span className="tabular-nums">
+                          {label} · {fmtTime(slotAt(day, w.startMin))}–{fmtTime(slotAt(day, w.endMin))}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
 
                 {/* drag-to-create selection — the range you're sweeping out */}
                 {dragSel?.di === di && dragSel.b > dragSel.a && (
@@ -404,13 +422,13 @@ export function TimeGrid({
                     style={{
                       top: toY(dragSel.a),
                       height: ((dragSel.b - dragSel.a) / 60) * HOUR_PX,
-                      borderColor: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42 / 0.7)",
-                      background: availabilityMode ? AVAIL_COLORS.open.bg : "oklch(0.9 0.05 48 / 0.7)",
+                      borderColor: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42 / 0.7)",
+                      background: availabilityMode ? ghostColor.bg : "oklch(0.9 0.05 48 / 0.7)",
                     }}
                   >
                     <span
                       className="rounded-full px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop"
-                      style={{ background: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42)" }}
+                      style={{ background: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42)" }}
                     >
                       {availabilityMode ? "Available " : ""}
                       {fmtTime(slotAt(day, dragSel.a))}–{fmtTime(slotAt(day, dragSel.b))}
@@ -438,14 +456,14 @@ export function TimeGrid({
                       className="rounded-md border border-dashed"
                       style={{
                         height: HOUR_PX,
-                        borderColor: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42 / 0.6)",
-                        background: availabilityMode ? AVAIL_COLORS.open.bg : "oklch(0.9 0.05 48 / 0.5)",
+                        borderColor: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42 / 0.6)",
+                        background: availabilityMode ? ghostColor.bg : "oklch(0.9 0.05 48 / 0.5)",
                       }}
                     />
                     <div className="absolute -top-[1px] left-0">
                       <span
                         className="rounded-full px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop"
-                        style={{ background: availabilityMode ? AVAIL_COLORS.open.border : "oklch(0.58 0.115 42)" }}
+                        style={{ background: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42)" }}
                       >
                         {fmtTime(slotAt(day, hover.min))}
                       </span>
