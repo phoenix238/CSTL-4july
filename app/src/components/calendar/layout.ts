@@ -54,6 +54,8 @@ export const SPAN_COLORS: Record<
 /** Clinic key an availability window belongs to. */
 export type AvailClinic = "waterloo" | "bethnal";
 
+export const CLINIC_LABEL: Record<AvailClinic, string> = { bethnal: "Bethnal Green", waterloo: "Waterloo" };
+
 /**
  * One availability window drawn on the calendar.
  *
@@ -79,30 +81,36 @@ export interface AvailWindowDTO {
   exactStart?: boolean;
 }
 
-/** Colours for the availability layer — green = bookable, red = closed. */
-export const AVAIL_COLORS = {
-  // Solid and confident — this is the layer that's actually true for clients.
-  bookable: {
-    bg: "oklch(0.88 0.09 148 / 0.72)",
-    border: "oklch(0.52 0.14 148)",
-    text: "oklch(0.34 0.1 148)",
-  },
-  open: {
-    bg: "oklch(0.92 0.06 148 / 0.55)",
-    border: "oklch(0.6 0.13 148)",
-    text: "oklch(0.4 0.09 148)",
-  },
-  weekly: {
-    bg: "oklch(0.93 0.04 148 / 0.28)",
-    border: "oklch(0.72 0.07 148)",
-    text: "oklch(0.46 0.06 148)",
-  },
-  block: {
-    bg: "oklch(0.94 0.05 25 / 0.5)",
-    border: "oklch(0.62 0.14 25)",
-    text: "oklch(0.45 0.12 25)",
-  },
-} as const;
+/**
+ * Colours for the availability layer, one palette per clinic so Bethnal Green
+ * and Waterloo read as distinct at a glance when both are drawn on the grid
+ * together — Bethnal in green, Waterloo in blue. "Unavailable" stays a shared
+ * red in both, since "closed" is a universal signal worth keeping recognisable
+ * regardless of which clinic it belongs to.
+ */
+type AvailColorSet = { bg: string; border: string; text: string };
+type AvailKind = "bookable" | "open" | "weekly" | "block";
+
+const BLOCK_COLOR: AvailColorSet = {
+  bg: "oklch(0.94 0.05 25 / 0.5)",
+  border: "oklch(0.62 0.14 25)",
+  text: "oklch(0.45 0.12 25)",
+};
+
+function clinicPalette(hue: number): Record<AvailKind, AvailColorSet> {
+  return {
+    // Solid and confident — this is the layer that's actually true for clients.
+    bookable: { bg: `oklch(0.88 0.09 ${hue} / 0.72)`, border: `oklch(0.52 0.14 ${hue})`, text: `oklch(0.34 0.1 ${hue})` },
+    open: { bg: `oklch(0.92 0.06 ${hue} / 0.55)`, border: `oklch(0.6 0.13 ${hue})`, text: `oklch(0.4 0.09 ${hue})` },
+    weekly: { bg: `oklch(0.93 0.04 ${hue} / 0.28)`, border: `oklch(0.72 0.07 ${hue})`, text: `oklch(0.46 0.06 ${hue})` },
+    block: BLOCK_COLOR,
+  };
+}
+
+export const AVAIL_COLORS: Record<AvailClinic, Record<AvailKind, AvailColorSet>> = {
+  bethnal: clinicPalette(148), // green
+  waterloo: clinicPalette(255), // blue
+};
 
 export interface LaidOutEvent<T> {
   event: T;
