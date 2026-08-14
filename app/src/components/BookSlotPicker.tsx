@@ -17,12 +17,22 @@ export function BookSlotPicker({
    * frees up the slot the client currently holds so they can see around it. */
   slotsUrl = (c) => `/api/public/slots?clinic=${c}`,
   emptyMessage = "No times available right now — please check back soon, or get in touch directly.",
+  /**
+   * True (default) boxes the list to a fixed height with its own scrollbar —
+   * right for the admin/portal widgets this is embedded in, which sit
+   * alongside other content on the page. The public booking page has nothing
+   * below it competing for space, so it passes false and lets the list grow
+   * with the page instead — a scrollbar nested inside the page's own scroll
+   * reads as a bug, not a feature.
+   */
+  boxed = true,
 }: {
   clinic: Clinic;
   selected: string | null;
   onSelect: (iso: string) => void;
   slotsUrl?: (clinic: Clinic) => string;
   emptyMessage?: string;
+  boxed?: boolean;
 }) {
   const [slots, setSlots] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +70,7 @@ export function BookSlotPicker({
   }
 
   return (
-    <div className="flex max-h-[360px] flex-col gap-3 overflow-y-auto pr-1">
+    <div className={`flex flex-col gap-3 ${boxed ? "max-h-[360px] overflow-y-auto pr-1" : ""}`}>
       {[...groups.values()].map((times) => (
         <div key={times[0].toISOString()}>
           <div className="mb-1.5 text-[12px] font-semibold text-ink-soft">{fmtDayLong(times[0])}</div>

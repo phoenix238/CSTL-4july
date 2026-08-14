@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, Card, PrimaryButton, inputClass, useToast } from "./ui";
+import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
@@ -39,6 +39,10 @@ export function BookingFlow({
   const toast = useToast();
   const [clinic, setClinic] = useState<Clinic>("bethnal");
   const [selected, setSelected] = useState<string | null>(null);
+  // Separate from `selected` on purpose. Closing the box leaves the time they
+  // picked highlighted in the list behind it, and the box needs to keep
+  // rendering that time all the way through its closing animation.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -138,55 +142,14 @@ export function BookingFlow({
     );
   }
 
-  // Recognised them: one tap to book into the record they already have, one to
-  // back out if the address isn't theirs. Nothing is booked either way until
-  // they answer, so a wrong guess here costs nothing.
-  if (recognised) {
-    return (
-      <div className="mx-auto flex min-h-screen max-w-[520px] flex-col items-center justify-center gap-4 px-5 py-10 text-center">
-        <div className="font-serif text-2xl font-medium">{recognised.prompt}</div>
-        <p className="text-[13.5px] leading-relaxed text-muted">
-          {recognised.intakeDone
-            ? "If so, I'll add this session to your existing record — no intake form to fill in this time."
-            : "If so, I'll add this session to your existing record rather than starting a new one."}
-        </p>
-        <p className="text-[13px] leading-relaxed text-muted">
-          Booking as <span className="font-semibold text-ink-soft">{name.trim()}</span> · {email.trim()}
-        </p>
-        <div className="mt-1 flex w-full flex-col gap-2.5">
-          <PrimaryButton onClick={() => submit(true)} disabled={submitting} className="py-3">
-            {submitting ? "Booking…" : "Yes, that's me — book it"}
-          </PrimaryButton>
-          <button
-            onClick={() => {
-              // Clear the address rather than send them back to a form still
-              // holding the one we just told them belongs to someone else.
-              setEmail("");
-              setRecognised(null);
-            }}
-            className="cursor-pointer rounded-full border border-line bg-card px-4 py-2.5 text-[13px] font-semibold text-clay-text hover:bg-hoverbg"
-          >
-            No — let me use a different email
-          </button>
-        </div>
-        {linkSent ? (
-          <p className="text-[13px] font-medium text-sage-text">
-            Sent — check your email for your booking page link.
-          </p>
-        ) : (
-          <button
-            onClick={sendMyLink}
-            disabled={linkSending}
-            className="cursor-pointer text-[12.5px] font-semibold text-clay-text underline hover:text-clay disabled:cursor-default disabled:opacity-60"
-          >
-            {linkSending ? "Sending…" : "Or just email me my page link"}
-          </button>
-        )}
-        <p className="text-[12px] leading-relaxed text-muted">
-          If you&apos;re booking for someone else, please use their own email address so their notes stay theirs.
-        </p>
-      </div>
-    );
+  // Backing out mid-way shouldn't strand them: the box closes, the time stays
+  // highlighted in the list behind it, and tapping any time re-opens it with
+  // whatever they'd already typed still in the fields.
+  function closeSheet() {
+    if (submitting) return;
+    setSheetOpen(false);
+    setRecognised(null);
+    setLinkSent(false);
   }
 
   return (
@@ -204,6 +167,7 @@ export function BookingFlow({
               onClick={() => {
                 setClinic(c);
                 setSelected(null);
+                setSheetOpen(false);
               }}
               className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold select-none ${
                 clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
@@ -224,45 +188,147 @@ export function BookingFlow({
           {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
         </div>
 
-        <BookSlotPicker clinic={clinic} selected={selected} onSelect={setSelected} />
-
-        {selected && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit();
-            }}
-            className="flex flex-col gap-3 border-t border-hairline pt-4"
-          >
-            <div className="text-[13px] font-semibold">
-              {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
-            </div>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12.5px] font-semibold text-ink-soft">Email</span>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
-            </label>
-            <input
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              tabIndex={-1}
-              autoComplete="off"
-              aria-hidden="true"
-              className="absolute left-[-9999px] h-0 w-0 opacity-0"
-            />
-            <PrimaryButton type="submit" disabled={submitting} className="mt-1 py-3">
-              {submitting ? "Booking…" : "Confirm booking"}
-            </PrimaryButton>
-          </form>
-        )}
+        <BookSlotPicker
+          clinic={clinic}
+          selected={selected}
+          onSelect={(iso) => {
+            setSelected(iso);
+            setRecognised(null);
+            setSheetOpen(true);
+          }}
+          boxed={false}
+        />
       </Card>
+
+      <Sheet open={sheetOpen} onClose={closeSheet} label="Your details">
+        {selected && (
+          <div className="flex flex-col gap-4 px-5 pt-3 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:pb-6">
+            {/* The grab bar reads as "this slid up and can slide back down". On a
+                desktop dialog it would just be a stray line, so it stays on phones. */}
+            <div className="mx-auto h-1 w-9 shrink-0 rounded-full bg-line sm:hidden" />
+
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-serif text-[19px] leading-tight font-medium">
+                  {recognised ? recognised.prompt : "Your details"}
+                </div>
+                <div className="mt-1 text-[12.5px] text-muted">
+                  {CLINIC_LABEL[clinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeSheet}
+                aria-label="Close"
+                className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-full px-2 py-1 text-[17px] leading-none text-muted hover:bg-hoverbg hover:text-ink"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Recognised them: one tap to book into the record they already have,
+                one to back out if the address isn't theirs. Nothing is booked
+                either way until they answer, so a wrong guess here costs nothing. */}
+            {recognised ? (
+              <div key="recognised" className="ct-swap flex flex-col gap-3">
+                <p className="text-[13.5px] leading-relaxed text-muted">
+                  {recognised.intakeDone
+                    ? "If so, I'll add this session to your existing record — no intake form to fill in this time."
+                    : "If so, I'll add this session to your existing record rather than starting a new one."}
+                </p>
+                <p className="text-[13px] leading-relaxed text-muted">
+                  Booking as <span className="font-semibold text-ink-soft">{name.trim()}</span> · {email.trim()}
+                </p>
+                <div className="flex flex-col gap-2.5">
+                  <PrimaryButton onClick={() => submit(true)} disabled={submitting} className="py-3">
+                    {submitting ? "Booking…" : "Yes, that's me — book it"}
+                  </PrimaryButton>
+                  <button
+                    onClick={() => {
+                      // Clear the address rather than send them back to a form
+                      // still holding the one we just told them belongs to
+                      // someone else.
+                      setEmail("");
+                      setRecognised(null);
+                    }}
+                    className="cursor-pointer rounded-full border border-line bg-card px-4 py-2.5 text-[13px] font-semibold text-clay-text hover:bg-hoverbg"
+                  >
+                    No — let me use a different email
+                  </button>
+                </div>
+                {linkSent ? (
+                  <p className="text-center text-[13px] font-medium text-sage-text">
+                    Sent — check your email for your booking page link.
+                  </p>
+                ) : (
+                  <button
+                    onClick={sendMyLink}
+                    disabled={linkSending}
+                    className="cursor-pointer text-center text-[12.5px] font-semibold text-clay-text underline hover:text-clay disabled:cursor-default disabled:opacity-60"
+                  >
+                    {linkSending ? "Sending…" : "Or just email me my page link"}
+                  </button>
+                )}
+                <p className="text-[12px] leading-relaxed text-muted">
+                  If you&apos;re booking for someone else, please use their own email address so their notes stay
+                  theirs.
+                </p>
+              </div>
+            ) : (
+              <form
+                key="details"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submit();
+                }}
+                className="ct-swap flex flex-col gap-3"
+              >
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                    className={inputClass}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[12.5px] font-semibold text-ink-soft">Email</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    inputMode="email"
+                    className={inputClass}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    autoComplete="tel"
+                    inputMode="tel"
+                    className={inputClass}
+                  />
+                </label>
+                <input
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  className="absolute left-[-9999px] h-0 w-0 opacity-0"
+                />
+                <PrimaryButton type="submit" disabled={submitting} className="mt-1 py-3">
+                  {submitting ? "Booking…" : "Confirm booking"}
+                </PrimaryButton>
+              </form>
+            )}
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

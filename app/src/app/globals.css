@@ -68,3 +68,126 @@ body {
 .animate-ct-pulse {
   animation: ct-pulse 1.1s ease-in-out infinite;
 }
+
+/* ---------- sheet (see ui.tsx <Sheet>) ----------
+   Rises from the bottom edge on a phone, settles into the middle on anything
+   wider. Both directions are animated: a box that snaps out is as jarring as
+   one that snaps in. Durations here are mirrored by SHEET_LEAVE_MS in ui.tsx —
+   change one and change the other. */
+
+@keyframes ct-veil-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ct-veil-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ct-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ct-sheet-down {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+@keyframes ct-sheet-pop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ct-sheet-sink {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.ct-veil {
+  animation: ct-veil-in 220ms ease-out both;
+}
+
+.ct-veil-leaving {
+  animation: ct-veil-out 200ms ease-in both;
+}
+
+/* The ease is a soft-landing curve — quick off the mark, slow into place, so
+   the sheet reads as settling rather than arriving. */
+.ct-sheet {
+  animation: ct-sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.ct-sheet-leaving {
+  animation: ct-sheet-down 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (min-width: 640px) {
+  .ct-sheet {
+    animation: ct-sheet-pop 240ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+  }
+
+  .ct-sheet-leaving {
+    animation: ct-sheet-sink 180ms ease-in both;
+  }
+}
+
+/* Swapping the panel's contents in place (contact form → "is this you?") gets
+   the same treatment, so the box grows to its new height instead of jumping. */
+@keyframes ct-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ct-swap {
+  animation: ct-swap-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-veil,
+  .ct-veil-leaving,
+  .ct-sheet,
+  .ct-sheet-leaving,
+  .ct-swap {
+    animation-duration: 1ms;
+  }
+}

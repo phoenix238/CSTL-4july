@@ -16,6 +16,93 @@ export function useEscapeKey(onEscape: () => void, active = true) {
   }, [onEscape, active]);
 }
 
+/* ---------- sheet ---------- */
+
+/** Matches the leave animations in globals.css (.ct-sheet-leaving / .ct-veil-leaving). */
+const SHEET_LEAVE_MS = 200;
+
+/**
+ * A panel that animates in over the page — a bottom sheet on a phone, a centred
+ * dialog on anything wider.
+ *
+ * It stays mounted for the length of its leave animation after `open` goes
+ * false, which is the whole reason this isn't just `{open && <div/>}`: unmounting
+ * on the spot would make it vanish rather than close.
+ */
+export function Sheet({
+  open,
+  onClose,
+  label,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Accessible name for the dialog. */
+  label: string;
+  children: React.ReactNode;
+}) {
+  const [mounted, setMounted] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setLeaving(false);
+      return;
+    }
+    if (!mounted) return;
+    setLeaving(true);
+    const t = setTimeout(() => {
+      setMounted(false);
+      setLeaving(false);
+    }, SHEET_LEAVE_MS);
+    return () => clearTimeout(t);
+  }, [open, mounted]);
+
+  // Hold the page still underneath. Without this the body scrolls behind the
+  // sheet on a phone, which reads as the sheet itself drifting.
+  useEffect(() => {
+    if (!mounted) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [mounted]);
+
+  // Move focus to the panel rather than to the first field: on a phone, focusing
+  // an input throws the keyboard up mid-animation and the sheet lands behind it.
+  useEffect(() => {
+    if (open) panel.current?.focus({ preventScroll: true });
+  }, [open]);
+
+  useEscapeKey(onClose, open);
+
+  if (!mounted) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+      <div
+        onClick={onClose}
+        className={`absolute inset-0 bg-[oklch(0.3_0.02_60_/_0.28)] ${leaving ? "ct-veil-leaving" : "ct-veil"}`}
+      />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+        className={`relative max-h-[88svh] w-full overflow-y-auto rounded-t-2xl border border-line bg-card shadow-pop outline-none sm:max-w-[440px] sm:rounded-2xl ${
+          leaving ? "ct-sheet-leaving" : "ct-sheet"
+        }`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- shared atoms, matching the design's card/chip/button styles ---------- */
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
