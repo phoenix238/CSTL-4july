@@ -202,11 +202,7 @@ export function BookingFlow({
 
       <Sheet open={sheetOpen} onClose={closeSheet} label="Your details">
         {selected && (
-          <div className="flex flex-col gap-4 px-5 pt-3 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:pt-5 sm:pb-6">
-            {/* The grab bar reads as "this slid up and can slide back down". On a
-                desktop dialog it would just be a stray line, so it stays on phones. */}
-            <div className="mx-auto h-1 w-9 shrink-0 rounded-full bg-line sm:hidden" />
-
+          <div className="flex flex-col gap-4 px-5 py-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:py-6">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="font-serif text-[19px] leading-tight font-medium">

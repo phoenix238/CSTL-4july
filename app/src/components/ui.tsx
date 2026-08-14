@@ -22,8 +22,9 @@ export function useEscapeKey(onEscape: () => void, active = true) {
 const SHEET_LEAVE_MS = 200;
 
 /**
- * A panel that animates in over the page — a bottom sheet on a phone, a centred
- * dialog on anything wider.
+ * A panel that pops in over the page, centred in front of whatever's behind
+ * it — same treatment at every viewport width, so it never reads as docked to
+ * an edge or only covering part of the screen.
  *
  * It stays mounted for the length of its leave animation after `open` goes
  * false, which is the whole reason this isn't just `{open && <div/>}`: unmounting
@@ -82,7 +83,7 @@ export function Sheet({
   if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         onClick={onClose}
         className={`absolute inset-0 bg-[oklch(0.3_0.02_60_/_0.28)] ${leaving ? "ct-veil-leaving" : "ct-veil"}`}
@@ -93,7 +94,7 @@ export function Sheet({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className={`relative max-h-[88svh] w-full overflow-y-auto rounded-t-2xl border border-line bg-card shadow-pop outline-none sm:max-w-[440px] sm:rounded-2xl ${
+        className={`relative max-h-[88svh] w-full max-w-[440px] overflow-y-auto rounded-2xl border border-line bg-card shadow-pop outline-none ${
           leaving ? "ct-sheet-leaving" : "ct-sheet"
         }`}
       >

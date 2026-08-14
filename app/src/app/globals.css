@@ -70,10 +70,10 @@ body {
 }
 
 /* ---------- sheet (see ui.tsx <Sheet>) ----------
-   Rises from the bottom edge on a phone, settles into the middle on anything
-   wider. Both directions are animated: a box that snaps out is as jarring as
-   one that snaps in. Durations here are mirrored by SHEET_LEAVE_MS in ui.tsx —
-   change one and change the other. */
+   Pops in centred, in front of whatever's behind it — same treatment at every
+   viewport width. Both directions are animated: a box that snaps out is as
+   jarring as one that snaps in. Durations here are mirrored by SHEET_LEAVE_MS
+   in ui.tsx — change one and change the other. */
 
 @keyframes ct-veil-in {
   from {
@@ -90,28 +90,6 @@ body {
   }
   to {
     opacity: 0;
-  }
-}
-
-@keyframes ct-sheet-up {
-  from {
-    opacity: 0;
-    transform: translateY(100%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes ct-sheet-down {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(100%);
   }
 }
 
@@ -145,24 +123,12 @@ body {
   animation: ct-veil-out 200ms ease-in both;
 }
 
-/* The ease is a soft-landing curve — quick off the mark, slow into place, so
-   the sheet reads as settling rather than arriving. */
 .ct-sheet {
-  animation: ct-sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: ct-sheet-pop 240ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
 }
 
 .ct-sheet-leaving {
-  animation: ct-sheet-down 200ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-
-@media (min-width: 640px) {
-  .ct-sheet {
-    animation: ct-sheet-pop 240ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
-  }
-
-  .ct-sheet-leaving {
-    animation: ct-sheet-sink 180ms ease-in both;
-  }
+  animation: ct-sheet-sink 180ms ease-in both;
 }
 
 /* Swapping the panel's contents in place (contact form → "is this you?") gets
