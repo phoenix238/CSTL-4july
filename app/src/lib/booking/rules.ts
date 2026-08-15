@@ -39,6 +39,8 @@ export interface PlannedEvent {
   /** event body — used on the venue-facing room event to tell the clinic what
    * they need (session time, a contact line) without exposing the client's name */
   description?: string;
+  /** Google event colour id — see CLINIC_EVENT_COLOR */
+  colorId?: string;
 }
 
 export const SESSION_MINUTES = 60;
@@ -55,6 +57,22 @@ export const CLINIC_LABEL: Record<Clinic, string> = {
 export const CLINIC_PRICE: Record<Clinic, string> = {
   waterloo: "£80",
   bethnal: "£30–60 sliding scale",
+};
+
+/**
+ * Which colour each clinic's session shows as in Google Calendar, so a glance
+ * at the phone says where you're meant to be without opening anything.
+ *
+ * These ids index Google's *event* palette, which is a fixed set of eleven:
+ * Lavender 1, Sage 2, Grape 3, Flamingo 4, Banana 5, Tangerine 6, Peacock 7,
+ * Graphite 8, Blueberry 9, Basil 10, Tomato 11. The longer list of names
+ * including Cherry Blossom belongs to the palette for colouring a whole
+ * calendar, and can't be applied to a single event — so Bethnal Green uses
+ * Flamingo (#e67c73), the blossom pink of the set that is available.
+ */
+export const CLINIC_EVENT_COLOR: Record<Clinic, string> = {
+  bethnal: "4", // Flamingo — the event palette's cherry-blossom pink
+  waterloo: "6", // Tangerine
 };
 
 const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
@@ -87,6 +105,7 @@ export function planBookingEvents(
         end: sessionEnd,
         inviteClient: true,
         location,
+        colorId: CLINIC_EVENT_COLOR.waterloo,
       },
       {
         calendar: "room",
@@ -108,6 +127,7 @@ export function planBookingEvents(
       end: sessionEnd,
       inviteClient: true,
       location,
+      colorId: CLINIC_EVENT_COLOR.bethnal,
     },
   ];
 }

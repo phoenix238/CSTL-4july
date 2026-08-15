@@ -9,7 +9,7 @@ import { ClientMessagesEditor } from "./ClientMessagesEditor";
 import { PortalSettings } from "./PortalSettings";
 import { PaymentMatching } from "./PaymentMatching";
 import { GoogleConnectionPanel } from "./GoogleConnectionPanel";
-import { RenameCalendarEventsButton } from "./RenameCalendarEventsButton";
+import { TidyCalendarEventsButton } from "./TidyCalendarEventsButton";
 import { TestEmailPanel } from "./TestEmailPanel";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -618,6 +618,7 @@ export function SettingsView({
             <Row label="Chalk Farm calendar">
               {settings.chalkFarmCalendarId || "not set — needed for Bethnal Green bookings"}
             </Row>
+            <Row label="Session colours">Bethnal Green pink · Waterloo orange</Row>
             <Row label="Event reminders" last>
               Email 24 h before · popup 1 h before
             </Row>
@@ -650,7 +651,7 @@ export function SettingsView({
             </PrimaryButton>
           </Card>
         )}
-        <RenameCalendarEventsButton />
+        <TidyCalendarEventsButton />
       </Dropdown>
 
       <SectionLabel className="pt-2">ADD TO YOUR IPHONE</SectionLabel>

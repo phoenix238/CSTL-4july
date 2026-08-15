@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockedRange, planBookingEvents } from "./rules";
+import { blockedRange, CLINIC_EVENT_COLOR, planBookingEvents } from "./rules";
 
 const at = (h: number, m = 0) => new Date(Date.UTC(2026, 6, 7, h, m));
 
@@ -57,6 +57,32 @@ describe("planBookingEvents", () => {
     expect(personal.start).toEqual(at(14));
     expect(personal.end).toEqual(at(15));
     expect(personal.inviteClient).toBe(true);
+  });
+
+  it("colours each clinic's session so a glance at the calendar says where you are", () => {
+    const bethnal = planBookingEvents("bethnal", at(14))[0];
+    const waterloo = planBookingEvents("waterloo", at(9)).find((e) => e.calendar === "personal")!;
+
+    expect(bethnal.colorId).toBe(CLINIC_EVENT_COLOR.bethnal);
+    expect(waterloo.colorId).toBe(CLINIC_EVENT_COLOR.waterloo);
+    // The two clinics must never be given the same colour — telling them apart
+    // at a glance is the entire point.
+    expect(bethnal.colorId).not.toBe(waterloo.colorId);
+  });
+
+  it("uses ids from Google's eleven-colour event palette", () => {
+    // Anything outside 1–11 is silently rejected by Google and the event comes
+    // back the calendar's default colour, with no error to notice.
+    for (const id of Object.values(CLINIC_EVENT_COLOR)) {
+      expect(Number(id)).toBeGreaterThanOrEqual(1);
+      expect(Number(id)).toBeLessThanOrEqual(11);
+      expect(id).toMatch(/^\d+$/);
+    }
+  });
+
+  it("leaves the shared room event uncoloured — it lives on the venue's calendar", () => {
+    const room = planBookingEvents("waterloo", at(9)).find((e) => e.calendar === "room")!;
+    expect(room.colorId).toBeUndefined();
   });
 });
 
