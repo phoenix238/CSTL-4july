@@ -7,8 +7,7 @@ import { FlowerOfLife } from "./FlowerOfLife";
 import { ClientSearch } from "./ClientSearch";
 
 const NAV = [
-  { label: "Today", href: "/" },
-  { label: "This week", href: "/week" },
+  { label: "Home", href: "/" },
   { label: "Session", href: "/session" },
   { label: "Reflect", href: "/reflect" },
   { label: "Clients", href: "/clients" },
