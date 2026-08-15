@@ -54,6 +54,21 @@ export interface TimeGridProps {
   /** swipe left/right (or the parent's own buttons) to page the range */
   onPage?: (dir: -1 | 1) => void;
   /**
+   * Fill the parent's box and scroll the hours inside it, day headers pinned,
+   * edge to edge — the immersive treatment a phone wants. Off by default, where
+   * the grid renders at its natural height and the page does the scrolling.
+   */
+  fill?: boolean;
+  /**
+   * fill mode: where to start the hour scroll. null opens on the current time.
+   * Paging remounts the grid to restart its slide animation, so the parent
+   * holds this and hands it back — otherwise every flick would throw you back
+   * to the morning.
+   */
+  initialScrollTop?: number | null;
+  /** fill mode: report the hour scroll so the parent can hand it back after a page turn */
+  onScrollTop?: (top: number) => void;
+  /**
    * availability mode: green background windows the practitioner is bookable in.
    * When set, the drag-to-select ghost reads as "Available" (green), so dragging
    * marks availability rather than adding an event.
@@ -119,6 +134,9 @@ export function TimeGrid({
   onRangeSelect,
   onEventMove,
   onPage,
+  fill = false,
+  initialScrollTop = null,
+  onScrollTop,
   availWindows,
   dayNotes,
   onAvailabilityClick,
@@ -227,6 +245,23 @@ export function TimeGrid({
   const scrollLock = useRef(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const vScrollRef = useRef<HTMLDivElement>(null);
+
+  // Open on the hour you're actually in, the way a calendar app does, rather
+  // than at the top of the working day — unless the parent kept a position from
+  // before a page turn, which wins.
+  useEffect(() => {
+    if (!fill) return;
+    const el = vScrollRef.current;
+    if (!el) return;
+    const max = Math.max(0, el.scrollHeight - el.clientHeight);
+    const target =
+      initialScrollTop ??
+      ((londonMinutes(new Date()) - 60) / 60 - startHour) * HOUR_PX; // an hour of lead-in
+    el.scrollTop = Math.max(0, Math.min(target, max));
+    // Mount only: re-running would yank the grid back while it's being read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fill]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -364,8 +399,44 @@ export function TimeGrid({
     timer: ReturnType<typeof setTimeout> | null;
   } | null>(null);
   const [dragSel, setDragSel] = useState<{ di: number; a: number; b: number } | null>(null);
-  /** When the last swipe finished, so its trailing click can be ignored. */
+  /** When the last swipe finished, so its trailing tap can be ignored. */
   const swipedAt = useRef(0);
+
+  /**
+   * Paging is read here, in the capture phase on the whole grid, rather than on
+   * the day columns — because a session block stops the event from reaching its
+   * column, so a flick that happened to start on one used to open that session
+   * instead of turning the page. Capture sees the gesture first whatever it
+   * lands on, and because it runs before the target's own handler, the checks
+   * below still see a drag that's genuinely in progress and stand down for it.
+   */
+  const handleSwipeCapture = (e: React.PointerEvent) => {
+    if (!compact || !onPage || e.pointerType === "mouse" || e.button !== 0) return;
+    const from = { x: e.clientX, y: e.clientY, at: Date.now() };
+    const end = (ev: PointerEvent) => {
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      // Something is being dragged or resized — that gesture owns the finger.
+      if (draftRef.current || evDragRef.current) return;
+      const dx = ev.clientX - from.x;
+      const dy = ev.clientY - from.y;
+      if (
+        Math.abs(dx) > SWIPE_PX &&
+        Math.abs(dx) > Math.abs(dy) * 1.5 &&
+        Date.now() - from.at < 600
+      ) {
+        // Stamped before the target's handler runs, so the tap it would
+        // otherwise report — opening a session, booking a slot — is swallowed.
+        swipedAt.current = Date.now();
+        cfgRef.current.onPage?.(dx > 0 ? -1 : 1);
+      }
+    };
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+
+  /** True when the gesture that just ended was a page turn, not a tap. */
+  const justSwiped = () => Date.now() - swipedAt.current < 400;
 
   const handleColumnDown = (day: Date, di: number) => (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
@@ -374,7 +445,6 @@ export function TimeGrid({
       setDraftBoth(null);
       return;
     }
-    if (!slotSelectable && !(compact && onPage)) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const touch = e.pointerType !== "mouse";
     const p = {
@@ -436,19 +506,11 @@ export function TimeGrid({
       if (!d) return;
       const dx = ev.clientX - d.x;
       const dy = ev.clientY - d.y;
-      const elapsed = Date.now() - d.at;
       cleanup();
       if (d.longPressed) return; // the draft gesture owns it now
-
-      // A quick sideways flick pages the calendar. The click that follows the
-      // same gesture would otherwise land on whatever column it ended over —
-      // in picker mode that books a slot — so it's swallowed for a moment.
-      const { onPage: page } = cfgRef.current;
-      if (compact && page && Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.5 && elapsed < 600) {
-        swipedAt.current = Date.now();
-        page(dx > 0 ? -1 : 1);
-        return;
-      }
+      // Paging is decided in handleSwipeCapture; if that's what this was, the
+      // gesture is spent and must not also book a slot.
+      if (justSwiped()) return;
       if (!slotSelectable) return;
 
       const { startHour: sh, endHour: eh, onSlotClick: click, onRangeSelect: range } = cfgRef.current;
@@ -539,9 +601,11 @@ export function TimeGrid({
       teardown.current = null;
       if (!commit) return;
       const { onEventClick: click, onEventMove: mv } = cfgRef.current;
-      // Never picked up, or picked up and put back where it was: that's a tap.
+      // Never picked up, or picked up and put back where it was: that's a tap —
+      // unless the gesture was a flick to the next page, which starts on a
+      // session as readily as on empty grid and mustn't open it.
       if (d?.moved && mv) mv(d.span, slotAt(d.day, d.lastStartMin));
-      else if (click && ev) click(span, { x: ev.clientX, y: ev.clientY });
+      else if (click && ev && !justSwiped()) click(span, { x: ev.clientX, y: ev.clientY });
     };
     const up = (ev: PointerEvent) => finish(true, ev);
     const cancel = () => finish(false);
@@ -564,7 +628,7 @@ export function TimeGrid({
 
   const handlePickerTap = (day: Date) => (e: React.MouseEvent<HTMLDivElement>) => {
     if (!pickerSelectable || !picker || e.target !== e.currentTarget) return;
-    if (Date.now() - swipedAt.current < 400) return; // trailing click of a swipe
+    if (justSwiped()) return; // trailing click of a page turn
     const rect = e.currentTarget.getBoundingClientRect();
     const min = snapMinFromY(e.clientY - rect.top);
     const slot = slotAt(day, min);
@@ -574,29 +638,34 @@ export function TimeGrid({
 
   const draftDay = draft ? days[draft.di] ?? days[0] : null;
 
-  return (
-    <div ref={scrollerRef} className={compact ? "pb-2" : "overflow-x-auto pb-2"}>
-      <div className={compact ? "" : "min-w-[760px]"}>
-        {/* day headers */}
-        <div className="flex">
-          <div className="w-12 flex-none" />
-          {days.map((day) => {
-            const isToday = sameLondonDay(day, now);
-            return (
-              <div key={day.toISOString()} className="min-w-0 flex-1 px-1 pb-1.5 text-center">
-                <span
-                  className={`inline-block rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${
-                    isToday ? "bg-clay-tint text-clay-text" : "text-ink-soft"
-                  }`}
-                >
-                  {fmtDayShort(day)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+  // In fill mode the grid owns a fixed box and scrolls its own hours, so the day
+  // headers stay put at the top instead of sliding away with the page — the
+  // thing that makes a calendar feel like a calendar rather than a long page.
+  const dayHeaders = (
+    <div className={`flex ${fill ? "flex-none border-b border-line bg-linen pt-0.5" : ""}`}>
+      <div className="w-12 flex-none" />
+      {days.map((day) => {
+        const isToday = sameLondonDay(day, now);
+        return (
+          <div key={day.toISOString()} className="min-w-0 flex-1 px-1 pb-1.5 text-center">
+            <span
+              className={`inline-block rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${
+                isToday ? "bg-clay-tint text-clay-text" : "text-ink-soft"
+              }`}
+            >
+              {fmtDayShort(day)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 
-        <div ref={bodyRef} className="flex rounded-2xl border border-line bg-card shadow-card">
+  const gridBody = (
+    <div
+      ref={bodyRef}
+      className={`flex ${fill ? "bg-card" : "rounded-2xl border border-line bg-card shadow-card"}`}
+    >
           {/* hour axis */}
           <div className="relative w-12 flex-none" style={{ height: gridHeight }}>
             {Array.from({ length: endHour - startHour }, (_, i) => (
@@ -635,7 +704,7 @@ export function TimeGrid({
             return (
               <div
                 key={day.toISOString()}
-                onPointerDown={slotSelectable || (compact && onPage) ? handleColumnDown(day, di) : undefined}
+                onPointerDown={slotSelectable ? handleColumnDown(day, di) : undefined}
                 onClick={pickerSelectable ? handlePickerTap(day) : undefined}
                 onMouseMove={handleColumnHover(di)}
                 onMouseLeave={() => setHover((h) => (h?.di === di ? null : h))}
@@ -920,7 +989,30 @@ export function TimeGrid({
               </div>
             );
           })}
-        </div>
+    </div>
+  );
+
+  return (
+    <div
+      ref={scrollerRef}
+      onPointerDownCapture={handleSwipeCapture}
+      className={
+        fill ? "flex h-full min-h-0 flex-col" : compact ? "pb-2" : "overflow-x-auto pb-2"
+      }
+    >
+      <div className={fill ? "flex h-full min-h-0 flex-col" : compact ? "" : "min-w-[760px]"}>
+        {dayHeaders}
+        {fill ? (
+          <div
+            ref={vScrollRef}
+            onScroll={(e) => onScrollTop?.(e.currentTarget.scrollTop)}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          >
+            {gridBody}
+          </div>
+        ) : (
+          gridBody
+        )}
       </div>
 
       {/* The draft's confirm bar — the web equivalent of the "(No title)" sheet

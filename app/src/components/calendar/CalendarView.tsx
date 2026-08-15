@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   londonAddDays,
   londonDateKey,
@@ -14,7 +14,7 @@ import {
   fmtTime,
 } from "@/lib/time";
 import type { WeeklyHours } from "@/lib/booking/availability";
-import { api, OutlineButton, PrimaryButton, Sheet, useToast } from "../ui";
+import { api, OutlineButton, PrimaryButton, Sheet, useIsPhone, useToast } from "../ui";
 import { AvailabilityComposer } from "./AvailabilityComposer";
 import { BookingPopover } from "./BookingPopover";
 import { BookingsList } from "./BookingsList";
@@ -82,6 +82,7 @@ const VIEW_LABEL: Record<CalView, string> = { "3day": "3 days", week: "Week", mo
 
 export function CalendarView() {
   const toast = useToast();
+  const phone = useIsPhone();
   const [view, setView] = useState<CalView>("week");
   const [anchor, setAnchor] = useState(() => new Date());
   // Which way the range last moved, so the incoming page slides in from the
@@ -100,6 +101,9 @@ export function CalendarView() {
   // A dragged session waiting to be confirmed — nothing has been sent yet.
   const [pendingMove, setPendingMove] = useState<{ span: SpanDTO; newStart: Date } | null>(null);
   const [moving, setMoving] = useState(false);
+  // How far down the hours you'd scrolled. Paging remounts the grid, so this
+  // survives out here and is handed straight back.
+  const gridScrollTop = useRef<number | null>(null);
   const [hidden, setHidden] = useState<Set<SpanSource>>(new Set());
 
   // Availability-editing mode: draw the times you're bookable for online booking.
@@ -427,11 +431,14 @@ export function CalendarView() {
   }
 
   return (
-    <div className="flex max-w-[1200px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
+    <div className="flex max-w-[1200px] flex-col gap-3 p-3 pb-10 sm:gap-4 sm:p-5 lg:px-[30px] lg:pt-[26px]">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Calendar</h1>
-          <div className="mt-[5px] text-[13.5px] text-muted">
+          <h1 className="font-serif text-[22px] leading-[1.1] sm:text-[26px] lg:text-[28px]">Calendar</h1>
+          {/* The instructions are a paragraph, and a paragraph is most of a
+              phone screen. The gestures they describe are discoverable by
+              doing; the space is better spent on the calendar itself. */}
+          <div className="mt-[5px] hidden text-[13.5px] text-muted sm:block">
             {availMode
               ? "Drag across the grid to mark when you're available for online booking. Tap a window to edit or remove it."
               : showAvailability
@@ -594,11 +601,22 @@ export function CalendarView() {
         ) : (
           <div
             key={page.n}
-            className={page.dir === 1 ? "ct-page-next" : page.dir === -1 ? "ct-page-prev" : undefined}
+            /* On a phone the grid runs edge to edge (-mx-3 cancels the page's
+               padding) and takes the rest of the screen, scrolling its own
+               hours under pinned day headers. Above sm it goes back to sitting
+               in the page at its natural height. */
+            className={`-mx-3 h-[calc(100svh-186px)] min-h-[320px] sm:mx-0 sm:h-auto ${
+              page.dir === 1 ? "ct-page-next" : page.dir === -1 ? "ct-page-prev" : ""
+            }`}
           >
           <TimeGrid
             start={rangeStart}
             days={gridDays}
+            fill={phone}
+            initialScrollTop={gridScrollTop.current}
+            onScrollTop={(t) => {
+              gridScrollTop.current = t;
+            }}
             onPage={(dir) => nav(dir)}
             spans={visible(week.spans) ?? []}
             mode="display"
