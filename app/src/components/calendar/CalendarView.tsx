@@ -104,6 +104,7 @@ export function CalendarView() {
   // How far down the hours you'd scrolled. Paging remounts the grid, so this
   // survives out here and is handed straight back.
   const gridScrollTop = useRef<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [hidden, setHidden] = useState<Set<SpanSource>>(new Set());
 
   // Availability-editing mode: draw the times you're bookable for online booking.
@@ -430,15 +431,107 @@ export function CalendarView() {
     setQuickBookSlot(slot);
   }
 
+  /* The controls, built once and placed twice: spread across the header on a
+     laptop, stacked inside the menu on a phone, where the screen belongs to the
+     calendar and everything else is a tap away. */
+
+  const availabilityToggle = !availMode ? (
+    <button
+      onClick={toggleShowAvailability}
+      aria-pressed={showAvailability}
+      className={`cursor-pointer rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+        showAvailability
+          ? "border-sage/60 bg-sage-tint text-sage-text"
+          : "border-line bg-card text-ink-soft hover:bg-hoverbg"
+      }`}
+    >
+      {showAvailability ? "Hide availability" : "Show availability"}
+    </button>
+  ) : null;
+
+  const availabilityButton = (
+    <button
+      onClick={() => (availMode ? setAvailMode(false) : enterAvailability())}
+      className={`cursor-pointer rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+        availMode ? "text-cream" : "border-line bg-card text-ink-soft hover:bg-hoverbg"
+      }`}
+      style={
+        availMode
+          ? { background: AVAIL_COLORS[availClinic].open.border, borderColor: AVAIL_COLORS[availClinic].open.border }
+          : undefined
+      }
+    >
+      {availMode ? "Done editing availability" : "Set availability"}
+    </button>
+  );
+
+  const viewSwitcher = !availMode ? (
+    <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+      {(["3day", "week", "month"] as const).map((v) => (
+        <button
+          key={v}
+          onClick={() => chooseView(v)}
+          className={`flex-1 cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold select-none ${
+            view === v ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+          }`}
+        >
+          {VIEW_LABEL[v]}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  const navButtons = (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => nav(-1)}
+        className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[13px] font-semibold hover:bg-hoverbg"
+        aria-label="Previous"
+      >
+        ‹
+      </button>
+      <button
+        onClick={() => nav(0)}
+        className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] font-semibold hover:bg-hoverbg"
+      >
+        Today
+      </button>
+      <button
+        onClick={() => nav(1)}
+        className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[13px] font-semibold hover:bg-hoverbg"
+        aria-label="Next"
+      >
+        ›
+      </button>
+    </div>
+  );
+
   return (
-    <div className="flex max-w-[1200px] flex-col gap-3 p-3 pb-10 sm:gap-4 sm:p-5 lg:px-[30px] lg:pt-[26px]">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex max-w-[1200px] flex-col gap-3 p-0 sm:gap-4 sm:p-5 sm:pb-10 lg:px-[30px] lg:pt-[26px] max-sm:h-[calc(100svh-52px)]">
+      {/* phone: one slim strip — where you are, and the way in to everything else */}
+      <div className="flex flex-none items-center justify-between gap-3 border-b border-line px-3 py-2 sm:hidden">
+        <span className="truncate text-[13px] font-semibold text-ink-soft">{rangeLabel}</span>
+        <div className="flex flex-none items-center gap-1.5">
+          <button
+            onClick={() => nav(0)}
+            className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] font-semibold"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => setMenuOpen(true)}
+            aria-label="Calendar options"
+            className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft"
+          >
+            •••
+          </button>
+        </div>
+      </div>
+
+      <header className="hidden flex-wrap items-end justify-between gap-3 sm:flex">
         <div>
-          <h1 className="font-serif text-[22px] leading-[1.1] sm:text-[26px] lg:text-[28px]">Calendar</h1>
-          {/* The instructions are a paragraph, and a paragraph is most of a
-              phone screen. The gestures they describe are discoverable by
-              doing; the space is better spent on the calendar itself. */}
-          <div className="mt-[5px] hidden text-[13.5px] text-muted sm:block">
+          <h1 className="font-serif text-[26px] leading-[1.1] lg:text-[28px]">Calendar</h1>
+          <div className="mt-[5px] text-[13.5px] text-muted">
             {availMode
               ? "Drag across the grid to mark when you're available for online booking. Tap a window to edit or remove it."
               : showAvailability
@@ -447,71 +540,66 @@ export function CalendarView() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!availMode && (
-            <button
-              onClick={toggleShowAvailability}
-              aria-pressed={showAvailability}
-              className={`cursor-pointer rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                showAvailability
-                  ? "border-sage/60 bg-sage-tint text-sage-text"
-                  : "border-line bg-card text-ink-soft hover:bg-hoverbg"
-              }`}
-            >
-              {showAvailability ? "Hide availability" : "Show availability"}
-            </button>
-          )}
-          <button
-            onClick={() => (availMode ? setAvailMode(false) : enterAvailability())}
-            className={`cursor-pointer rounded-full border px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-              availMode ? "text-cream" : "border-line bg-card text-ink-soft hover:bg-hoverbg"
-            }`}
-            style={availMode ? { background: AVAIL_COLORS[availClinic].open.border, borderColor: AVAIL_COLORS[availClinic].open.border } : undefined}
-          >
-            {availMode ? "Done editing availability" : "Set availability"}
-          </button>
-          {!availMode && (
-            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["3day", "week", "month"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => chooseView(v)}
-                  className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold select-none ${
-                    view === v ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-                  }`}
-                >
-                  {VIEW_LABEL[v]}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => nav(-1)}
-              className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[13px] font-semibold hover:bg-hoverbg"
-              aria-label="Previous"
-            >
-              ‹
-            </button>
-            <button
-              onClick={() => nav(0)}
-              className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] font-semibold hover:bg-hoverbg"
-            >
-              Today
-            </button>
-            <button
-              onClick={() => nav(1)}
-              className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[13px] font-semibold hover:bg-hoverbg"
-              aria-label="Next"
-            >
-              ›
-            </button>
-          </div>
+          {availabilityToggle}
+          {availabilityButton}
+          {viewSwitcher}
+          {navButtons}
           <div className="text-[13px] font-semibold text-ink-soft">{rangeLabel}</div>
         </div>
       </header>
 
+      {menuOpen && (
+        <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} label="Calendar options">
+          <div className="flex flex-col gap-4 p-5">
+            <div>
+              <h2 className="font-serif text-[19px] leading-tight">Calendar</h2>
+              <div className="mt-0.5 text-[13px] text-muted">{rangeLabel}</div>
+            </div>
+            {viewSwitcher && <div className="flex flex-col gap-1.5">{viewSwitcher}</div>}
+            <div className="flex flex-wrap items-center gap-2">
+              {navButtons}
+              {availabilityToggle}
+              <span onClick={() => setMenuOpen(false)}>{availabilityButton}</span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[11px] font-semibold tracking-[0.08em] text-muted">CALENDARS</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {CALENDAR_SOURCES.map((s) => {
+                  const c = SPAN_COLORS[s];
+                  const off = hidden.has(s);
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => toggleSource(s)}
+                      className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold select-none ${
+                        off ? "border-line bg-transparent text-faint" : "border-transparent text-ink-soft"
+                      }`}
+                      style={off ? undefined : { background: c.bg, color: c.text }}
+                    >
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ background: off ? "oklch(0.8 0.01 80)" : c.border }}
+                      />
+                      {c.label}
+                      {off && <span className="text-[10px]">hidden</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <p className="text-[12px] leading-[1.6] text-muted">
+              Tap a booking to manage it, tap a free space to book a client, or press and hold the grid to add an
+              event. Only client sessions can be dragged, and a move is confirmed before anyone is told.
+            </p>
+            <OutlineButton onClick={() => setMenuOpen(false)} className="self-start px-4 py-2 text-[13px]">
+              Done
+            </OutlineButton>
+          </div>
+        </Sheet>
+      )}
+
       {reschedule && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border-[1.5px] border-clay/40 bg-clay-tint px-4 py-2.5 text-[13px] font-medium text-clay-text">
+        <div className="flex flex-none items-center justify-between gap-3 border-[1.5px] border-clay/40 bg-clay-tint px-4 py-2.5 text-[13px] font-medium text-clay-text max-sm:mx-0 sm:rounded-xl">
           <span>Pick a new slot for {reschedule.clientName} — tap any free space.</span>
           <button
             onClick={() => setReschedule(null)}
@@ -523,7 +611,7 @@ export function CalendarView() {
       )}
 
       {(availMode || showAvailability) && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border-[1.5px] border-sage/50 bg-sage-tint px-4 py-2.5 text-[13px]">
+        <div className="flex flex-none flex-wrap items-center gap-3 border-[1.5px] border-sage/50 bg-sage-tint px-4 py-2.5 text-[13px] sm:rounded-xl">
           {availMode && (
             <>
               <span className="font-semibold text-sage-text">Drawing for</span>
@@ -555,7 +643,9 @@ export function CalendarView() {
                 </b>
               </span>
             ))}
-            <span>
+            {/* The key is what the colours mean; the paragraph explaining the
+                edge cases is a screenful on a phone, so it waits for a laptop. */}
+            <span className="hidden sm:inline">
               Solid = actually bookable now, faint = your{" "}
               <a href="/settings" className="font-semibold text-sage-text underline">
                 usual hours
@@ -568,8 +658,9 @@ export function CalendarView() {
         </div>
       )}
 
-      {/* calendar toggles — tap to show/hide each shared calendar */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* calendar toggles — tap to show/hide each shared calendar. On a phone
+          they live in the menu instead, where they don't cost grid height. */}
+      <div className="hidden flex-wrap items-center gap-2 sm:flex">
         {CALENDAR_SOURCES.map((s) => {
           const c = SPAN_COLORS[s];
           const off = hidden.has(s);
@@ -595,17 +686,17 @@ export function CalendarView() {
 
       {view !== "month" ? (
         !week.spans ? (
-          <div className="flex h-[300px] items-center justify-center rounded-2xl border border-line bg-card text-[13.5px] text-muted">
+          <div className="flex min-h-0 flex-1 items-center justify-center border-line bg-card text-[13.5px] text-muted sm:h-[300px] sm:flex-none sm:rounded-2xl sm:border">
             Loading your calendars…
           </div>
         ) : (
           <div
             key={page.n}
-            /* On a phone the grid runs edge to edge (-mx-3 cancels the page's
-               padding) and takes the rest of the screen, scrolling its own
-               hours under pinned day headers. Above sm it goes back to sitting
-               in the page at its natural height. */
-            className={`-mx-3 h-[calc(100svh-186px)] min-h-[320px] sm:mx-0 sm:h-auto ${
+            /* On a phone the grid is the page: edge to edge, taking every row
+               the strip above it doesn't need, scrolling its own hours under
+               pinned day headers. Above sm it goes back to sitting in the page
+               at its natural height. */
+            className={`min-h-0 flex-1 sm:h-auto sm:flex-none ${
               page.dir === 1 ? "ct-page-next" : page.dir === -1 ? "ct-page-prev" : ""
             }`}
           >
@@ -692,23 +783,29 @@ export function CalendarView() {
           </div>
         )
       ) : (
-        <MonthGrid
-          month={anchor}
-          spans={visible(month.spans)}
-          onDayClick={(day) => {
-            setAnchor(day);
-            chooseView("3day");
-          }}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 sm:overflow-visible sm:px-0">
+          <MonthGrid
+            month={anchor}
+            spans={visible(month.spans)}
+            onDayClick={(day) => {
+              setAnchor(day);
+              chooseView("3day");
+            }}
+          />
+        </div>
       )}
 
-      <BookingsList
-        spans={view !== "month" ? week.spans : month.spans}
-        onChanged={() => {
-          week.invalidate();
-          month.invalidate();
-        }}
-      />
+      {/* The list under the grid would halve the calendar on a phone, and Home
+          already answers what it answers — today, and the rest of the week. */}
+      <div className="hidden sm:block">
+        <BookingsList
+          spans={view !== "month" ? week.spans : month.spans}
+          onChanged={() => {
+            week.invalidate();
+            month.invalidate();
+          }}
+        />
+      </div>
 
       {openSpan && (
         <BookingPopover
