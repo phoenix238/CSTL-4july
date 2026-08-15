@@ -10,9 +10,11 @@ import {
   londonWeekdayIndex,
   londonYMD,
   fmtDate,
+  fmtDayLong,
+  fmtTime,
 } from "@/lib/time";
 import type { WeeklyHours } from "@/lib/booking/availability";
-import { api, useToast } from "../ui";
+import { api, OutlineButton, PrimaryButton, Sheet, useToast } from "../ui";
 import { AvailabilityComposer } from "./AvailabilityComposer";
 import { BookingPopover } from "./BookingPopover";
 import { BookingsList } from "./BookingsList";
@@ -95,6 +97,9 @@ export function CalendarView() {
   });
   const [reschedule, setReschedule] = useState<{ bookingId: string; clientName: string } | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  // A dragged session waiting to be confirmed — nothing has been sent yet.
+  const [pendingMove, setPendingMove] = useState<{ span: SpanDTO; newStart: Date } | null>(null);
+  const [moving, setMoving] = useState(false);
   const [hidden, setHidden] = useState<Set<SpanSource>>(new Set());
 
   // Availability-editing mode: draw the times you're bookable for online booking.
@@ -373,32 +378,26 @@ export function CalendarView() {
     }
   }
 
-  async function handleEventMove(span: SpanDTO, newStart: Date) {
+  /**
+   * Moving a session isn't a local edit: rescheduleBooking deletes the Google
+   * events and makes new ones, so the client is sent a cancellation and a fresh
+   * invite. That's a message to someone else's inbox, off the back of a drag —
+   * so the drag only ever proposes the move, and this asks first.
+   */
+  async function commitMove(span: SpanDTO, newStart: Date) {
+    if (!span.bookingId) return;
+    setMoving(true);
     try {
-      if (span.source === "booking" && span.bookingId) {
-        await api(`/api/bookings/${span.bookingId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ startISO: newStart.toISOString() }),
-        });
-      } else if (span.source === "personal" && span.googleEventId) {
-        const durMs = new Date(span.end).getTime() - new Date(span.start).getTime();
-        await api("/api/events", {
-          method: "PATCH",
-          body: JSON.stringify({
-            calendar: "personal",
-            eventId: span.googleEventId,
-            title: span.title,
-            startISO: newStart.toISOString(),
-            endISO: new Date(newStart.getTime() + durMs).toISOString(),
-          }),
-        });
-      } else {
-        return;
-      }
+      await api(`/api/bookings/${span.bookingId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ startISO: newStart.toISOString() }),
+      });
       toast("Moved ✓");
+      setPendingMove(null);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't move that");
     } finally {
+      setMoving(false);
       week.invalidate();
       month.invalidate();
     }
@@ -436,8 +435,8 @@ export function CalendarView() {
             {availMode
               ? "Drag across the grid to mark when you're available for online booking. Tap a window to edit or remove it."
               : showAvailability
-                ? "Availability is shown for reference — Bethnal Green in green, Waterloo in blue. Tap a booking to manage it, tap a free space to book a client, or drag across the grid to add any event to your calendar."
-                : "Tap a booking to manage it, tap a free space to book a client, or drag across the grid to add any event to your calendar."}
+                ? "Availability is shown for reference — Bethnal Green in green, Waterloo in blue. Tap a booking to manage it, tap a free space to book a client, or press and hold the grid to add an event. Only client sessions can be dragged, and a move is confirmed before anyone is told."
+                : "Tap a booking to manage it, tap a free space to book a client, or press and hold the grid to add an event. Only client sessions can be dragged, and a move is confirmed before anyone is told."}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -668,7 +667,9 @@ export function CalendarView() {
                   ? undefined
                   : (start, end) => setComposer({ mode: "create", start, end })
             }
-            onEventMove={availMode || reschedule ? undefined : handleEventMove}
+            onEventMove={
+              availMode || reschedule ? undefined : (span, newStart) => setPendingMove({ span, newStart })
+            }
           />
           </div>
         )
@@ -711,6 +712,49 @@ export function CalendarView() {
             setOpenSpan(null);
           }}
         />
+      )}
+
+      {pendingMove && (
+        <Sheet open={!!pendingMove} onClose={() => !moving && setPendingMove(null)} label="Move this session?">
+          <div className="flex flex-col gap-4 p-5">
+            <div>
+              <h2 className="font-serif text-[19px] leading-tight">Move this session?</h2>
+              <div className="mt-1 text-[13px] text-muted">
+                {pendingMove.span.title.split(" — ")[0]}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 rounded-xl bg-inputbg px-4 py-3 text-[13.5px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-muted">From</span>
+                <span className="font-semibold tabular-nums line-through decoration-muted/60">
+                  {fmtDayLong(new Date(pendingMove.span.start))} · {fmtTime(new Date(pendingMove.span.start))}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-muted">To</span>
+                <span className="font-semibold tabular-nums text-clay-text">
+                  {fmtDayLong(pendingMove.newStart)} · {fmtTime(pendingMove.newStart)}
+                </span>
+              </div>
+            </div>
+            <p className="text-[12.5px] leading-[1.6] text-muted">
+              Google will cancel the old invite and send a new one, so they&apos;ll be told the time has changed.
+              Nothing has been sent yet.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <PrimaryButton
+                onClick={() => commitMove(pendingMove.span, pendingMove.newStart)}
+                disabled={moving}
+                className="px-4 py-2 text-[13px]"
+              >
+                {moving ? "Moving…" : "Move it"}
+              </PrimaryButton>
+              <OutlineButton onClick={() => setPendingMove(null)} disabled={moving} className="px-4 py-2 text-[13px]">
+                Leave it where it was
+              </OutlineButton>
+            </div>
+          </div>
+        </Sheet>
       )}
 
       {quickBookSlot && (

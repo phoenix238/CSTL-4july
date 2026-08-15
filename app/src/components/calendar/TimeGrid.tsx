@@ -157,10 +157,13 @@ export function TimeGrid({
   const slotSelectable = mode === "display" && (!!onSlotClick || !!onRangeSelect);
   const pickerSelectable = mode === "picker" && !!picker;
 
+  // Only client sessions can be dragged. Everything else on this grid belongs to
+  // a calendar this app doesn't own — your own Google entries, the venue's room
+  // events, the shared Chalk Farm block — and dragging those from here moves
+  // real appointments that have nothing to do with a booking. A personal event
+  // is still editable, deliberately, by tapping it and using the composer.
   const isMovable = (span: SpanDTO) =>
-    mode === "display" &&
-    !!onEventMove &&
-    ((span.source === "booking" && !!span.bookingId) || (span.source === "personal" && !!span.googleEventId));
+    mode === "display" && !!onEventMove && span.source === "booking" && !!span.bookingId;
 
   // Split spans into per-day events, clamped to the visible hour window.
   const dayEvents: DayEvent[][] = useMemo(
@@ -483,11 +486,37 @@ export function TimeGrid({
     const origStartMin = londonMinutes(st);
     const durationMin = Math.max(SNAP_MIN, Math.round((en.getTime() - st.getTime()) / 60_000));
     const grabOffset = snapMinFromY(e.clientY - rectTop) - origStartMin;
-    evDragRef.current = { span, di, day, rectTop, grabOffset, durationMin, lastStartMin: origStartMin, moved: false };
-    setEvGhost({ di, startMin: origStartMin, durationMin });
-    scrollLock.current = true;
+    const touch = e.pointerType !== "mouse";
+    const downX = e.clientX;
+    const downY = e.clientY;
+
+    // A mouse is precise, so it picks the session up on contact. A finger has to
+    // rest on it first: scrolling the page and swiping between days both begin
+    // as a touch that lands on an event, and neither should move a client's
+    // session by accident.
+    let armed = false;
+    let pickUpTimer: ReturnType<typeof setTimeout> | null = null;
+    const pickUp = (buzz: boolean) => {
+      armed = true;
+      pickUpTimer = null;
+      scrollLock.current = true;
+      if (buzz) haptic();
+      evDragRef.current = { span, di, day, rectTop, grabOffset, durationMin, lastStartMin: origStartMin, moved: false };
+      setEvGhost({ di, startMin: origStartMin, durationMin });
+    };
+    if (touch) pickUpTimer = setTimeout(() => pickUp(true), LONG_PRESS_MS);
+    else pickUp(false);
 
     const move = (ev: PointerEvent) => {
+      if (!armed) {
+        // Travel before the timer fires means the finger is going somewhere —
+        // let the browser have the gesture.
+        if (pickUpTimer && Math.hypot(ev.clientX - downX, ev.clientY - downY) > LONG_PRESS_SLOP_PX) {
+          clearTimeout(pickUpTimer);
+          pickUpTimer = null;
+        }
+        return;
+      }
       const d = evDragRef.current;
       if (!d) return;
       const { startHour: sh, endHour: eh } = cfgRef.current;
@@ -501,17 +530,22 @@ export function TimeGrid({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", cancel);
+      if (pickUpTimer) clearTimeout(pickUpTimer);
+      pickUpTimer = null;
       const d = evDragRef.current;
       evDragRef.current = null;
       setEvGhost(null);
       scrollLock.current = false;
-      if (!commit || !d) return;
+      teardown.current = null;
+      if (!commit) return;
       const { onEventClick: click, onEventMove: mv } = cfgRef.current;
-      if (d.moved && mv) mv(d.span, slotAt(d.day, d.lastStartMin));
-      else if (click && ev) click(d.span, { x: ev.clientX, y: ev.clientY });
+      // Never picked up, or picked up and put back where it was: that's a tap.
+      if (d?.moved && mv) mv(d.span, slotAt(d.day, d.lastStartMin));
+      else if (click && ev) click(span, { x: ev.clientX, y: ev.clientY });
     };
     const up = (ev: PointerEvent) => finish(true, ev);
     const cancel = () => finish(false);
+    teardown.current = () => finish(false);
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", cancel);
@@ -867,9 +901,11 @@ export function TimeGrid({
                         color: c.text,
                         opacity: pickerDim ? 0.75 : 1,
                         zIndex: 5,
-                        // Let a touch-drag move the block instead of scrolling the
-                        // page (only on these small targets, so column scroll is kept).
-                        touchAction: movable ? "none" : undefined,
+                        // Same bargain as the columns: the browser keeps vertical
+                        // panning so the page still scrolls when a finger happens
+                        // to land on a session, and we take the gesture back — via
+                        // the touchmove veto — only once one is actually picked up.
+                        touchAction: compact ? "pan-y" : undefined,
                       }}
                     >
                       <div className="font-semibold tabular-nums">
