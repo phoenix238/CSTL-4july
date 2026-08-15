@@ -148,12 +148,82 @@ body {
   animation: ct-swap-in 220ms ease-out both;
 }
 
+/* ---------- calendar: draft block + page turns (see calendar/TimeGrid.tsx) ----------
+   A long-press draft has to announce itself the moment it exists: on a phone
+   the buzz and this spring are the only confirmation that the press landed. */
+
+@keyframes ct-draft-in {
+  from {
+    transform: scale(0.94);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.ct-draft {
+  animation: ct-draft-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes ct-draftbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ct-draftbar {
+  animation: ct-draftbar-in 200ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+
+/* Paging the calendar slides the new range in from the side it came from, so a
+   swipe reads as moving along one continuous calendar rather than a redraw. */
+@keyframes ct-page-from-right {
+  from {
+    opacity: 0.35;
+    transform: translateX(7%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ct-page-from-left {
+  from {
+    opacity: 0.35;
+    transform: translateX(-7%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ct-page-next {
+  animation: ct-page-from-right 230ms cubic-bezier(0.25, 0.9, 0.3, 1) both;
+}
+
+.ct-page-prev {
+  animation: ct-page-from-left 230ms cubic-bezier(0.25, 0.9, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ct-veil,
   .ct-veil-leaving,
   .ct-sheet,
   .ct-sheet-leaving,
-  .ct-swap {
+  .ct-swap,
+  .ct-draft,
+  .ct-draftbar,
+  .ct-page-next,
+  .ct-page-prev {
     animation-duration: 1ms;
   }
 }

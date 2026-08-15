@@ -13,6 +13,7 @@ import {
   TintButton,
   inputClass,
   useEscapeKey,
+  useIsPhone,
   useToast,
 } from "./ui";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
@@ -125,7 +126,12 @@ export function EnquiryFlow({
   const [nameDraft, setNameDraft] = useState("");
 
   const activeClient = saved ?? (ignoreMatch ? null : match);
-  const { spans, invalidate } = useWeekSpans(weekStart, 7);
+  // Three columns on a phone, a full week on a laptop — the same grid either way.
+  const gridDays = useIsPhone() ? 3 : 7;
+  const { spans, invalidate } = useWeekSpans(weekStart, gridDays);
+  /** Where the picker jumps back to, and where an offered time is shown from. */
+  const rangeStartFor = (at?: Date) =>
+    gridDays === 3 ? londonDayStart(0, at) : londonWeekStart(at);
 
   useEscapeKey(() => setPasteOpen(false), pasteOpen);
   useEscapeKey(() => setShowWaiting(false), showWaiting);
@@ -853,30 +859,30 @@ export function EnquiryFlow({
         <div className="flex items-center gap-1">
           <button
             onClick={() => {
-              setWeekStart((w) => londonDayStart(-7, w));
+              setWeekStart((w) => londonDayStart(-gridDays, w));
               setSelected([]);
             }}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1 text-[13px] font-semibold hover:bg-hoverbg"
-            aria-label="Previous week"
+            aria-label="Earlier"
           >
             ‹
           </button>
           <button
             onClick={() => {
-              setWeekStart(londonWeekStart());
+              setWeekStart(rangeStartFor());
               setSelected([]);
             }}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold hover:bg-hoverbg"
           >
-            This week
+            {gridDays === 3 ? "Today" : "This week"}
           </button>
           <button
             onClick={() => {
-              setWeekStart((w) => londonDayStart(7, w));
+              setWeekStart((w) => londonDayStart(gridDays, w));
               setSelected([]);
             }}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1 text-[13px] font-semibold hover:bg-hoverbg"
-            aria-label="Next week"
+            aria-label="Later"
           >
             ›
           </button>
@@ -896,7 +902,7 @@ export function EnquiryFlow({
             <button
               key={t.toISOString()}
               onClick={() => {
-                setWeekStart(londonWeekStart(t));
+                setWeekStart(rangeStartFor(t));
                 setSelected([t]);
               }}
               className="cursor-pointer rounded-full bg-clay-tint px-2.5 py-1 font-semibold text-clay-text hover:bg-clay/20"
@@ -915,7 +921,12 @@ export function EnquiryFlow({
       ) : (
         <>
           <TimeGrid
-            weekStart={weekStart}
+            start={weekStart}
+            days={gridDays}
+            onPage={(dir) => {
+              setWeekStart((w) => londonDayStart(dir * gridDays, w));
+              setSelected([]);
+            }}
             spans={spans}
             mode="picker"
             picker={{ clinic, selected, onToggle: toggleSlot }}

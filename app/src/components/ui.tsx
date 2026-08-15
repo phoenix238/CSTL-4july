@@ -16,6 +16,23 @@ export function useEscapeKey(onEscape: () => void, active = true) {
   }, [onEscape, active]);
 }
 
+/**
+ * True on phone-width screens. Calendars use it to default to a 3-day grid,
+ * where seven columns would be too narrow to read a name in or tap accurately.
+ * Starts false so the server and first client render agree, then corrects on mount.
+ */
+export function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const apply = () => setIsPhone(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  return isPhone;
+}
+
 /* ---------- sheet ---------- */
 
 /** Matches the leave animations in globals.css (.ct-sheet-leaving / .ct-veil-leaving). */

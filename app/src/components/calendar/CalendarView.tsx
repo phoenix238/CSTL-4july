@@ -72,11 +72,19 @@ const TZ = "Europe/London";
 const CALENDAR_SOURCES: SpanSource[] = ["booking", "room", "chalkFarm", "personal"];
 const HIDDEN_KEY = "cstl-calendar-hidden";
 const SHOW_AVAIL_KEY = "cstl-calendar-show-availability";
+const VIEW_KEY = "cstl-calendar-view";
+
+type CalView = "3day" | "week" | "month";
+
+const VIEW_LABEL: Record<CalView, string> = { "3day": "3 days", week: "Week", month: "Month" };
 
 export function CalendarView() {
   const toast = useToast();
-  const [view, setView] = useState<"week" | "month">("week");
+  const [view, setView] = useState<CalView>("week");
   const [anchor, setAnchor] = useState(() => new Date());
+  // Which way the range last moved, so the incoming page slides in from the
+  // side it came from; the key restarts the animation on every move.
+  const [page, setPage] = useState<{ dir: -1 | 0 | 1; n: number }>({ dir: 0, n: 0 });
   const [openSpan, setOpenSpan] = useState<{ span: SpanDTO; anchor: { x: number; y: number } } | null>(null);
   const [quickBookSlot, setQuickBookSlot] = useState<Date | null>(null);
   const [composer, setComposer] = useState<ComposerState | null>(null);
@@ -143,6 +151,33 @@ export function CalendarView() {
       /* ignore */
     }
   }, []);
+
+  // Which view to open on. A remembered choice always wins; failing that a
+  // phone gets 3 days, because seven columns on a 390px screen are too narrow
+  // to read a name in, let alone tap.
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(VIEW_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (saved === "3day" || saved === "week" || saved === "month") {
+      setView(saved);
+      return;
+    }
+    if (window.matchMedia("(max-width: 640px)").matches) setView("3day");
+  }, []);
+
+  function chooseView(v: CalView) {
+    setView(v);
+    setPage({ dir: 0, n: 0 });
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  }
   function toggleShowAvailability() {
     setShowAvailability((prev) => {
       const next = !prev;
@@ -169,13 +204,20 @@ export function CalendarView() {
   }
   const visible = (spans: SpanDTO[] | null) => spans?.filter((s) => !hidden.has(s.source)) ?? null;
 
-  const weekStart = useMemo(() => londonWeekStart(anchor), [anchor]);
+  // How many day columns the time grid draws, and where it starts. A week view
+  // snaps to Monday; a 3-day view starts on the day you're looking at, so
+  // paging walks the calendar three days at a time from wherever you are.
+  const gridDays = view === "3day" ? 3 : 7;
+  const rangeStart = useMemo(
+    () => (view === "3day" ? londonDayStart(0, anchor) : londonWeekStart(anchor)),
+    [anchor, view],
+  );
   const monthGridStart = useMemo(() => {
     const { y, m } = londonYMD(anchor);
     return londonWeekStart(new Date(Date.UTC(y, m - 1, 1, 12)));
   }, [anchor]);
 
-  const week = useWeekSpans(weekStart, 7);
+  const week = useWeekSpans(rangeStart, gridDays);
   const month = useWeekSpans(monthGridStart, 42);
 
   // Availability is drawn whenever it's being edited, or the read-only
@@ -188,8 +230,8 @@ export function CalendarView() {
   const availWindows = useMemo<AvailWindowDTO[]>(() => {
     if (!availShowing) return [];
     const out: AvailWindowDTO[] = [];
-    for (let i = 0; i < 7; i++) {
-      const day = londonAddDays(weekStart, i);
+    for (let i = 0; i < gridDays; i++) {
+      const day = londonAddDays(rangeStart, i);
       const dateKey = londonDateKey(day);
       const weekday = londonWeekdayIndex(day);
       for (const clinic of AVAIL_CLINICS) {
@@ -219,7 +261,7 @@ export function CalendarView() {
       }
     }
     return out;
-  }, [availShowing, weeklyHours, overrides, weekStart]);
+  }, [availShowing, weeklyHours, overrides, rangeStart, gridDays]);
 
   // The real answer for the visible week, for both clinics — refetched
   // whenever the week or anything that could change availability moves.
@@ -232,7 +274,7 @@ export function CalendarView() {
     Promise.all(
       AVAIL_CLINICS.map((clinic) =>
         api<{ slots: string[]; days: BookableDay[] }>(
-          `/api/bookable?clinic=${clinic}&start=${encodeURIComponent(weekStart.toISOString())}&days=7`,
+          `/api/bookable?clinic=${clinic}&start=${encodeURIComponent(rangeStart.toISOString())}&days=${gridDays}`,
         ).then((r) => [clinic, r] as const),
       ),
     )
@@ -245,7 +287,7 @@ export function CalendarView() {
     return () => {
       stale = true;
     };
-  }, [availShowing, weekStart, overrides, week.spans]);
+  }, [availShowing, rangeStart, gridDays, overrides, week.spans]);
 
   // Bookable starts merged into the ranges they cover, so a run of half-hourly
   // slots reads as one solid band rather than a stack of overlapping hours.
@@ -282,7 +324,7 @@ export function CalendarView() {
   }, [bookable, availClinic]);
 
   function enterAvailability() {
-    setView("week");
+    if (view === "month") chooseView("week");
     setReschedule(null);
     setAvailMode(true);
   }
@@ -295,19 +337,22 @@ export function CalendarView() {
   }
 
   const rangeLabel =
-    view === "week"
-      ? `${fmtDate(weekStart)} – ${fmtDate(londonAddDays(weekStart, 6))}`
-      : new Intl.DateTimeFormat("en-GB", { timeZone: TZ, month: "long", year: "numeric" }).format(anchor);
+    view === "month"
+      ? new Intl.DateTimeFormat("en-GB", { timeZone: TZ, month: "long", year: "numeric" }).format(anchor)
+      : `${fmtDate(rangeStart)} – ${fmtDate(londonAddDays(rangeStart, gridDays - 1))}`;
 
   function nav(dir: -1 | 0 | 1) {
     if (dir === 0) {
       setAnchor(new Date());
+      setPage({ dir: 0, n: 0 });
       return;
     }
-    if (view === "week") setAnchor((a) => londonDayStart(dir * 7, a));
-    else {
+    setPage((p) => ({ dir, n: p.n + 1 }));
+    if (view === "month") {
       const { y, m } = londonYMD(anchor);
       setAnchor(new Date(Date.UTC(y, m - 1 + dir, 1, 12)));
+    } else {
+      setAnchor((a) => londonDayStart(dir * gridDays, a));
     }
   }
 
@@ -420,15 +465,15 @@ export function CalendarView() {
           </button>
           {!availMode && (
             <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["week", "month"] as const).map((v) => (
+              {(["3day", "week", "month"] as const).map((v) => (
                 <button
                   key={v}
-                  onClick={() => setView(v)}
-                  className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold capitalize select-none ${
+                  onClick={() => chooseView(v)}
+                  className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold select-none ${
                     view === v ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
                   }`}
                 >
-                  {v}
+                  {VIEW_LABEL[v]}
                 </button>
               ))}
             </div>
@@ -542,14 +587,20 @@ export function CalendarView() {
         })}
       </div>
 
-      {view === "week" ? (
+      {view !== "month" ? (
         !week.spans ? (
           <div className="flex h-[300px] items-center justify-center rounded-2xl border border-line bg-card text-[13.5px] text-muted">
             Loading your calendars…
           </div>
         ) : (
+          <div
+            key={page.n}
+            className={page.dir === 1 ? "ct-page-next" : page.dir === -1 ? "ct-page-prev" : undefined}
+          >
           <TimeGrid
-            weekStart={weekStart}
+            start={rangeStart}
+            days={gridDays}
+            onPage={(dir) => nav(dir)}
             spans={visible(week.spans) ?? []}
             mode="display"
             availabilityMode={availMode}
@@ -619,6 +670,7 @@ export function CalendarView() {
             }
             onEventMove={availMode || reschedule ? undefined : handleEventMove}
           />
+          </div>
         )
       ) : (
         <MonthGrid
@@ -626,13 +678,13 @@ export function CalendarView() {
           spans={visible(month.spans)}
           onDayClick={(day) => {
             setAnchor(day);
-            setView("week");
+            chooseView("3day");
           }}
         />
       )}
 
       <BookingsList
-        spans={view === "week" ? week.spans : month.spans}
+        spans={view !== "month" ? week.spans : month.spans}
         onChanged={() => {
           week.invalidate();
           month.invalidate();
@@ -652,7 +704,9 @@ export function CalendarView() {
                 bookingId: openSpan.span.bookingId,
                 clientName: openSpan.span.title.split(" — ")[0],
               });
-              setView("week");
+              // Any time grid will do for picking a new slot — only the month
+              // view has no times to tap, so that's the one case worth moving.
+              if (view === "month") chooseView("week");
             }
             setOpenSpan(null);
           }}
