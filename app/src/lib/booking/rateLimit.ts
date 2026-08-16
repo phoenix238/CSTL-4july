@@ -25,6 +25,20 @@ const DAILY_TOTAL_MAX = 40;
 /** Attempts older than this are no longer counted by any limit, so they're pruned. */
 const RETENTION_MS = 25 * 60 * 60_000;
 
+/**
+ * Emails/IPs that skip the limits entirely — for Phoenix's own testing, so a
+ * burst of manual bookings from one machine or one inbox doesn't lock him out
+ * of the page he's trying to test. Comma-separated in the env var so more than
+ * one address/IP can be listed; unset means nobody is exempt. Bypassed
+ * attempts aren't recorded either, so testing never eats into the daily
+ * backstop that protects real visitors.
+ */
+function parseList(raw: string | undefined): Set<string> {
+  return new Set((raw ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+}
+const BYPASS_EMAILS = parseList(process.env.RATE_LIMIT_BYPASS_EMAILS);
+const BYPASS_IPS = parseList(process.env.RATE_LIMIT_BYPASS_IPS);
+
 /** Refused for booking too often — surfaced to the visitor as a 429. */
 export class RateLimitedError extends Error {
   constructor() {
@@ -64,7 +78,10 @@ export async function assertBookingAllowed(
   email: string,
   { record = true }: { record?: boolean } = {},
 ): Promise<void> {
-  const keys = { email: `email:${email.trim().toLowerCase()}`, ip: `ip:${clientIp(req)}` };
+  const ip = clientIp(req);
+  if (BYPASS_EMAILS.has(email.trim().toLowerCase()) || BYPASS_IPS.has(ip.toLowerCase())) return;
+
+  const keys = { email: `email:${email.trim().toLowerCase()}`, ip: `ip:${ip}` };
   const now = Date.now();
 
   if (record) {
