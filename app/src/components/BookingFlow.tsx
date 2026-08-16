@@ -8,6 +8,28 @@ import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { ClientCopy } from "@/lib/clientCopy";
 
+/**
+ * Told when a booking is genuinely confirmed, so the parent page's GA4 can
+ * record where the booking actually came from — this app carries no GA tag
+ * of its own (see the comment on the pre-warm iframe in the site's
+ * index.html for why). Posted to an explicit origin allowlist, never '*':
+ * only one of these matches the actual parent at a time, and postMessage
+ * silently skips delivery to the ones that don't, so it's safe to try all
+ * three the site is ever embedded from.
+ */
+const SITE_ORIGINS = [
+  "https://craniosacraltherapylondon.com",
+  "https://phoenix238.github.io",
+  "http://localhost:8090",
+];
+
+function notifyParentOfBooking(clinic: Clinic) {
+  if (window.parent === window) return; // not embedded — nothing to tell
+  for (const origin of SITE_ORIGINS) {
+    window.parent.postMessage({ type: "cstl:booking_confirmed", clinic }, origin);
+  }
+}
+
 function MapsLink({ address }: { address: string }) {
   const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   return (
@@ -113,6 +135,7 @@ export function BookingFlow({
         setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
         return;
       }
+      notifyParentOfBooking(clinic);
       setConfirmed({
         whenLabel: result.whenLabel,
         email,

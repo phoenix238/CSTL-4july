@@ -21,6 +21,8 @@ export interface SendOptions {
    * a booking, not two.
    */
   bcc?: string;
+  /** Where a reply should go, when it isn't `from` — see MessageParts.replyTo. */
+  replyTo?: string;
 }
 
 /**
@@ -44,7 +46,7 @@ export async function sendEmail(
   body: string,
   thread?: GmailThread,
   attachments?: Attachment[],
-  options?: { bcc?: string },
+  options?: { bcc?: string; replyTo?: string },
 ) {
   try {
     const gmail = await getGmailApi();
@@ -55,6 +57,7 @@ export async function sendEmail(
       to,
       from: from ?? undefined,
       bcc: options?.bcc,
+      replyTo: options?.replyTo,
       subject: replySubject,
       body,
       inReplyTo: thread?.inReplyTo,

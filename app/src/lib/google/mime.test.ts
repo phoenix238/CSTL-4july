@@ -84,4 +84,11 @@ describe("buildMessage", () => {
     expect(buildMessage({ ...base, bcc: "phoenix@example.com" })).toContain("Bcc: phoenix@example.com");
     expect(buildMessage(base)).not.toContain("Bcc:");
   });
+
+  it("sets Reply-To when asked, and not otherwise", () => {
+    // Used for enquiry notifications sent from Phoenix's own address: hitting
+    // reply in his inbox should reach the enquirer, not himself.
+    expect(buildMessage({ ...base, replyTo: "jane@example.com" })).toContain("Reply-To: jane@example.com");
+    expect(buildMessage(base)).not.toContain("Reply-To:");
+  });
 });

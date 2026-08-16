@@ -39,6 +39,12 @@ export interface MessageParts {
    * message the client received, and the client can't see he was copied.
    */
   bcc?: string;
+  /**
+   * Where a reply should actually go when it isn't the same as `from` — e.g. a
+   * notification sent from Phoenix's own address about someone else's enquiry,
+   * where hitting reply should reach that person, not Phoenix himself.
+   */
+  replyTo?: string;
   subject: string;
   body: string;
   inReplyTo?: string;
@@ -58,6 +64,7 @@ export function buildMessage({
   from,
   fromName = "Phoenix Tanner",
   bcc,
+  replyTo,
   subject,
   body,
   inReplyTo,
@@ -69,6 +76,7 @@ export function buildMessage({
     // Gmail strips this header before delivery to `to`, and delivers a copy to
     // the address named here — which is the whole point.
     ...(bcc ? [`Bcc: ${bcc}`] : []),
+    ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
     `Subject: ${encodeHeader(subject)}`,
     ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
     "MIME-Version: 1.0",
