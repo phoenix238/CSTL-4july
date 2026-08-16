@@ -338,6 +338,10 @@ model AppSettings {
   // Anything extra to show under the bank details on the portal.
   bankPaymentNote   String @default("")
 
+  // Last time Phoenix opened Home and its notifications were marked seen — an
+  // online booking newer than this still shows a red dot on the Home nav link.
+  notificationsViewedAt DateTime? @default(now())
+
   // — Starling payment matching —
   // Off until switched on, so nothing touches payment state unexpectedly.
   starlingEnabled    Boolean   @default(false)
