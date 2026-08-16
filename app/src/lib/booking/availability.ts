@@ -229,6 +229,35 @@ const pad = (iv: { start: Date; end: Date }, minutes: number) =>
     : iv;
 
 /**
+ * The clearance to keep around one busy span, given the open window hosting
+ * the candidate next to it (or `null` when there isn't one). A span with its
+ * own `bufferMinutes` carries a physical constraint that always applies; the
+ * default clinic buffer only applies within the same open window (see the
+ * reasoning on the two callers of this below). Shared by `slotFits` (checking
+ * a candidate against every busy span) and the grid-independent candidate
+ * injection in `computeAvailability` (working out where the slot right next
+ * to a busy span actually falls) — one formula, so they can't disagree.
+ */
+function busyGapMinutes(
+  span: { start: Date; end: Date; bufferMinutes?: number },
+  window: { start: Date; end: Date } | null,
+  defaultBufferMinutes: number,
+): number {
+  if (span.bufferMinutes != null) return span.bufferMinutes;
+  if (!window) return 0;
+  const sameWindow = span.start < window.end && span.end > window.start;
+  return sameWindow ? defaultBufferMinutes : 0;
+}
+
+/** One minute-of-day `Interval` as real `Date` bounds on a given London day. */
+function intervalWindow(iv: Interval, y: number, m: number, d: number): { start: Date; end: Date } {
+  return {
+    start: londonTime(y, m, d, Math.floor(iv.start / 60), iv.start % 60),
+    end: londonTime(y, m, d, Math.floor(iv.end / 60), iv.end % 60),
+  };
+}
+
+/**
  * Why a candidate didn't make it — "ok" when it did.
  *
  * Reported rather than swallowed so the admin calendar can say *why* a day has
@@ -295,8 +324,7 @@ function slotFits(
     // already his considered answer, and letting the slider add more would
     // silently delete the second session the moment the first was booked. So
     // the default gap only applies between sessions inside the *same* window.
-    const sameWindow = b.start < intervalEnd && b.end > intervalStart;
-    const gap = b.bufferMinutes ?? (sameWindow ? bufferMinutes : 0);
+    const gap = busyGapMinutes(b, { start: intervalStart, end: intervalEnd }, bufferMinutes);
     const padded = pad(b, gap);
     return rawFootprint.start < padded.end && rawFootprint.end > padded.start;
   });
@@ -389,6 +417,33 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
       }
     }
     for (const minute of exactStartsOn(overrides, dateKey, weekday)) candidateMinutes.add(minute);
+
+    // The slot right after a busy span ends, and the one right before it
+    // starts, computed from the real buffer rather than the grid step — so
+    // widening `slotMinutes` to declutter the list can't silently waste real
+    // bookable time between two sessions (e.g. an 11:00-12:00 booking with a
+    // 15-min buffer leaves 12:15 free even when the grid only offers :00/:30).
+    // Gated to the grid intervals (not the fuller fit set) so an injected
+    // candidate can't land inside an exact-start window and spawn a second
+    // pickable time there.
+    const fitsGrid = (minute: number) =>
+      gridIntervals.some((iv) => minute >= iv.start && minute + SESSION_MINUTES <= iv.end);
+    for (const b of busy) {
+      if (londonDateKey(b.end) === dateKey) {
+        const endMinute = londonMinutes(b.end);
+        const hostIv = fitIntervals.find((iv) => endMinute >= iv.start && endMinute <= iv.end);
+        const gap = busyGapMinutes(b, hostIv ? intervalWindow(hostIv, y, m, d) : null, bufferMinutes);
+        const afterMinute = endMinute + gap;
+        if (afterMinute >= 0 && afterMinute < 1440 && fitsGrid(afterMinute)) candidateMinutes.add(afterMinute);
+      }
+      if (londonDateKey(b.start) === dateKey) {
+        const startMinute = londonMinutes(b.start);
+        const hostIv = fitIntervals.find((iv) => startMinute >= iv.start && startMinute <= iv.end);
+        const gap = busyGapMinutes(b, hostIv ? intervalWindow(hostIv, y, m, d) : null, bufferMinutes);
+        const beforeMinute = startMinute - SESSION_MINUTES - gap;
+        if (beforeMinute >= 0 && beforeMinute < 1440 && fitsGrid(beforeMinute)) candidateMinutes.add(beforeMinute);
+      }
+    }
 
     for (const minute of [...candidateMinutes].sort((a, b) => a - b)) {
       // Null on the spring-forward Sunday, for the hour that doesn't happen.

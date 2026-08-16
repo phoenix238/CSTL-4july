@@ -269,6 +269,111 @@ describe("computeAvailability", () => {
   });
 });
 
+describe("grid-independent candidate injection: the slot right next to a booking is always offered", () => {
+  const hours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 1020 }]; // 9-17
+
+  it("offers the slot right after a booking even when the grid step skips over it", () => {
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: hours,
+      overrides: [],
+      busy: [{ start: at(11), end: at(12) }],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    }).map(fmtTime);
+    expect(slots).toContain("12:15");
+    expect(slots).toContain("12:30");
+    expect(slots).not.toContain("12:00");
+  });
+
+  it("offers the slot right before a booking too", () => {
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: hours,
+      overrides: [],
+      busy: [{ start: at(15), end: at(16) }],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    }).map(fmtTime);
+    expect(slots).toContain("13:45"); // 15:00 minus a 60-min session minus the 15-min buffer
+  });
+
+  it("doesn't spawn an extra pickable time inside an exact-start window", () => {
+    const overrides: OverrideWindow[] = [
+      { date: "2026-07-07", kind: "open", startMin: 20 * 60, endMin: 21 * 60, exactStart: true },
+    ];
+    // A later busy span whose "before" injection (21:15 minus a session, no
+    // buffer) lands at 20:15 — inside the exact window but not its own start,
+    // and far enough from 20:00 that the window's own slot stays clear of it.
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: [{ weekday: tueWeekday, startMin: 10 * 60, endMin: 12 * 60 }],
+      overrides,
+      busy: [{ start: at(21, 15), end: at(22, 15), bufferMinutes: 0 }],
+      slotMinutes: 30,
+      now: at(0),
+    }).map(fmtTime);
+    expect(slots).toContain("20:00"); // the exact window's own configured start
+    expect(slots).not.toContain("20:15"); // would be inside the exact window but isn't its own start
+  });
+
+  it("agrees with isSlotAvailable on the injected candidate", () => {
+    const params = {
+      clinic: "bethnal" as const,
+      weeklyHours: hours,
+      overrides: [],
+      busy: [{ start: at(11), end: at(12) }],
+      bufferMinutes: 15,
+      now: at(0),
+    };
+    expect(isSlotAvailable(at(12, 15), params)).toBe(true);
+    expect(isSlotAvailable(at(12, 0), params)).toBe(false);
+  });
+
+  it("keeps trace accounting balanced when an injected candidate is itself rejected", () => {
+    const day = computeAvailability({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: hours,
+      overrides: [],
+      busy: [
+        { start: at(11), end: at(12) },
+        { start: at(12, 15), end: at(13, 15) },
+      ],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    }).days[0];
+    const { past, hours: droppedHours, busy, cap, clockChange } = day.dropped;
+    expect(day.bookable + past + droppedHours + busy + cap + clockChange).toBe(day.candidates);
+    expect(busy).toBeGreaterThan(0); // the injected 12:15 candidate collided with the second booking
+  });
+
+  it("doesn't offer a slot that collides with a neighbouring booking, and still finds the real next slot", () => {
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
+      ...dayWindow(TUESDAY),
+      weeklyHours: hours,
+      overrides: [],
+      busy: [
+        { start: at(11), end: at(12) },
+        { start: at(12, 15), end: at(13, 15) },
+      ],
+      slotMinutes: 30,
+      bufferMinutes: 15,
+      now: at(0),
+    }).map(fmtTime);
+    expect(slots).not.toContain("12:15"); // would collide with the second booking
+    expect(slots).not.toContain("12:00"); // still inside the first booking's buffer
+    expect(slots).toContain("13:30"); // real next slot: 13:15 end + 15 min buffer
+  });
+});
+
 describe("repeating overrides", () => {
   // Drawn on Tue 7 July 2026, repeating weekly.
   const repeatingOpen: OverrideWindow[] = [
