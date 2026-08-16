@@ -6,7 +6,7 @@ import { assertSlotAvailable } from "@/lib/booking/slots";
 import { rescheduleBooking } from "@/lib/booking/book";
 import { canRescheduleSelf } from "@/lib/account";
 import { portalRoute, PortalRuleError } from "@/lib/portalRoute";
-import { notifyPortalAction } from "@/lib/portalNotify";
+import { confirmToClient, notifyPhoenix } from "@/lib/portalNotify";
 import { portalUrl } from "@/lib/portal";
 
 /** Move the client's upcoming session. Body: { startISO } */
@@ -41,15 +41,24 @@ export const POST = portalRoute(async (req, client) => {
 
   const result = await rescheduleBooking(booking.id, start.toISOString());
 
-  await notifyPortalAction({
-    action: "rescheduled",
+  // Blind-copies Phoenix on the client's own confirmation, same as booking —
+  // one email about one move, not that email plus a separate summary.
+  const notifyInput = {
+    action: "rescheduled" as const,
     clientName: result.clientName,
     clientEmail: client.email,
     clinic,
     whenLabel: result.whenLabel,
     previousWhenLabel: result.previousWhenLabel,
     portalLink: portalUrl(settings, client.portalToken),
-  });
+  };
+  const bcc = settings.portalNotifyEmail ? process.env.ALLOWED_EMAIL || undefined : undefined;
+  const { sent } = await confirmToClient(notifyInput, bcc);
+  // …unless the client's copy never sent, in which case the Bcc didn't either
+  // and this is the only way he finds out.
+  if (!sent) {
+    await notifyPhoenix({ ...notifyInput, emailFailed: true });
+  }
   revalidateTag("shell");
 
   return NextResponse.json({ whenLabel: result.whenLabel });

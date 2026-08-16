@@ -6,7 +6,7 @@ import { cancelBookingEvents } from "@/lib/google/calendar";
 import { suggestedGoodwillPence } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { portalRoute, PortalRuleError } from "@/lib/portalRoute";
-import { notifyPortalAction } from "@/lib/portalNotify";
+import { confirmToClient, notifyPhoenix } from "@/lib/portalNotify";
 import { getOrCreatePaymentRef, portalUrl } from "@/lib/portal";
 
 /**
@@ -48,8 +48,10 @@ export const POST = portalRoute(async (_req, client) => {
 
   const paymentRef = goodwill ? await getOrCreatePaymentRef(client.id) : undefined;
 
-  await notifyPortalAction({
-    action: "cancelled",
+  // Blind-copies Phoenix on the client's own confirmation, same as booking —
+  // one email about one cancellation, not that email plus a separate summary.
+  const notifyInput = {
+    action: "cancelled" as const,
     clientName: client.name,
     clientEmail: client.email,
     clinic,
@@ -57,7 +59,14 @@ export const POST = portalRoute(async (_req, client) => {
     goodwillPence: goodwill,
     paymentRef,
     portalLink: portalUrl(settings, client.portalToken),
-  });
+  };
+  const bcc = settings.portalNotifyEmail ? process.env.ALLOWED_EMAIL || undefined : undefined;
+  const { sent } = await confirmToClient(notifyInput, bcc);
+  // …unless the client's copy never sent, in which case the Bcc didn't either
+  // and this is the only way he finds out.
+  if (!sent) {
+    await notifyPhoenix({ ...notifyInput, emailFailed: true });
+  }
   revalidateTag("shell");
 
   return NextResponse.json({ whenLabel, goodwillPence: goodwill });

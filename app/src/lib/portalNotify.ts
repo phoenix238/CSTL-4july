@@ -7,10 +7,13 @@ import { resolveSignOff } from "@/lib/booking/email";
 /**
  * Telling both sides what just happened.
  *
- * Every self-service action a client takes in the portal produces two emails:
- * one to Phoenix (this is his only signal — nobody is watching a dashboard) and
- * one to the client (so they close the tab with a record, rather than a screen
- * they'll have forgotten by evening).
+ * Every self-service action a client takes in the portal produces one email:
+ * the client's own confirmation, so they close the tab with a record rather
+ * than a screen they'll have forgotten by evening. Phoenix is blind-copied on
+ * that same email — his only signal, since nobody is watching a dashboard —
+ * rather than getting a second, separately-worded summary beside it. He only
+ * gets a standalone note (`notifyPhoenix`) when the client's copy fails to
+ * send, since that's the one case he needs to know about directly.
  *
  * Both sends are non-fatal and deliberately so. By the time these run the
  * calendar has already been changed; a Gmail hiccup must never roll that back or
@@ -91,9 +94,17 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
   }
 }
 
-/** Confirm to the client, so they have it in writing. */
-export async function confirmToClient(input: NotifyInput): Promise<void> {
-  if (!input.clientEmail) return;
+/**
+ * Confirm to the client, so they have it in writing.
+ *
+ * `bcc` blind-copies Phoenix on this same email — one message about one
+ * action, in place of that email plus a separately-worded "they just
+ * rescheduled/cancelled" summary landing beside it. Returns whether the
+ * client's copy actually sent, so the caller can fall back to a direct
+ * notification when it didn't (their only record of what happened).
+ */
+export async function confirmToClient(input: NotifyInput, bcc?: string): Promise<{ sent: boolean }> {
+  if (!input.clientEmail) return { sent: false };
   const settings = await getSettings();
   const clinic = CLINIC_LABEL[input.clinic];
   const first = input.clientName.split(" ")[0] || "there";
@@ -138,15 +149,12 @@ export async function confirmToClient(input: NotifyInput): Promise<void> {
   lines.push("", ...resolveSignOff(settings).split("\n"));
 
   try {
-    await sendEmail(input.clientEmail, subject, lines.join("\n"));
+    await sendEmail(input.clientEmail, subject, lines.join("\n"), undefined, undefined, { bcc });
+    return { sent: true };
   } catch (err) {
     console.error("Couldn't send the portal confirmation email to the client", err);
+    return { sent: false };
   }
-}
-
-/** Both sides, in parallel — neither can fail the action that triggered it. */
-export async function notifyPortalAction(input: NotifyInput): Promise<void> {
-  await Promise.all([notifyPhoenix(input), confirmToClient(input)]);
 }
 
 export interface ReceiptLine {
