@@ -22,7 +22,11 @@ import { fmtDayShort, fmtTime, londonAddDays, londonDateKey, londonMinutes, lond
 import { AVAIL_COLORS, CLINIC_LABEL, layoutDayEvents, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO } from "./layout";
 import { haptic } from "./haptics";
 
-const HOUR_PX = 48;
+/** Default height of one hour. Adjustable at runtime — see the `hourPx` prop. */
+export const HOUR_PX = 48;
+/** How far the zoom control can go: a whole day in view, or a few hours. */
+export const HOUR_PX_MIN = 26;
+export const HOUR_PX_MAX = 104;
 // Choosing a time snaps to this (Google-Calendar-style 15-min steps).
 const SNAP_MIN = 15;
 /** How long a finger has to rest before a press becomes a draft event. */
@@ -68,6 +72,12 @@ export interface TimeGridProps {
   initialScrollTop?: number | null;
   /** fill mode: report the hour scroll so the parent can hand it back after a page turn */
   onScrollTop?: (top: number) => void;
+  /**
+   * Height of one hour, in pixels — the zoom. Small shows a whole day at once,
+   * large opens up a few hours to work in. Clamped by the caller to
+   * HOUR_PX_MIN..HOUR_PX_MAX.
+   */
+  hourPx?: number;
   /**
    * availability mode: green background windows the practitioner is bookable in.
    * When set, the drag-to-select ghost reads as "Available" (green), so dragging
@@ -137,6 +147,7 @@ export function TimeGrid({
   fill = false,
   initialScrollTop = null,
   onScrollTop,
+  hourPx = HOUR_PX,
   availWindows,
   dayNotes,
   onAvailabilityClick,
@@ -150,20 +161,22 @@ export function TimeGrid({
     [start, dayCount],
   );
   const gridMinutes = (endHour - startHour) * 60;
-  const gridHeight = (gridMinutes / 60) * HOUR_PX;
+  const gridHeight = (gridMinutes / 60) * hourPx;
   const now = new Date();
 
-  // Few enough columns to fit any phone: no sideways scrolling, which frees a
-  // horizontal swipe to mean "next page" instead of "scroll the grid".
-  const compact = dayCount <= 4;
+  // Columns fit the width rather than scrolling sideways — which is what frees a
+  // horizontal swipe to mean "next page". True for any small range, and always
+  // true in fill mode, so a phone can swipe across a full week as readily as
+  // across three days.
+  const compact = fill || dayCount <= 4;
 
   // Live "where you're about to book" indicator — the day column under the
   // cursor and the 15-min-snapped minute, so choosing a time feels precise.
   const [hover, setHover] = useState<{ di: number; min: number } | null>(null);
 
-  const toY = (min: number) => ((min - startHour * 60) / 60) * HOUR_PX;
+  const toY = (min: number) => ((min - startHour * 60) / 60) * hourPx;
   const snapMinFromY = (offsetY: number) =>
-    startHour * 60 + Math.floor((offsetY / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
+    startHour * 60 + Math.floor((offsetY / hourPx) * 60 / SNAP_MIN) * SNAP_MIN;
 
   // Would a clinic session starting at `slot` collide with anything busy?
   // The shared Chalk Farm room block is excluded — only real sessions count.
@@ -223,11 +236,12 @@ export function TimeGrid({
   }, [availWindows, days, startHour, endHour]);
 
   // Latest props/config for the stable window drag handlers (avoids stale closures).
-  const cfgRef = useRef({ startHour, endHour, dayCount, onSlotClick, onRangeSelect, onEventClick, onEventMove, onPage });
-  cfgRef.current = { startHour, endHour, dayCount, onSlotClick, onRangeSelect, onEventClick, onEventMove, onPage };
+  const cfgRef = useRef({ startHour, endHour, dayCount, hourPx, onSlotClick, onRangeSelect, onEventClick, onEventMove, onPage });
+  cfgRef.current = { startHour, endHour, dayCount, hourPx, onSlotClick, onRangeSelect, onEventClick, onEventMove, onPage };
 
   const clampMin = (m: number, sh: number, eh: number) => Math.max(sh * 60, Math.min(eh * 60, m));
-  const minFromY = (y: number, sh: number) => sh * 60 + Math.floor((y / HOUR_PX) * 60 / SNAP_MIN) * SNAP_MIN;
+  const minFromY = (y: number, sh: number) =>
+    sh * 60 + Math.floor((y / cfgRef.current.hourPx) * 60 / SNAP_MIN) * SNAP_MIN;
 
   /* ---------- touch draft: long-press to create, handles to adjust ---------- */
 
@@ -257,11 +271,23 @@ export function TimeGrid({
     const max = Math.max(0, el.scrollHeight - el.clientHeight);
     const target =
       initialScrollTop ??
-      ((londonMinutes(new Date()) - 60) / 60 - startHour) * HOUR_PX; // an hour of lead-in
+      ((londonMinutes(new Date()) - 60) / 60 - startHour) * hourPx; // an hour of lead-in
     el.scrollTop = Math.max(0, Math.min(target, max));
     // Mount only: re-running would yank the grid back while it's being read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fill]);
+
+  // Zooming rescales the hours under a fixed scroll offset, which would slide
+  // the view to a different time of day. Scaling the offset by the same factor
+  // keeps you looking at the hour you were looking at.
+  const prevHourPx = useRef(hourPx);
+  useEffect(() => {
+    const el = vScrollRef.current;
+    if (el && prevHourPx.current !== hourPx) {
+      el.scrollTop = (el.scrollTop * hourPx) / prevHourPx.current;
+    }
+    prevHourPx.current = hourPx;
+  }, [hourPx]);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -672,7 +698,7 @@ export function TimeGrid({
               <div
                 key={i}
                 className="absolute right-2 -translate-y-1/2 text-[10.5px] font-medium tabular-nums text-faint"
-                style={{ top: i * HOUR_PX }}
+                style={{ top: i * hourPx }}
               >
                 {i === 0 ? "" : `${String(startHour + i).padStart(2, "0")}:00`}
               </div>
@@ -726,7 +752,7 @@ export function TimeGrid({
                   <div
                     key={i}
                     className="pointer-events-none absolute right-0 left-0 border-t border-hairline"
-                    style={{ top: (i + 1) * HOUR_PX }}
+                    style={{ top: (i + 1) * hourPx }}
                   />
                 ))}
 
@@ -751,7 +777,7 @@ export function TimeGrid({
                     const c = AVAIL_COLORS[w.clinic][w.kind];
                     const editable = w.kind !== "weekly" && !!w.id;
                     const top = toY(w.startMin);
-                    const height = Math.max(((w.endMin - w.startMin) / 60) * HOUR_PX, 12);
+                    const height = Math.max(((w.endMin - w.startMin) / 60) * hourPx, 12);
                     const kindLabel =
                       (w.kind === "block"
                         ? "Unavailable"
@@ -805,7 +831,7 @@ export function TimeGrid({
                     className="pointer-events-none absolute right-[3px] left-[3px] z-30 flex items-start justify-start rounded-md border px-1 pt-0.5"
                     style={{
                       top: toY(dragSel.a),
-                      height: ((dragSel.b - dragSel.a) / 60) * HOUR_PX,
+                      height: ((dragSel.b - dragSel.a) / 60) * hourPx,
                       borderColor: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42 / 0.7)",
                       background: availabilityMode ? ghostColor.bg : "oklch(0.9 0.05 48 / 0.7)",
                     }}
@@ -827,7 +853,7 @@ export function TimeGrid({
                     className="ct-draft absolute right-[3px] left-[3px] z-40 rounded-lg border-2 shadow-pop"
                     style={{
                       top: toY(draft.startMin),
-                      height: Math.max(((draft.endMin - draft.startMin) / 60) * HOUR_PX, 22),
+                      height: Math.max(((draft.endMin - draft.startMin) / 60) * hourPx, 22),
                       borderColor: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42)",
                       background: availabilityMode ? ghostColor.bg : "oklch(0.9 0.05 48 / 0.85)",
                       touchAction: "none",
@@ -869,7 +895,7 @@ export function TimeGrid({
                 {evGhost?.di === di && (
                   <div
                     className="pointer-events-none absolute right-[3px] left-[3px] z-30 flex items-start justify-start rounded-md border border-clay bg-clay-tint/80 px-1 pt-0.5"
-                    style={{ top: toY(evGhost.startMin), height: (evGhost.durationMin / 60) * HOUR_PX }}
+                    style={{ top: toY(evGhost.startMin), height: (evGhost.durationMin / 60) * hourPx }}
                   >
                     <span className="rounded-full bg-clay px-1.5 py-[1px] text-[10px] font-semibold tabular-nums text-cream shadow-pop">
                       {fmtTime(slotAt(day, evGhost.startMin))}
@@ -884,7 +910,7 @@ export function TimeGrid({
                     <div
                       className="rounded-md border border-dashed"
                       style={{
-                        height: HOUR_PX,
+                        height: hourPx,
                         borderColor: availabilityMode ? ghostColor.border : "oklch(0.58 0.115 42 / 0.6)",
                         background: availabilityMode ? ghostColor.bg : "oklch(0.9 0.05 48 / 0.5)",
                       }}
@@ -906,7 +932,7 @@ export function TimeGrid({
                     className="pointer-events-none absolute right-[3px] left-[3px] z-20 rounded-md border"
                     style={{
                       top: toY(hover!.min),
-                      height: HOUR_PX,
+                      height: hourPx,
                       borderColor: hoverBlocked ? "oklch(0.72 0.12 25)" : "oklch(0.62 0.13 148)",
                       background: hoverBlocked ? "oklch(0.95 0.04 25 / 0.45)" : "oklch(0.92 0.06 148 / 0.5)",
                     }}
@@ -932,7 +958,7 @@ export function TimeGrid({
                           picker!.onToggle(s);
                         }}
                         className="absolute right-[3px] left-[3px] z-40 flex cursor-pointer items-start justify-center rounded-lg bg-clay px-1 pt-1 text-[11px] font-semibold text-cream shadow-pop hover:bg-clay-deep"
-                        style={{ top: toY(londonMinutes(s)), height: HOUR_PX }}
+                        style={{ top: toY(londonMinutes(s)), height: hourPx }}
                       >
                         {fmtTime(s)}
                         {compact ? "" : " · chosen"}
@@ -962,7 +988,7 @@ export function TimeGrid({
                       }`}
                       style={{
                         top: toY(event.startMin) + 1,
-                        height: Math.max(((event.endMin - event.startMin) / 60) * HOUR_PX - 2, 14),
+                        height: Math.max(((event.endMin - event.startMin) / 60) * hourPx - 2, 14),
                         left: `calc(${(lane / lanes) * 100}% + 2px)`,
                         width: `calc(${100 / lanes}% - 4px)`,
                         background: c.bg,

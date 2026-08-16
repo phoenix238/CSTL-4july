@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import { api, Card, OutlineButton, PrimaryButton, SectionLabel, inputClass, useEscapeKey, useToast } from "../ui";
+import {
+  api,
+  Card,
+  OutlineButton,
+  PrimaryButton,
+  SectionLabel,
+  inputClass,
+  useEscapeKey,
+  useIsPhone,
+  useToast,
+} from "../ui";
 
 interface ClientHit {
   id: string;
@@ -27,6 +37,7 @@ export function QuickBook({
   onBooked: () => void;
 }) {
   const toast = useToast();
+  const phone = useIsPhone();
   useEscapeKey(onClose);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
@@ -94,8 +105,11 @@ export function QuickBook({
           {!client ? (
             <div className="relative">
               <SectionLabel className="mb-1.5">WHO IS IT FOR?</SectionLabel>
+              {/* Not autofocused on a phone: the keyboard would throw itself up
+                  over the sheet as it's still animating in, covering the slot
+                  you just picked. On a laptop it saves a click and costs nothing. */}
               <input
-                autoFocus
+                autoFocus={!phone}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search your clients…"

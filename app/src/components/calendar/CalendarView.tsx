@@ -21,7 +21,7 @@ import { BookingsList } from "./BookingsList";
 import { EventComposer, type EventCalendar } from "./EventComposer";
 import { MonthGrid } from "./MonthGrid";
 import { QuickBook } from "./QuickBook";
-import { TimeGrid } from "./TimeGrid";
+import { TimeGrid, HOUR_PX, HOUR_PX_MAX, HOUR_PX_MIN } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
 import { AVAIL_COLORS, CLINIC_LABEL, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO, type SpanSource } from "./layout";
 import { mergeIntervals, overrideAppliesOn } from "@/lib/booking/availability";
@@ -76,14 +76,28 @@ const HIDDEN_KEY = "cstl-calendar-hidden";
 const SHOW_AVAIL_KEY = "cstl-calendar-show-availability";
 const VIEW_KEY = "cstl-calendar-view";
 
-type CalView = "3day" | "week" | "month";
+type CalView = "3day" | "5day" | "7day" | "month";
 
-const VIEW_LABEL: Record<CalView, string> = { "3day": "3 days", week: "Week", month: "Month" };
+const VIEW_LABEL: Record<CalView, string> = {
+  "3day": "3 days",
+  "5day": "Mon–Fri",
+  "7day": "7 days",
+  month: "Month",
+};
+
+/** Columns each time view draws. Month has none — it's a different grid. */
+const VIEW_DAYS: Record<Exclude<CalView, "month">, number> = { "3day": 3, "5day": 5, "7day": 7 };
+
+const ZOOM_KEY = "cstl-calendar-hourpx";
+/** One tap of the zoom control. */
+const ZOOM_STEP = 14;
+const clampZoom = (px: number) => Math.max(HOUR_PX_MIN, Math.min(HOUR_PX_MAX, Math.round(px)));
 
 export function CalendarView() {
   const toast = useToast();
   const phone = useIsPhone();
-  const [view, setView] = useState<CalView>("week");
+  const [view, setView] = useState<CalView>("7day");
+  const [hourPx, setHourPx] = useState(HOUR_PX);
   const [anchor, setAnchor] = useState(() => new Date());
   // Which way the range last moved, so the incoming page slides in from the
   // side it came from; the key restarts the animation on every move.
@@ -167,12 +181,18 @@ export function CalendarView() {
   // to read a name in, let alone tap.
   useEffect(() => {
     let saved: string | null = null;
+    let savedZoom: string | null = null;
     try {
       saved = localStorage.getItem(VIEW_KEY);
+      savedZoom = localStorage.getItem(ZOOM_KEY);
     } catch {
       /* ignore */
     }
-    if (saved === "3day" || saved === "week" || saved === "month") {
+    const zoom = Number(savedZoom);
+    if (Number.isFinite(zoom) && zoom > 0) setHourPx(clampZoom(zoom));
+    // "week" is what the 7-day view was called before Mon–Fri existed.
+    if (saved === "week") saved = "7day";
+    if (saved === "3day" || saved === "5day" || saved === "7day" || saved === "month") {
       setView(saved);
       return;
     }
@@ -182,11 +202,25 @@ export function CalendarView() {
   function chooseView(v: CalView) {
     setView(v);
     setPage({ dir: 0, n: 0 });
+    // Picking a view is the thing you opened the menu to do — get out of the way.
+    setMenuOpen(false);
     try {
       localStorage.setItem(VIEW_KEY, v);
     } catch {
       /* ignore */
     }
+  }
+
+  function zoomBy(step: number) {
+    setHourPx((h) => {
+      const next = clampZoom(h + step);
+      try {
+        localStorage.setItem(ZOOM_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   }
   function toggleShowAvailability() {
     setShowAvailability((prev) => {
@@ -217,7 +251,9 @@ export function CalendarView() {
   // How many day columns the time grid draws, and where it starts. A week view
   // snaps to Monday; a 3-day view starts on the day you're looking at, so
   // paging walks the calendar three days at a time from wherever you are.
-  const gridDays = view === "3day" ? 3 : 7;
+  const gridDays = view === "month" ? 7 : VIEW_DAYS[view];
+  // 3 days rolls from whatever day you're on; Mon–Fri and the full week both
+  // snap to Monday, so the working week keeps its shape as you page.
   const rangeStart = useMemo(
     () => (view === "3day" ? londonDayStart(0, anchor) : londonWeekStart(anchor)),
     [anchor, view],
@@ -334,7 +370,7 @@ export function CalendarView() {
   }, [bookable, availClinic]);
 
   function enterAvailability() {
-    if (view === "month") chooseView("week");
+    if (view === "month") chooseView("7day");
     setReschedule(null);
     setAvailMode(true);
   }
@@ -351,6 +387,18 @@ export function CalendarView() {
       ? new Intl.DateTimeFormat("en-GB", { timeZone: TZ, month: "long", year: "numeric" }).format(anchor)
       : `${fmtDate(rangeStart)} – ${fmtDate(londonAddDays(rangeStart, gridDays - 1))}`;
 
+  // The phone strip has buttons to fit alongside it, and "19 Aug 2026 – 21 Aug
+  // 2026" is mostly redundant with the dated day headers right underneath.
+  const shortRangeLabel = (() => {
+    if (view === "month") return rangeLabel;
+    const from = rangeStart;
+    const to = londonAddDays(rangeStart, gridDays - 1);
+    const d = (x: Date) => new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric" }).format(x);
+    const dm = (x: Date) =>
+      new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "numeric", month: "short" }).format(x);
+    return londonYMD(from).m === londonYMD(to).m ? `${d(from)}–${dm(to)}` : `${dm(from)} – ${dm(to)}`;
+  })();
+
   function nav(dir: -1 | 0 | 1) {
     if (dir === 0) {
       setAnchor(new Date());
@@ -362,7 +410,10 @@ export function CalendarView() {
       const { y, m } = londonYMD(anchor);
       setAnchor(new Date(Date.UTC(y, m - 1 + dir, 1, 12)));
     } else {
-      setAnchor((a) => londonDayStart(dir * gridDays, a));
+      // Mon–Fri steps a whole week: stepping five days would land on Saturday
+      // and drag the working week off its Monday from then on.
+      const step = view === "5day" ? 7 : gridDays;
+      setAnchor((a) => londonDayStart(dir * step, a));
     }
   }
 
@@ -467,11 +518,11 @@ export function CalendarView() {
 
   const viewSwitcher = !availMode ? (
     <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-      {(["3day", "week", "month"] as const).map((v) => (
+      {(["3day", "5day", "7day", "month"] as const).map((v) => (
         <button
           key={v}
           onClick={() => chooseView(v)}
-          className={`flex-1 cursor-pointer rounded-full px-3.5 py-[6px] text-[12.5px] font-semibold select-none ${
+          className={`flex-1 cursor-pointer rounded-full px-2.5 py-[6px] text-[12.5px] font-semibold whitespace-nowrap select-none sm:px-3.5 ${
             view === v ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
           }`}
         >
@@ -480,6 +531,30 @@ export function CalendarView() {
       ))}
     </div>
   ) : null;
+
+  // Zoom is the hour height: out until a whole day fits, in until there's room
+  // to work in a single afternoon. Hidden in month view, which has no hours.
+  const zoomButtons =
+    view === "month" ? null : (
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => zoomBy(-ZOOM_STEP)}
+          disabled={hourPx <= HOUR_PX_MIN}
+          aria-label="Show more hours"
+          className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[14px] leading-none font-semibold hover:bg-hoverbg disabled:cursor-default disabled:opacity-40"
+        >
+          −
+        </button>
+        <button
+          onClick={() => zoomBy(ZOOM_STEP)}
+          disabled={hourPx >= HOUR_PX_MAX}
+          aria-label="Show fewer hours, larger"
+          className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[14px] leading-none font-semibold hover:bg-hoverbg disabled:cursor-default disabled:opacity-40"
+        >
+          +
+        </button>
+      </div>
+    );
 
   const navButtons = (
     <div className="flex items-center gap-1">
@@ -509,9 +584,10 @@ export function CalendarView() {
   return (
     <div className="flex max-w-[1200px] flex-col gap-3 p-0 sm:gap-4 sm:p-5 sm:pb-10 lg:px-[30px] lg:pt-[26px] max-sm:h-[calc(100svh-52px)]">
       {/* phone: one slim strip — where you are, and the way in to everything else */}
-      <div className="flex flex-none items-center justify-between gap-3 border-b border-line px-3 py-2 sm:hidden">
-        <span className="truncate text-[13px] font-semibold text-ink-soft">{rangeLabel}</span>
+      <div className="flex flex-none items-center justify-between gap-2 border-b border-line px-3 py-2 sm:hidden">
+        <span className="min-w-0 truncate text-[13px] font-semibold text-ink-soft">{shortRangeLabel}</span>
         <div className="flex flex-none items-center gap-1.5">
+          {zoomButtons}
           <button
             onClick={() => nav(0)}
             className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[12.5px] font-semibold"
@@ -521,7 +597,7 @@ export function CalendarView() {
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Calendar options"
-            className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft"
+            className="cursor-pointer rounded-full border border-line bg-card px-3 py-1.5 text-[13px] font-semibold text-ink-soft"
           >
             •••
           </button>
@@ -543,6 +619,7 @@ export function CalendarView() {
           {availabilityToggle}
           {availabilityButton}
           {viewSwitcher}
+          {zoomButtons}
           {navButtons}
           <div className="text-[13px] font-semibold text-ink-soft">{rangeLabel}</div>
         </div>
@@ -704,6 +781,7 @@ export function CalendarView() {
             start={rangeStart}
             days={gridDays}
             fill={phone}
+            hourPx={hourPx}
             initialScrollTop={gridScrollTop.current}
             onScrollTop={(t) => {
               gridScrollTop.current = t;
@@ -822,7 +900,7 @@ export function CalendarView() {
               });
               // Any time grid will do for picking a new slot — only the month
               // view has no times to tap, so that's the one case worth moving.
-              if (view === "month") chooseView("week");
+              if (view === "month") chooseView("7day");
             }
             setOpenSpan(null);
           }}

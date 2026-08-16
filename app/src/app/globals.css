@@ -44,6 +44,19 @@
   color: oklch(0.62 0.02 60);
 }
 
+/* iOS Safari zooms the whole page in when you focus a field whose text is
+   under 16px, and never zooms back out — which is why tapping a slot used to
+   throw the calendar into a close-up. Sixteen pixels on touch devices is the
+   only fix that doesn't involve blocking pinch-zoom, which would cost far more
+   than it saved. Pointer-coarse keeps laptops on the smaller type. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 html,
 body {
   height: 100%;
