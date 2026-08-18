@@ -176,7 +176,7 @@ export function BookingFlow({
   }
 
   return (
-    <div className="mx-auto max-w-[600px] px-5 py-10">
+    <div className="mx-auto max-w-[820px] px-5 py-10">
       <header className="mb-6 text-center">
         <h1 className="font-serif text-[28px] leading-[1.1]">{copy.bookPageTitle}</h1>
         <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.bookPageIntro}</p>
