@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, useToast } from "@/components/ui";
+import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
@@ -20,6 +20,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const [mode, setMode] = useState<"idle" | "book" | "reschedule">("idle");
   const [clinic, setClinic] = useState<Clinic>(view.preferredClinic);
   const [selected, setSelected] = useState<string | null>(null);
+  // Separate from `selected` on purpose. Picking a time opens the confirm box
+  // over the page — the same treatment the first-booking flow gives it, rather
+  // than a button that quietly appears at the bottom of the list. Closing the
+  // box leaves the time highlighted so it can be reopened or swapped.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [receiptEmail, setReceiptEmail] = useState("");
@@ -29,6 +34,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   function reset() {
     setMode("idle");
     setSelected(null);
+    setSheetOpen(false);
     setConfirmingCancel(false);
   }
 
@@ -96,6 +102,10 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       return api<{ sentTo?: string; pending?: boolean }>(`/api/portal/${token}/receipt`, { method: "POST" });
     }, receiptToast);
 
+  // Reschedule keeps the client on their existing clinic; only a fresh booking
+  // gets to choose one. This is the clinic the confirm box names either way.
+  const pickerClinic = mode === "reschedule" && upcoming ? upcoming.clinic : clinic;
+
   const picker = (
     <div className="flex flex-col gap-3 border-t border-hairline pt-4">
       {mode === "book" && (
@@ -106,6 +116,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
               onClick={() => {
                 setClinic(c);
                 setSelected(null);
+                setSheetOpen(false);
               }}
               className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold select-none ${
                 clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
@@ -129,9 +140,12 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       )}
 
       <BookSlotPicker
-        clinic={mode === "reschedule" && upcoming ? upcoming.clinic : clinic}
+        clinic={pickerClinic}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={(iso) => {
+          setSelected(iso);
+          setSheetOpen(true);
+        }}
         slotsUrl={(c) =>
           `/api/portal/${token}/slots?clinic=${c}${mode === "reschedule" ? "&moving=1" : ""}`
         }
@@ -139,16 +153,63 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       />
 
       <div className="flex flex-wrap gap-2">
-        <PrimaryButton
-          disabled={!selected || busy}
-          onClick={mode === "book" ? bookNext : reschedule}
-        >
-          {busy ? "Saving…" : mode === "book" ? "Confirm booking" : "Move my session"}
-        </PrimaryButton>
         <OutlineButton disabled={busy} onClick={reset}>
           Cancel
         </OutlineButton>
       </div>
+
+      {/* Picking a time brings the confirm step forward over the page, matching
+          the first-booking flow, instead of leaving it to be found at the foot
+          of the list. Closing it keeps the time picked so it can be reopened. */}
+      <Sheet
+        open={sheetOpen}
+        onClose={() => {
+          if (!busy) setSheetOpen(false);
+        }}
+        label={mode === "book" ? "Confirm your booking" : "Move your session"}
+      >
+        {selected && (
+          <div className="flex flex-col gap-4 px-5 py-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:py-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-serif text-[19px] leading-tight font-medium">
+                  {mode === "book" ? "Confirm your booking" : "Move your session"}
+                </div>
+                <div className="mt-1 text-[12.5px] text-muted">
+                  {CLINIC_LABEL[pickerClinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetOpen(false)}
+                disabled={busy}
+                aria-label="Close"
+                className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-full px-2 py-1 text-[17px] leading-none text-muted hover:bg-hoverbg hover:text-ink disabled:cursor-default disabled:opacity-60"
+              >
+                ×
+              </button>
+            </div>
+
+            {mode === "reschedule" && upcoming && (
+              <p className="text-[13px] leading-relaxed text-muted">
+                This moves your session from{" "}
+                <span className="font-semibold text-ink-soft">
+                  {fmtDayLong(new Date(upcoming.startsAtISO))}, {fmtTime(new Date(upcoming.startsAtISO))}
+                </span>{" "}
+                to the new time above.
+              </p>
+            )}
+
+            <PrimaryButton
+              disabled={busy}
+              onClick={mode === "book" ? bookNext : reschedule}
+              className="py-3"
+            >
+              {busy ? "Saving…" : mode === "book" ? "Confirm booking" : "Move my session"}
+            </PrimaryButton>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 
