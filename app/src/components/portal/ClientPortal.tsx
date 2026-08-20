@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
-import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { PortalView } from "@/lib/portalData";
@@ -122,7 +122,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                 clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
               }`}
             >
-              {CLINIC_LABEL[c]}
+              {CLINIC_BOOKING_LABEL[c]}
             </button>
           ))}
         </div>
@@ -176,7 +176,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   {mode === "book" ? "Confirm your booking" : "Move your session"}
                 </div>
                 <div className="mt-1 text-[12.5px] text-muted">
-                  {CLINIC_LABEL[pickerClinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
+                  {CLINIC_BOOKING_LABEL[pickerClinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
                 </div>
               </div>
               <button
