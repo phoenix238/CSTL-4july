@@ -54,6 +54,18 @@ export const CLINIC_LABEL: Record<Clinic, string> = {
   bethnal: "Bethnal Green",
 };
 
+/**
+ * Clinic labels for the client-facing booking selectors — the public /book page
+ * and the client portal. Kept separate from CLINIC_LABEL on purpose: the "low
+ * cost" framing belongs where a client is choosing where to book, not on
+ * calendar events, invites, emails, receipts, or session history, which all
+ * stay on the plain CLINIC_LABEL.
+ */
+export const CLINIC_BOOKING_LABEL: Record<Clinic, string> = {
+  waterloo: CLINIC_LABEL.waterloo,
+  bethnal: "Low cost Bethnal Green",
+};
+
 export const CLINIC_PRICE: Record<Clinic, string> = {
   waterloo: "£80",
   bethnal: "£30–60 sliding scale",

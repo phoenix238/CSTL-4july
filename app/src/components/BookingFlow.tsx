@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
-import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import { CLINIC_BOOKING_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { ClientCopy } from "@/lib/clientCopy";
 
@@ -196,7 +196,7 @@ export function BookingFlow({
                 clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
               }`}
             >
-              {CLINIC_LABEL[c]}
+              {CLINIC_BOOKING_LABEL[c]}
             </button>
           ))}
         </div>
@@ -232,7 +232,7 @@ export function BookingFlow({
                   {recognised ? recognised.prompt : "Your details"}
                 </div>
                 <div className="mt-1 text-[12.5px] text-muted">
-                  {CLINIC_LABEL[clinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
+                  {CLINIC_BOOKING_LABEL[clinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
                 </div>
               </div>
               <button
