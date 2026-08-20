@@ -232,7 +232,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
               </div>
             </div>
 
-            {mode === "idle" && !confirmingCancel && (
+            {mode === "idle" && (
               <div className="flex flex-wrap gap-2">
                 {upcoming.canReschedule ? (
                   <OutlineButton onClick={() => setMode("reschedule")}>Move this session</OutlineButton>
@@ -246,12 +246,35 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
               </div>
             )}
 
-            {/* The goodwill ask appears BEFORE they commit, never as a surprise after. */}
-            {confirmingCancel && (
-              <div className="flex flex-col gap-3 border-t border-hairline pt-4">
-                <p className="text-[13px] leading-relaxed">
-                  Cancel your session on {fmtDayLong(new Date(upcoming.startsAtISO))}?
-                </p>
+            {/* Same treatment as booking and moving: the confirm step — goodwill ask
+                and all — comes forward over the page rather than unfolding beneath
+                the buttons. The ask still appears BEFORE they commit, never after. */}
+            <Sheet
+              open={confirmingCancel}
+              onClose={() => {
+                if (!busy) setConfirmingCancel(false);
+              }}
+              label="Cancel your session"
+            >
+              <div className="flex flex-col gap-4 px-5 py-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:py-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-serif text-[19px] leading-tight font-medium">Cancel your session</div>
+                    <div className="mt-1 text-[12.5px] text-muted">
+                      {fmtDayLong(new Date(upcoming.startsAtISO))} at {fmtTime(new Date(upcoming.startsAtISO))} ·{" "}
+                      {CLINIC_LABEL[upcoming.clinic]}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingCancel(false)}
+                    disabled={busy}
+                    aria-label="Close"
+                    className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-full px-2 py-1 text-[17px] leading-none text-muted hover:bg-hoverbg hover:text-ink disabled:cursor-default disabled:opacity-60"
+                  >
+                    ×
+                  </button>
+                </div>
                 {upcoming.cancelGoodwillPence > 0 && (
                   <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12.5px] leading-relaxed text-clay-text">
                     This is inside {view.noticeHours} hours, so the room is already paid for. If you&apos;re able to, a{" "}
@@ -260,8 +283,8 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                     that&apos;s completely okay and nothing is owed either way.
                   </p>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  <PrimaryButton disabled={busy} onClick={cancel}>
+                <div className="flex flex-col gap-2.5">
+                  <PrimaryButton disabled={busy} onClick={cancel} className="py-3">
                     {busy ? "Cancelling…" : "Yes, cancel it"}
                   </PrimaryButton>
                   <OutlineButton disabled={busy} onClick={() => setConfirmingCancel(false)}>
@@ -269,7 +292,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   </OutlineButton>
                 </div>
               </div>
-            )}
+            </Sheet>
 
             {mode === "reschedule" && picker}
           </>
