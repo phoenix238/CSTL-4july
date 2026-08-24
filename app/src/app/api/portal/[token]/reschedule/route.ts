@@ -9,17 +9,26 @@ import { portalRoute, PortalRuleError } from "@/lib/portalRoute";
 import { confirmToClient, notifyPhoenix } from "@/lib/portalNotify";
 import { portalUrl } from "@/lib/portal";
 
-/** Move the client's upcoming session. Body: { startISO } */
+/** Move one of the client's upcoming sessions. Body: { startISO, bookingId? } */
 export const POST = portalRoute(async (req, client) => {
   const settings = await getSettings();
-  const { startISO } = (await req.json()) as { startISO?: string };
+  const { startISO, bookingId } = (await req.json()) as { startISO?: string; bookingId?: string };
   const start = startISO ? new Date(startISO) : null;
   if (!start || Number.isNaN(start.getTime()) || start <= new Date()) {
     throw new PortalRuleError("Please pick a time in the future.");
   }
 
+  // A client can hold several upcoming sessions, so which one is being moved has
+  // to be named. bookingId is scoped to this client's own confirmed future rows —
+  // a token for one client can never reach another's booking. Falls back to the
+  // soonest when unspecified, so an older page with no id still works.
   const booking = await prisma.booking.findFirst({
-    where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
+    where: {
+      clientId: client.id,
+      status: "confirmed",
+      startsAt: { gt: new Date() },
+      ...(bookingId ? { id: bookingId } : {}),
+    },
     orderBy: { startsAt: "asc" },
   });
   if (!booking) {

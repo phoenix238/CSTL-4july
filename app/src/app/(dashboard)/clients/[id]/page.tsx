@@ -25,7 +25,10 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
     directions: isWaterloo ? settings.waterlooDirections : settings.bethnalDirections,
   };
 
-  const nextBooking = await prisma.booking.findFirst({
+  // Every session still ahead of now, soonest first — a client can have several
+  // booked at once (a course of sessions a week apart), so the profile lists them
+  // all rather than surfacing only the nearest.
+  const upcomingBookings = await prisma.booking.findMany({
     where: { clientId: id, status: "confirmed", startsAt: { gte: new Date() } },
     orderBy: { startsAt: "asc" },
   });
@@ -98,8 +101,11 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       }}
       notes={notes}
       recordings={recordings}
-      nextSession={nextBooking ? `${fmtDayLong(nextBooking.startsAt)} · ${fmtTime(nextBooking.startsAt)}` : null}
-      nextBookingId={nextBooking?.id ?? null}
+      upcomingSessions={upcomingBookings.map((b) => ({
+        id: b.id,
+        label: `${fmtDayLong(b.startsAt)} · ${fmtTime(b.startsAt)}`,
+        clinic: b.clinic,
+      }))}
       activeOffer={activeOffer}
       reflectionsDocId={reflectionsDocId || null}
       location={location}

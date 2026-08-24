@@ -71,8 +71,7 @@ export function ClientProfile({
   client,
   notes,
   recordings,
-  nextSession,
-  nextBookingId,
+  upcomingSessions = [],
   activeOffer,
   reflectionsDocId,
   location,
@@ -84,8 +83,8 @@ export function ClientProfile({
   client: ProfileClient;
   notes: ProfileNote[];
   recordings: ProfileRecording[];
-  nextSession: string | null;
-  nextBookingId?: string | null;
+  /** every confirmed session still in the future, soonest first */
+  upcomingSessions?: Array<{ id: string; label: string; clinic: string }>;
   activeOffer?: { id: string; times: Array<{ iso: string; label: string }> } | null;
   reflectionsDocId?: string | null;
   location?: { address: string; url: string; directions: string } | null;
@@ -103,8 +102,10 @@ export function ClientProfile({
   const [noteOpen, setNoteOpen] = useState(false);
   const [reflectionOpen, setReflectionOpen] = useState(false);
   const [linkDocOpen, setLinkDocOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [rescheduling, setRescheduling] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  // Which upcoming session's "Change time" picker is open, if any — a client can
+  // have several booked, so this names the one being moved rather than a bare flag.
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [movingSlot, setMovingSlot] = useState(false);
   const [marketingDraft, setMarketingDraft] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -118,31 +119,29 @@ export function ClientProfile({
   const [inPersonOpen, setInPersonOpen] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
-  async function cancelNextSession() {
-    if (!nextBookingId) return;
-    if (!window.confirm(`Cancel ${client.name}'s upcoming session? Both calendar events are deleted.`)) return;
-    setCancelling(true);
+  async function cancelSession(bookingId: string, label: string) {
+    if (!window.confirm(`Cancel ${client.name}'s session on ${label}? Both calendar events are deleted.`)) return;
+    setCancellingId(bookingId);
     try {
-      await api(`/api/bookings/${nextBookingId}`, { method: "DELETE" });
+      await api(`/api/bookings/${bookingId}`, { method: "DELETE" });
       toast("Booking cancelled");
       router.refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't cancel that booking");
     } finally {
-      setCancelling(false);
+      setCancellingId(null);
     }
   }
 
-  async function reschedule(iso: string) {
-    if (!nextBookingId) return;
+  async function reschedule(bookingId: string, iso: string) {
     setMovingSlot(true);
     try {
-      const res = await api<{ whenLabel: string }>(`/api/bookings/${nextBookingId}`, {
+      const res = await api<{ whenLabel: string }>(`/api/bookings/${bookingId}`, {
         method: "PATCH",
         body: JSON.stringify({ startISO: iso }),
       });
       toast(`Moved to ${res.whenLabel} ✓`);
-      setRescheduling(false);
+      setReschedulingId(null);
       router.refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't change the time");
@@ -643,38 +642,75 @@ export function ClientProfile({
         </section>
 
         <aside className="flex w-full flex-none flex-col gap-2.5 lg:w-[300px]">
-          <SectionLabel>NEXT SESSION</SectionLabel>
+          <SectionLabel>
+            {upcomingSessions.length > 1
+              ? `UPCOMING SESSIONS · ${upcomingSessions.length}`
+              : "NEXT SESSION"}
+          </SectionLabel>
           <div className="flex flex-col gap-1.5 rounded-2xl border border-[oklch(0.87_0.05_48_/_0.5)] bg-[oklch(0.94_0.03_48_/_0.55)] px-4 py-[13px]">
-            <button
-              onClick={() =>
-                nextBookingId ? setRescheduling((v) => !v) : router.push(`/enquiries?client=${client.id}`)
-              }
-              className="flex cursor-pointer items-center justify-between gap-2.5 text-left text-[13.5px] text-[oklch(0.4_0.07_45)]"
-            >
-              <span>{nextSession ?? 'Nothing booked — use "Book next session".'}</span>
-              <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
-                {nextBookingId ? (rescheduling ? "Close" : "Change time ›") : "Book ›"}
-              </span>
-            </button>
-
-            {rescheduling && nextBookingId && (
-              <div className="mt-1 flex flex-col gap-2 rounded-xl border border-[oklch(0.87_0.05_48_/_0.6)] bg-card/70 px-3 py-3">
-                <span className="text-[11.5px] leading-[1.5] text-[oklch(0.45_0.06_45)]">
-                  Pick a new time for {client.name.split(" ")[0]} — {CLINIC_LABEL[client.clinic as Clinic]}. The
-                  calendar events move and the invite updates automatically.
+            {upcomingSessions.length === 0 ? (
+              <button
+                onClick={() => router.push(`/enquiries?client=${client.id}`)}
+                className="flex cursor-pointer items-center justify-between gap-2.5 text-left text-[13.5px] text-[oklch(0.4_0.07_45)]"
+              >
+                <span>Nothing booked — use &quot;Book next session&quot;.</span>
+                <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
+                  Book ›
                 </span>
-                <BookSlotPicker clinic={client.clinic as Clinic} selected={null} onSelect={reschedule} />
-                {movingSlot && <span className="text-[11.5px] font-semibold text-muted">Moving…</span>}
-              </div>
+              </button>
+            ) : (
+              upcomingSessions.map((s, i) => (
+                <div
+                  key={s.id}
+                  className={`flex flex-col gap-1.5 ${i > 0 ? "border-t border-[oklch(0.87_0.05_48_/_0.5)] pt-2" : ""}`}
+                >
+                  <button
+                    onClick={() => setReschedulingId((v) => (v === s.id ? null : s.id))}
+                    className="flex cursor-pointer items-center justify-between gap-2.5 text-left text-[13.5px] text-[oklch(0.4_0.07_45)]"
+                  >
+                    <span>
+                      {s.label}
+                      <span className="ml-1.5 text-[11px] text-[oklch(0.5_0.09_45)]">
+                        {CLINIC_LABEL[s.clinic as Clinic]}
+                      </span>
+                    </span>
+                    <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
+                      {reschedulingId === s.id ? "Close" : "Change time ›"}
+                    </span>
+                  </button>
+
+                  {reschedulingId === s.id && (
+                    <div className="mt-1 flex flex-col gap-2 rounded-xl border border-[oklch(0.87_0.05_48_/_0.6)] bg-card/70 px-3 py-3">
+                      <span className="text-[11.5px] leading-[1.5] text-[oklch(0.45_0.06_45)]">
+                        Pick a new time for {client.name.split(" ")[0]} — {CLINIC_LABEL[s.clinic as Clinic]}. The
+                        calendar events move and the invite updates automatically.
+                      </span>
+                      <BookSlotPicker
+                        clinic={s.clinic as Clinic}
+                        selected={null}
+                        onSelect={(iso) => reschedule(s.id, iso)}
+                      />
+                      {movingSlot && <span className="text-[11.5px] font-semibold text-muted">Moving…</span>}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => cancelSession(s.id, s.label)}
+                    disabled={cancellingId === s.id}
+                    className="cursor-pointer self-start text-[11.5px] font-semibold text-[oklch(0.55_0.12_25)] hover:text-[oklch(0.45_0.15_25)] disabled:cursor-default"
+                  >
+                    {cancellingId === s.id ? "Cancelling…" : "Cancel this session"}
+                  </button>
+                </div>
+              ))
             )}
 
-            {nextBookingId && (
+            {upcomingSessions.length > 0 && (
               <button
-                onClick={cancelNextSession}
-                disabled={cancelling}
-                className="cursor-pointer self-start text-[11.5px] font-semibold text-[oklch(0.55_0.12_25)] hover:text-[oklch(0.45_0.15_25)] disabled:cursor-default"
+                onClick={() => router.push(`/enquiries?client=${client.id}`)}
+                className="cursor-pointer self-start border-t border-[oklch(0.87_0.05_48_/_0.5)] pt-2 text-[11.5px] font-semibold text-[oklch(0.4_0.07_45)] hover:text-clay"
               >
-                {cancelling ? "Cancelling…" : "Cancel this session"}
+                Book another session ›
               </button>
             )}
             <button

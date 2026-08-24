@@ -17,11 +17,21 @@ import { getOrCreatePaymentRef, portalUrl } from "@/lib/portal";
  * Short notice attaches a suggested goodwill contribution to the booking, which
  * is recorded but never treated as a debt.
  */
-export const POST = portalRoute(async (_req, client) => {
+export const POST = portalRoute(async (req, client) => {
   const settings = await getSettings();
 
+  // The body may name which session to cancel — a client can hold more than one.
+  // bookingId is constrained to this client's own future confirmed rows, so a
+  // token can only ever cancel that client's session. Missing id → the soonest,
+  // keeping older pages working.
+  const { bookingId } = (await req.json().catch(() => ({}))) as { bookingId?: string };
   const booking = await prisma.booking.findFirst({
-    where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
+    where: {
+      clientId: client.id,
+      status: "confirmed",
+      startsAt: { gt: new Date() },
+      ...(bookingId ? { id: bookingId } : {}),
+    },
     orderBy: { startsAt: "asc" },
   });
   if (!booking) {

@@ -26,16 +26,24 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   // box leaves the time highlighted so it can be reopened or swapped.
   const [sheetOpen, setSheetOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // Which session a move or cancel is aimed at — a client can hold more than one,
+  // so the action has to name the exact booking rather than assume "the next one".
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
   const [receiptEmail, setReceiptEmail] = useState("");
 
   const upcoming = view.upcoming;
+  // The session a reschedule is currently working on (its old time, its clinic).
+  const target = upcoming.find((u) => u.id === targetId) ?? null;
+  // The session whose cancel confirmation is open, if any.
+  const cancelTarget = upcoming.find((u) => u.id === confirmingCancelId) ?? null;
 
   function reset() {
     setMode("idle");
     setSelected(null);
     setSheetOpen(false);
-    setConfirmingCancel(false);
+    setTargetId(null);
+    setConfirmingCancelId(null);
   }
 
   /** Run a portal action, then refresh the server-rendered view so it can't go stale. */
@@ -76,14 +84,18 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       () =>
         api<{ whenLabel: string }>(`/api/portal/${token}/reschedule`, {
           method: "POST",
-          body: JSON.stringify({ startISO: selected }),
+          body: JSON.stringify({ startISO: selected, bookingId: targetId }),
         }),
       (r) => toast(`Moved to ${r.whenLabel}`),
     );
 
-  const cancel = () =>
+  const cancel = (bookingId: string) =>
     run(
-      () => api<{ whenLabel: string }>(`/api/portal/${token}/cancel`, { method: "POST" }),
+      () =>
+        api<{ whenLabel: string }>(`/api/portal/${token}/cancel`, {
+          method: "POST",
+          body: JSON.stringify({ bookingId }),
+        }),
       () => toast("Your session has been cancelled"),
     );
 
@@ -104,7 +116,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
   // Reschedule keeps the client on their existing clinic; only a fresh booking
   // gets to choose one. This is the clinic the confirm box names either way.
-  const pickerClinic = mode === "reschedule" && upcoming ? upcoming.clinic : clinic;
+  const pickerClinic = mode === "reschedule" && target ? target.clinic : clinic;
 
   const picker = (
     <div className="flex flex-col gap-3 border-t border-hairline pt-4">
@@ -129,11 +141,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       )}
       {mode === "book" && <div className="text-[12.5px] text-muted">{CLINIC_PRICE[clinic]} · 60 minutes</div>}
 
-      {mode === "reschedule" && upcoming && (
+      {mode === "reschedule" && target && (
         <div className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12.5px] text-clay-text">
           Your current time is{" "}
           <span className="font-semibold">
-            {fmtDayLong(new Date(upcoming.startsAtISO))}, {fmtTime(new Date(upcoming.startsAtISO))}
+            {fmtDayLong(new Date(target.startsAtISO))}, {fmtTime(new Date(target.startsAtISO))}
           </span>
           . Pick a new time below.
         </div>
@@ -190,11 +202,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
               </button>
             </div>
 
-            {mode === "reschedule" && upcoming && (
+            {mode === "reschedule" && target && (
               <p className="text-[13px] leading-relaxed text-muted">
                 This moves your session from{" "}
                 <span className="font-semibold text-ink-soft">
-                  {fmtDayLong(new Date(upcoming.startsAtISO))}, {fmtTime(new Date(upcoming.startsAtISO))}
+                  {fmtDayLong(new Date(target.startsAtISO))}, {fmtTime(new Date(target.startsAtISO))}
                 </span>{" "}
                 to the new time above.
               </p>
@@ -220,98 +232,124 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         <p className="mt-2 text-[13.5px] text-muted">Your sessions with Phoenix Tanner.</p>
       </header>
 
-      {/* ---------- next session ---------- */}
+      {/* ---------- upcoming sessions ---------- */}
       <Card className="flex flex-col gap-3 px-5 py-5">
-        <SectionLabel>Your next session</SectionLabel>
-        {upcoming ? (
-          <>
+        <SectionLabel>{upcoming.length > 1 ? "Your upcoming sessions" : "Your next session"}</SectionLabel>
+        {upcoming.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {upcoming.length > 1 && (
+              <p className="text-[12.5px] text-muted">
+                You have {upcoming.length} sessions coming up.
+              </p>
+            )}
+            {upcoming.map((u, i) => (
+              <div
+                key={u.id}
+                className={`flex flex-col gap-2 ${i > 0 ? "border-t border-hairline pt-3" : ""}`}
+              >
+                <div>
+                  <div className="text-[15px] font-semibold">{fmtDayLong(new Date(u.startsAtISO))}</div>
+                  <div className="text-[13px] text-muted">
+                    {fmtTime(new Date(u.startsAtISO))} · {CLINIC_LABEL[u.clinic]}
+                  </div>
+                </div>
+
+                {mode === "idle" && (
+                  <div className="flex flex-wrap gap-2">
+                    {u.canReschedule ? (
+                      <OutlineButton
+                        onClick={() => {
+                          setMode("reschedule");
+                          setTargetId(u.id);
+                        }}
+                      >
+                        Move this session
+                      </OutlineButton>
+                    ) : (
+                      <p className="text-[12.5px] leading-relaxed text-muted">
+                        Sessions can be moved up to {view.noticeHours} hours beforehand. It&apos;s closer than that
+                        now — message Phoenix and he&apos;ll sort something out.
+                      </p>
+                    )}
+                    <OutlineButton onClick={() => setConfirmingCancelId(u.id)}>Cancel this session</OutlineButton>
+                  </div>
+                )}
+
+                {mode === "reschedule" && targetId === u.id && picker}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[13px] text-muted">You don&apos;t have a session booked at the moment.</p>
+        )}
+
+        {/* Booking a session is always available while self-booking is on — a client
+            can hold several at once (a course of sessions), so having one already
+            never hides the button. Only the wording changes. */}
+        {mode === "idle" &&
+          (view.selfBookEnabled ? (
             <div>
-              <div className="text-[15px] font-semibold">{fmtDayLong(new Date(upcoming.startsAtISO))}</div>
-              <div className="text-[13px] text-muted">
-                {fmtTime(new Date(upcoming.startsAtISO))} · {CLINIC_LABEL[upcoming.clinic]}
+              <PrimaryButton onClick={() => setMode("book")}>
+                {upcoming.length > 0 ? "Book another session" : "Book my next session"}
+              </PrimaryButton>
+            </div>
+          ) : upcoming.length === 0 ? (
+            <p className="text-[12.5px] text-muted">
+              Message Phoenix whenever you&apos;d like to arrange your next one.
+            </p>
+          ) : null)}
+        {mode === "book" && picker}
+
+        {/* Same treatment as booking and moving: the confirm step — goodwill ask
+            and all — comes forward over the page rather than unfolding beneath
+            the buttons. The ask still appears BEFORE they commit, never after. One
+            shared sheet, driven by which session's cancel was tapped. */}
+        <Sheet
+          open={!!cancelTarget}
+          onClose={() => {
+            if (!busy) setConfirmingCancelId(null);
+          }}
+          label="Cancel your session"
+        >
+          {cancelTarget && (
+            <div className="flex flex-col gap-4 px-5 py-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:py-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-serif text-[19px] leading-tight font-medium">Cancel your session</div>
+                  <div className="mt-1 text-[12.5px] text-muted">
+                    {fmtDayLong(new Date(cancelTarget.startsAtISO))} at {fmtTime(new Date(cancelTarget.startsAtISO))} ·{" "}
+                    {CLINIC_LABEL[cancelTarget.clinic]}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingCancelId(null)}
+                  disabled={busy}
+                  aria-label="Close"
+                  className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-full px-2 py-1 text-[17px] leading-none text-muted hover:bg-hoverbg hover:text-ink disabled:cursor-default disabled:opacity-60"
+                >
+                  ×
+                </button>
+              </div>
+              {cancelTarget.cancelGoodwillPence > 0 && (
+                <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12.5px] leading-relaxed text-clay-text">
+                  This is inside {view.noticeHours} hours, so the room is already paid for. If you&apos;re able to, a{" "}
+                  {formatPence(cancelTarget.cancelGoodwillPence)} contribution towards it is a real help. This is a
+                  donation-based clinic though, so if that&apos;s too much right now, please don&apos;t pay it —
+                  that&apos;s completely okay and nothing is owed either way.
+                </p>
+              )}
+              <div className="flex flex-col gap-2.5">
+                <PrimaryButton disabled={busy} onClick={() => cancel(cancelTarget.id)} className="py-3">
+                  {busy ? "Cancelling…" : "Yes, cancel it"}
+                </PrimaryButton>
+                <OutlineButton disabled={busy} onClick={() => setConfirmingCancelId(null)}>
+                  Keep my session
+                </OutlineButton>
               </div>
             </div>
-
-            {mode === "idle" && (
-              <div className="flex flex-wrap gap-2">
-                {upcoming.canReschedule ? (
-                  <OutlineButton onClick={() => setMode("reschedule")}>Move this session</OutlineButton>
-                ) : (
-                  <p className="text-[12.5px] leading-relaxed text-muted">
-                    Sessions can be moved up to {view.noticeHours} hours beforehand. It&apos;s closer than that now —
-                    message Phoenix and he&apos;ll sort something out.
-                  </p>
-                )}
-                <OutlineButton onClick={() => setConfirmingCancel(true)}>Cancel this session</OutlineButton>
-              </div>
-            )}
-
-            {/* Same treatment as booking and moving: the confirm step — goodwill ask
-                and all — comes forward over the page rather than unfolding beneath
-                the buttons. The ask still appears BEFORE they commit, never after. */}
-            <Sheet
-              open={confirmingCancel}
-              onClose={() => {
-                if (!busy) setConfirmingCancel(false);
-              }}
-              label="Cancel your session"
-            >
-              <div className="flex flex-col gap-4 px-5 py-5 pb-[calc(20px+env(safe-area-inset-bottom))] sm:px-6 sm:py-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-serif text-[19px] leading-tight font-medium">Cancel your session</div>
-                    <div className="mt-1 text-[12.5px] text-muted">
-                      {fmtDayLong(new Date(upcoming.startsAtISO))} at {fmtTime(new Date(upcoming.startsAtISO))} ·{" "}
-                      {CLINIC_LABEL[upcoming.clinic]}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingCancel(false)}
-                    disabled={busy}
-                    aria-label="Close"
-                    className="-mt-1 -mr-1 shrink-0 cursor-pointer rounded-full px-2 py-1 text-[17px] leading-none text-muted hover:bg-hoverbg hover:text-ink disabled:cursor-default disabled:opacity-60"
-                  >
-                    ×
-                  </button>
-                </div>
-                {upcoming.cancelGoodwillPence > 0 && (
-                  <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12.5px] leading-relaxed text-clay-text">
-                    This is inside {view.noticeHours} hours, so the room is already paid for. If you&apos;re able to, a{" "}
-                    {formatPence(upcoming.cancelGoodwillPence)} contribution towards it is a real help. This is a
-                    donation-based clinic though, so if that&apos;s too much right now, please don&apos;t pay it —
-                    that&apos;s completely okay and nothing is owed either way.
-                  </p>
-                )}
-                <div className="flex flex-col gap-2.5">
-                  <PrimaryButton disabled={busy} onClick={cancel} className="py-3">
-                    {busy ? "Cancelling…" : "Yes, cancel it"}
-                  </PrimaryButton>
-                  <OutlineButton disabled={busy} onClick={() => setConfirmingCancel(false)}>
-                    Keep my session
-                  </OutlineButton>
-                </div>
-              </div>
-            </Sheet>
-
-            {mode === "reschedule" && picker}
-          </>
-        ) : (
-          <>
-            <p className="text-[13px] text-muted">You don&apos;t have a session booked at the moment.</p>
-            {mode === "idle" &&
-              (view.selfBookEnabled ? (
-                <div>
-                  <PrimaryButton onClick={() => setMode("book")}>Book my next session</PrimaryButton>
-                </div>
-              ) : (
-                <p className="text-[12.5px] text-muted">
-                  Message Phoenix whenever you&apos;d like to arrange your next one.
-                </p>
-              ))}
-            {mode === "book" && picker}
-          </>
-        )}
+          )}
+        </Sheet>
       </Card>
 
       {/* ---------- payment ---------- */}
