@@ -36,11 +36,11 @@ export interface BookingRequest {
    * Treat this as a move rather than an addition: cancel the client's existing
    * upcoming session and free its slot.
    *
-   * True for the flows Phoenix drives — rebooking someone from the enquiry panel
-   * means moving them, and he can see what it replaced. False everywhere a
-   * client acts alone, where "book a session" means exactly that: a returning
-   * client arranging their next appointment must not silently lose the one they
-   * already have.
+   * Defaults to false — booking a session *adds* one, on every path (calendar,
+   * enquiry panel, offer accept, public page, client portal), so a client can
+   * hold several at once. Moving a session is a separate action with its own
+   * route (rescheduleBooking), so nothing here needs to replace; this stays only
+   * as an explicit opt-in for a future caller that genuinely means "move them".
    */
   replaceUpcoming?: boolean;
   /**
@@ -171,11 +171,12 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     client = await prisma.client.update({ where: { id: clientId }, data: { clinic: req.clinic } });
   }
 
-  // Reschedule rule: an existing client's upcoming booking is replaced —
-  // the old events are deleted so the old slot is genuinely free again. Only
-  // when the caller actually means "move them" (see BookingRequest.replaceUpcoming).
+  // Only when the caller explicitly asks to move the client (replaceUpcoming:
+  // true) is their existing upcoming session cancelled and its slot freed.
+  // The default is to add — every booking path leaves prior sessions intact, so
+  // "book a session" never silently removes one the client already has.
   let replacedLabel: string | null = null;
-  if (req.replaceUpcoming ?? true) {
+  if (req.replaceUpcoming) {
     const upcoming = await prisma.booking.findFirst({
       where: { clientId, status: "confirmed", startsAt: { gte: new Date() } },
     });
