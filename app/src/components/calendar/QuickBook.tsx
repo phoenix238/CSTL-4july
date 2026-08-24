@@ -76,8 +76,8 @@ export function QuickBook({
           // Booking a slot from the calendar means "add this session", never
           // "move their existing one" — a client can have two sessions a week
           // apart. Rescheduling has its own path (Change time on the profile /
-          // drag on the calendar → rescheduleBooking). Without this, bookSession
-          // defaults replaceUpcoming to true and cancels their next session.
+          // drag on the calendar → rescheduleBooking). Stated explicitly even
+          // though adding is bookSession's default, so the intent is unmistakable.
           replaceUpcoming: false,
         }),
       });
