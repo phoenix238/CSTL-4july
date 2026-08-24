@@ -73,6 +73,12 @@ export function QuickBook({
           startISO: slot.toISOString(),
           sendEmail,
           sendPayment: false,
+          // Booking a slot from the calendar means "add this session", never
+          // "move their existing one" — a client can have two sessions a week
+          // apart. Rescheduling has its own path (Change time on the profile /
+          // drag on the calendar → rescheduleBooking). Without this, bookSession
+          // defaults replaceUpcoming to true and cancels their next session.
+          replaceUpcoming: false,
         }),
       });
       if (res.emailTextForClipboard) {

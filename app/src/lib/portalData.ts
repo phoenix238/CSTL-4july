@@ -48,7 +48,8 @@ export interface PortalView {
   firstName: string;
   paymentRef: string;
   preferredClinic: Clinic;
-  upcoming: PortalUpcoming | null;
+  /** every confirmed session still in the future, soonest first */
+  upcoming: PortalUpcoming[];
   /** past and cancelled sessions, most recent first */
   history: PortalSession[];
   account: AccountSummary;
@@ -92,12 +93,13 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
 
   const account = summariseAccount(bookings.map(toAccountBooking), now);
 
-  // The next confirmed session. Only one is ever offered for self-service: the
-  // booking flow already replaces an existing upcoming slot rather than stacking,
-  // so "your session" is unambiguous.
-  const upcomingRow = [...bookings]
-    .reverse()
-    .find((b) => b.status === "confirmed" && b.startsAt.getTime() > now.getTime());
+  // Every confirmed session still ahead of now, soonest first. A client can hold
+  // more than one at a time (a course of sessions booked a week apart), so the
+  // portal shows and manages them as a list rather than assuming a single "next".
+  const upcomingRows = bookings
+    .filter((b) => b.status === "confirmed" && b.startsAt.getTime() > now.getTime())
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const upcomingIds = new Set(upcomingRows.map((b) => b.id));
 
   const toSession = (b: (typeof bookings)[number]): PortalSession => ({
     id: b.id,
@@ -112,20 +114,20 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     cancelled: b.status === "cancelled",
   });
 
-  const upcoming: PortalUpcoming | null = upcomingRow
-    ? {
-        ...toSession(upcomingRow),
-        canReschedule: canRescheduleSelf(upcomingRow.startsAt, settings.portalNoticeHours, now),
-        cancelGoodwillPence: suggestedGoodwillPence(
-          upcomingRow.startsAt,
-          settings.portalNoticeHours,
-          settings.lateCancelGoodwillPence,
-          now,
-        ),
-      }
-    : null;
+  const upcoming: PortalUpcoming[] = upcomingRows.map((row) => ({
+    ...toSession(row),
+    canReschedule: canRescheduleSelf(row.startsAt, settings.portalNoticeHours, now),
+    cancelGoodwillPence: suggestedGoodwillPence(
+      row.startsAt,
+      settings.portalNoticeHours,
+      settings.lateCancelGoodwillPence,
+      now,
+    ),
+  }));
 
-  const history = bookings.filter((b) => b.id !== upcomingRow?.id).map(toSession);
+  // Everything that isn't an upcoming session: past sessions and cancellations.
+  // Guarded by id so a second future booking can never fall through into here.
+  const history = bookings.filter((b) => !upcomingIds.has(b.id)).map(toSession);
 
   const bank = {
     accountName: settings.bankAccountName,
