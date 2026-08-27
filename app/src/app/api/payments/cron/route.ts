@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { syncBankPayments } from "@/lib/payments/sync";
 import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
+import { runAvailabilitySync } from "@/lib/google/availabilitySync";
 
 /**
  * The daily heartbeat: pull new bank payments and match them, flag sessions
@@ -67,12 +68,19 @@ export async function GET(req: Request) {
       console.error("Calendar reconcile failed", err);
       return { issues: [], newIssues: [] };
     });
+    // Availability ⇄ Google two-way sync (the daily "periodic" catch-up in
+    // addition to the on-open pull). Needs Google; never fail the run over it.
+    const availability = await runAvailabilitySync().catch((err) => {
+      console.error("Availability sync failed", err);
+      return { connected: false as const };
+    });
 
     return NextResponse.json({
       ...sync,
       unpaidFlagged: unpaid.newlyFlagged.length,
       unpaidTotal: unpaid.overdue.length,
       calendarIssues: calendar.newIssues.length,
+      availabilitySync: availability,
     });
   } catch (err) {
     console.error("Scheduled sync failed", err);

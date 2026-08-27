@@ -266,6 +266,29 @@ export function CalendarView() {
   const week = useWeekSpans(rangeStart, gridDays);
   const month = useWeekSpans(monthGridStart, 42);
 
+  // On opening the calendar, pull any availability changes made in Google
+  // Calendar back into the app (the "on app open" half of the two-way sync;
+  // the daily cron is the periodic backstop). Server-side throttled and a
+  // no-op when the availability calendar isn't connected. If it folded in real
+  // changes, refresh the overrides + spans so they show without a manual reload.
+  const availSyncedRef = useRef(false);
+  useEffect(() => {
+    if (availSyncedRef.current) return;
+    availSyncedRef.current = true;
+    api<{ result?: { imported?: number; closed?: number; moved?: number } }>("/api/availability/sync", {
+      method: "POST",
+    })
+      .then((r) => {
+        const changed = (r?.result?.imported ?? 0) + (r?.result?.closed ?? 0) + (r?.result?.moved ?? 0);
+        if (changed > 0) {
+          loadOverrides();
+          week.invalidate();
+          month.invalidate();
+        }
+      })
+      .catch(() => {});
+  }, [loadOverrides, week, month]);
+
   // Availability is drawn whenever it's being edited, or the read-only
   // "show availability" toggle is on — both clinics at once, each in its own
   // colour, so Bethnal Green and Waterloo can be compared at a glance.

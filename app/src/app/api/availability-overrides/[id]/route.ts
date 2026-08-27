@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
@@ -27,11 +28,13 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   if (exactStart !== undefined) data.exactStart = !!exactStart;
 
   const override = await prisma.availabilityOverride.update({ where: { id }, data });
+  await syncAvailabilityAfterChange();
   return NextResponse.json({ override });
 });
 
 export const DELETE = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   await prisma.availabilityOverride.delete({ where: { id } });
+  await syncAvailabilityAfterChange();
   return NextResponse.json({ ok: true });
 });

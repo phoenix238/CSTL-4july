@@ -272,6 +272,20 @@ model AppSettings {
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
+  // — Availability ⇄ Google Calendar two-way sync —
+  // A dedicated "CSTL Availability" calendar that mirrors the bookable hours
+  // (recurring weekly hours + one-off overrides) as concrete dated blocks,
+  // editable from either side. Empty until connected in Settings › Availability.
+  availabilityCalendarId        String @default("")
+  // Google's incremental sync cursor for that calendar's events, so a pull only
+  // fetches what changed since last time. Cleared (forcing a full resync) if
+  // Google rejects it as stale (410).
+  availabilityCalendarSyncToken String @default("")
+  availabilityLastSyncAt        DateTime?
+  // Clinic assumed for a block drawn directly in Google whose title carries no
+  // clinic keyword (waterloo / bethnal | bg) — the one shared calendar can't tell
+  // the two apart on its own.
+  availabilityDefaultClinic     String @default("waterloo")
   clientsFolderId       String @default("") // Drive › CSTL › Clients
   reflectionsDocId      String @default("") // Drive › CSTL › "Phoenix session reflections" — one Doc, all clients
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
@@ -393,6 +407,29 @@ model ChalkFarmDayBlock {
   date      String   @id // "YYYY-MM-DD" London calendar date
   eventId   String // the Google event id of that day's shared block
   updatedAt DateTime @updatedAt
+}
+
+// The projection mirror for the availability ⇄ Google Calendar sync: one row per
+// Google event the app has written onto the "CSTL Availability" calendar,
+// recording the open window that event represents. It makes the app→Google diff
+// idempotent (compare the expected windows against these rows, insert/patch/
+// delete the difference) and lets a changed or deleted Google event be folded
+// back into the right one-off override — the block it used to be is known here.
+model AvailabilityEvent {
+  eventId    String   @id // the Google Calendar event id
+  clinic     String // waterloo | bethnal
+  dateKey    String // "YYYY-MM-DD" London day the block sits on
+  startMin   Int // minutes after London midnight
+  endMin     Int
+  // "weekly" = derived from the recurring weekly hours; "override" = derived
+  // from an AvailabilityOverride open window. A delete/move in Google is folded
+  // back differently for each (see src/lib/google/availabilitySync.ts).
+  source     String
+  overrideId String   @default("") // set when source = "override"
+  updatedAt  DateTime @updatedAt
+
+  @@index([dateKey])
+  @@index([overrideId])
 }
 
 // One-off availability exceptions — either opens an extra date/window beyond the
