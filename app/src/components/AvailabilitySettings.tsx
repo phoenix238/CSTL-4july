@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, Card, OutlineButton, PrimaryButton, inputClass, useToast } from "./ui";
+import { AvailabilitySyncCard } from "./AvailabilitySyncCard";
 import type { WeeklyHours, WeeklyWindow } from "@/lib/booking/availability";
 
 type ClinicKey = "waterloo" | "bethnal";
@@ -275,6 +276,8 @@ export function AvailabilitySettings({
           Copy link
         </OutlineButton>
       </Card>
+
+      <AvailabilitySyncCard />
 
       <Card className="flex flex-col gap-3 px-[18px] py-4">
         <div className="text-[12px] font-semibold text-ink-soft">Weekly hours</div>

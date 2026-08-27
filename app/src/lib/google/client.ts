@@ -68,6 +68,12 @@ export async function calendarId(key: CalendarKey): Promise<string> {
     if (!s.roomCalendarId) throw new Error("The R5 room calendar isn't set yet — add it in Settings.");
     return s.roomCalendarId;
   }
+  if (key === "availability") {
+    if (!s.availabilityCalendarId) {
+      throw new Error("The availability calendar isn't connected yet — connect it in Settings › Availability.");
+    }
+    return s.availabilityCalendarId;
+  }
   if (!s.chalkFarmCalendarId) throw new Error("The Chalk Farm calendar isn't set yet — add it in Settings.");
   return s.chalkFarmCalendarId;
 }

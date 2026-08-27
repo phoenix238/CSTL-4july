@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 export const GET = guarded(async () => {
   const overrides = await prisma.availabilityOverride.findMany({ orderBy: { date: "asc" } });
@@ -26,5 +27,6 @@ export const POST = guarded(async (req: Request) => {
   const override = await prisma.availabilityOverride.create({
     data: { clinic, date, kind, startMin: start, endMin: end, note: note?.trim() || "", repeatWeekly: !!repeatWeekly, exactStart: !!exactStart },
   });
+  await syncAvailabilityAfterChange();
   return NextResponse.json({ override });
 });

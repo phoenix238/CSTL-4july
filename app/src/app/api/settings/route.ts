@@ -3,6 +3,7 @@ import { guarded } from "@/lib/api";
 import { prisma, getSettings } from "@/lib/db";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 /** The editable settings the UI needs (email preview etc.) — no Google secrets. */
 export const GET = guarded(async () => {
@@ -56,6 +57,12 @@ export const GET = guarded(async () => {
     clientCopy: resolveClientCopy(s.clientCopy),
     // Which calendars are wired up — for the calendar page's event composer.
     calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },
+    // Availability ⇄ Google Calendar two-way sync state — for the Settings card.
+    availabilitySync: {
+      connected: !!s.availabilityCalendarId,
+      defaultClinic: s.availabilityDefaultClinic,
+      lastSyncAt: s.availabilityLastSyncAt?.toISOString() ?? null,
+    },
   });
 });
 
@@ -86,6 +93,7 @@ const EDITABLE_SETTINGS = [
   "bankAccountName", "bankSortCode", "bankAccountNumber", "bankPaymentNote",
   "starlingEnabled", "starlingAutoMark", "starlingNotifyEmail", "starlingLookbackDays",
   "personalCalendarId", "roomCalendarId", "chalkFarmCalendarId",
+  "availabilityCalendarId", "availabilityDefaultClinic",
   "clientsFolderId", "reflectionsDocId", "marketingSheetId", "appUrl",
 ] as const;
 
@@ -104,5 +112,8 @@ export const PATCH = guarded(async (req: Request) => {
     update: data,
     create: { id: 1, ...data },
   });
+  // Saving the weekly hours changes what's offered — push the new picture onto
+  // the availability calendar (no-op when it isn't connected; never fatal).
+  if ("weeklyHours" in data) await syncAvailabilityAfterChange();
   return NextResponse.json(settings);
 });

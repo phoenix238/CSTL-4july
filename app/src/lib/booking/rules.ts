@@ -25,7 +25,7 @@
 
 export type Clinic = "waterloo" | "bethnal";
 
-export type CalendarKey = "personal" | "room" | "chalkFarm";
+export type CalendarKey = "personal" | "room" | "chalkFarm" | "availability";
 
 export interface PlannedEvent {
   calendar: CalendarKey;
