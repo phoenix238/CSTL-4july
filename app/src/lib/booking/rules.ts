@@ -144,7 +144,11 @@ export function planBookingEvents(
   ];
 }
 
-/** Reminder overrides applied to every event we create. */
+/**
+ * The legacy reminder pair — an email a day before and a popup an hour before.
+ * Kept as the "email_popup" option and as what a venue event carries when
+ * venue reminders are turned on.
+ */
 export const EVENT_REMINDERS = {
   useDefault: false,
   overrides: [
@@ -152,6 +156,61 @@ export const EVENT_REMINDERS = {
     { method: "popup" as const, minutes: 60 },
   ],
 };
+
+/** No reminder at all on an event — Google sends nothing for this copy. */
+export const NO_REMINDERS = { useDefault: false, overrides: [] as EventReminderOverride[] };
+
+export type EventReminderOverride = { method: "email" | "popup"; minutes: number };
+export interface EventReminders {
+  useDefault: boolean;
+  overrides: EventReminderOverride[];
+}
+
+/** How Phoenix wants reminding of his own sessions — the shape stored in settings. */
+export interface OwnReminderConfig {
+  /** "morning" | "before" | "email_popup" | "none" */
+  ownReminderMode: string;
+  /** minutes before the session, when mode = "before" */
+  ownReminderMinutesBefore: number;
+  /** London hour the morning-of popup fires, when mode = "morning" */
+  ownReminderMorningHour: number;
+}
+
+// Google reminder offsets are whole minutes before the start, from 0 up to four weeks.
+const clampMinutes = (m: number) => Math.max(0, Math.min(Math.round(m), 40320));
+
+/**
+ * The reminders to put on Phoenix's own copy of a session event. Pure so it can
+ * be unit-tested without Google or the clock: it takes the session's minute of
+ * the London day (e.g. 15:00 → 900) rather than a Date, since that's all the
+ * "morning of" maths needs.
+ *
+ * "morning" turns the fixed morning hour into a relative offset — the only kind
+ * Google event reminders support — so a 15:00 session set to an 08:00 morning
+ * reminder becomes a popup 420 minutes before. A session at or before the
+ * morning hour can't be reminded "that morning" any earlier than it starts, so
+ * it falls back to the plain minutes-before popup instead of a useless 0.
+ */
+export function personalEventReminders(cfg: OwnReminderConfig, sessionMinuteOfDay: number): EventReminders {
+  const beforePopup = (minutes: number): EventReminders => ({
+    useDefault: false,
+    overrides: [{ method: "popup", minutes: clampMinutes(minutes) }],
+  });
+  switch (cfg.ownReminderMode) {
+    case "none":
+      return NO_REMINDERS;
+    case "email_popup":
+      return EVENT_REMINDERS;
+    case "before":
+      return beforePopup(cfg.ownReminderMinutesBefore);
+    case "morning":
+    default: {
+      const offset = sessionMinuteOfDay - cfg.ownReminderMorningHour * 60;
+      // A session before the morning hour gets the plain minutes-before popup.
+      return beforePopup(offset > 0 ? offset : cfg.ownReminderMinutesBefore);
+    }
+  }
+}
 
 /**
  * The time range a booking blocks out (for availability). Both clinics block

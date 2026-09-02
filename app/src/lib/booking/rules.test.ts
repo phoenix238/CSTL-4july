@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { blockedRange, CLINIC_EVENT_COLOR, planBookingEvents } from "./rules";
+import {
+  blockedRange,
+  CLINIC_EVENT_COLOR,
+  EVENT_REMINDERS,
+  NO_REMINDERS,
+  personalEventReminders,
+  planBookingEvents,
+} from "./rules";
 
 const at = (h: number, m = 0) => new Date(Date.UTC(2026, 6, 7, h, m));
 
@@ -83,6 +90,46 @@ describe("planBookingEvents", () => {
   it("leaves the shared room event uncoloured — it lives on the venue's calendar", () => {
     const room = planBookingEvents("waterloo", at(9)).find((e) => e.calendar === "room")!;
     expect(room.colorId).toBeUndefined();
+  });
+});
+
+describe("personalEventReminders", () => {
+  const cfg = (over: Partial<Parameters<typeof personalEventReminders>[0]> = {}) => ({
+    ownReminderMode: "morning",
+    ownReminderMinutesBefore: 60,
+    ownReminderMorningHour: 8,
+    ...over,
+  });
+
+  it("morning mode turns 08:00 into a relative offset for an afternoon session", () => {
+    // 15:00 session, morning hour 8 → popup 7h (420 min) before, i.e. at 08:00.
+    expect(personalEventReminders(cfg(), 15 * 60)).toEqual({
+      useDefault: false,
+      overrides: [{ method: "popup", minutes: 420 }],
+    });
+  });
+
+  it("morning mode falls back to minutes-before for a session at/before the morning hour", () => {
+    // 07:00 session can't be reminded 'that morning' any earlier, so it uses the before popup.
+    expect(personalEventReminders(cfg(), 7 * 60)).toEqual({
+      useDefault: false,
+      overrides: [{ method: "popup", minutes: 60 }],
+    });
+  });
+
+  it("before mode is a single popup at the chosen offset", () => {
+    expect(personalEventReminders(cfg({ ownReminderMode: "before", ownReminderMinutesBefore: 90 }), 10 * 60)).toEqual({
+      useDefault: false,
+      overrides: [{ method: "popup", minutes: 90 }],
+    });
+  });
+
+  it("email_popup mode keeps the legacy email+popup pair", () => {
+    expect(personalEventReminders(cfg({ ownReminderMode: "email_popup" }), 10 * 60)).toEqual(EVENT_REMINDERS);
+  });
+
+  it("none mode puts no reminder on the event", () => {
+    expect(personalEventReminders(cfg({ ownReminderMode: "none" }), 10 * 60)).toEqual(NO_REMINDERS);
   });
 });
 

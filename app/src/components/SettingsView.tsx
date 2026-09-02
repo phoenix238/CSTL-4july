@@ -71,6 +71,10 @@ export interface SettingsData {
   portalReceipts: boolean;
   portalNoticeHours: number;
   lateCancelGoodwillPence: number;
+  ownReminderMode: string;
+  ownReminderMinutesBefore: number;
+  ownReminderMorningHour: number;
+  venueReminders: boolean;
   bankAccountName: string;
   bankSortCode: string;
   bankAccountNumber: string;
@@ -175,6 +179,34 @@ export function SettingsView({
     chalkFarmCalendarId: settings.chalkFarmCalendarId,
     appUrl: settings.appUrl,
   });
+
+  // Phoenix's own calendar reminders — how he's nudged about his sessions, and
+  // whether the venue events nag him too. Saved as their own little form.
+  const [reminderDraft, setReminderDraft] = useState({
+    ownReminderMode: settings.ownReminderMode,
+    ownReminderMinutesBefore: settings.ownReminderMinutesBefore,
+    ownReminderMorningHour: settings.ownReminderMorningHour,
+    venueReminders: settings.venueReminders,
+  });
+  const [reminderDirty, setReminderDirty] = useState(false);
+  const [savingReminders, setSavingReminders] = useState(false);
+  const setReminder = <K extends keyof typeof reminderDraft>(key: K, value: (typeof reminderDraft)[K]) => {
+    setReminderDraft((p) => ({ ...p, [key]: value }));
+    setReminderDirty(true);
+  };
+  const saveReminders = async () => {
+    setSavingReminders(true);
+    try {
+      await api("/api/settings", { method: "PATCH", body: JSON.stringify(reminderDraft) });
+      setReminderDirty(false);
+      router.refresh();
+      toast("Your reminder settings saved ✓");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't save");
+    } finally {
+      setSavingReminders(false);
+    }
+  };
 
   const baseUrl = (settings.appUrl?.trim() || "https://cstl-4july.vercel.app").replace(/\/+$/, "");
 
@@ -619,8 +651,15 @@ export function SettingsView({
               {settings.chalkFarmCalendarId || "not set — needed for Bethnal Green bookings"}
             </Row>
             <Row label="Session colours">Bethnal Green pink · Waterloo orange</Row>
-            <Row label="Event reminders" last>
-              Email 24 h before · popup 1 h before
+            <Row label="Your session reminders" last>
+              {settings.ownReminderMode === "morning"
+                ? `Popup on the morning of (from ${settings.ownReminderMorningHour}:00)`
+                : settings.ownReminderMode === "before"
+                  ? `Popup ${settings.ownReminderMinutesBefore} min before`
+                  : settings.ownReminderMode === "email_popup"
+                    ? "Email 24 h before · popup 1 h before"
+                    : "None"}
+              {` · venue events ${settings.venueReminders ? "on" : "off"}`}
             </Row>
           </Card>
         ) : (
@@ -653,6 +692,85 @@ export function SettingsView({
         )}
         <TidyCalendarEventsButton />
       </Dropdown>
+
+      <SectionLabel className="pt-2">YOUR OWN SESSION REMINDERS</SectionLabel>
+      <Card className="flex flex-col gap-3.5 px-5 py-4">
+        <p className="text-[12.5px] leading-[1.6] text-muted">
+          How Google reminds <span className="font-medium text-ink">you</span> about your own sessions. This only
+          changes your reminders — a client&apos;s reminders are always their own, set on their booking page. Takes
+          effect on sessions booked or moved from now on.
+        </p>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[12.5px] font-medium text-ink">How you&apos;re reminded</span>
+          <select
+            value={reminderDraft.ownReminderMode}
+            onChange={(e) => setReminder("ownReminderMode", e.target.value)}
+            className={inputClass}
+          >
+            <option value="morning">One popup on the morning of the session</option>
+            <option value="before">One popup a set time before</option>
+            <option value="email_popup">Email a day before + popup an hour before</option>
+            <option value="none">Nothing — I use the Today view</option>
+          </select>
+        </label>
+
+        {reminderDraft.ownReminderMode === "morning" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[12.5px] font-medium text-ink">
+              Morning popup fires from {reminderDraft.ownReminderMorningHour}:00
+            </span>
+            <input
+              type="range"
+              min={5}
+              max={11}
+              step={1}
+              value={reminderDraft.ownReminderMorningHour}
+              onChange={(e) => setReminder("ownReminderMorningHour", Number(e.target.value))}
+              className="w-full cursor-pointer accent-[oklch(0.58_0.115_42)]"
+            />
+            <span className="text-[11.5px] leading-[1.5] text-muted">
+              A session earlier than this gets an hour-before popup instead (there&apos;s no earlier morning to nudge).
+            </span>
+          </label>
+        )}
+
+        {reminderDraft.ownReminderMode === "before" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[12.5px] font-medium text-ink">Minutes before the session</span>
+            <input
+              value={String(reminderDraft.ownReminderMinutesBefore)}
+              onChange={(e) => setReminder("ownReminderMinutesBefore", Math.max(0, Number(e.target.value) || 0))}
+              inputMode="numeric"
+              className={`${inputClass} max-w-[110px]`}
+            />
+          </label>
+        )}
+
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={reminderDraft.venueReminders}
+            onChange={(e) => setReminder("venueReminders", e.target.checked)}
+            className="mt-0.5"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[12.5px] font-medium text-ink">Also remind me from the venue events</span>
+            <span className="text-[11.5px] leading-[1.5] text-muted">
+              Off is best — leaving it off is what stops you getting the same reminder twice (once from your session,
+              once from the &quot;R5 - Phoenix&quot; room event or the shared Chalk Farm block).
+            </span>
+          </span>
+        </label>
+
+        <PrimaryButton
+          onClick={saveReminders}
+          disabled={!reminderDirty || savingReminders}
+          className="self-start px-4 py-1.5 text-[12.5px]"
+        >
+          {savingReminders ? "Saving…" : "Save reminder settings"}
+        </PrimaryButton>
+      </Card>
 
       <SectionLabel className="pt-2">ADD TO YOUR IPHONE</SectionLabel>
       <Card className="flex flex-col gap-3 px-5 py-4 text-[13px] leading-[1.6] text-[oklch(0.4_0.02_60)]">

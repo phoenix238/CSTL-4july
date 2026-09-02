@@ -7,7 +7,33 @@ import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import type { PortalView } from "@/lib/portalData";
+import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
+import type { PortalUpcoming, PortalView } from "@/lib/portalData";
+
+/**
+ * Add-to-calendar links for one session. The Google invite already reaches a
+ * client who keeps a Google calendar and accepts it; these cover everyone else —
+ * one tap onto Google, or an .ics that Apple Calendar, Outlook and the rest
+ * understand — so the session lands in a calendar the client actually looks at,
+ * rather than only in an invite they might never open.
+ */
+function AddToCalendar({ session }: { session: PortalUpcoming }) {
+  const linkClass =
+    "inline-flex items-center gap-1.5 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] font-medium text-clay-text hover:bg-hoverbg";
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11.5px] font-semibold text-muted">Add it to your calendar</span>
+      <div className="flex flex-wrap gap-2">
+        <a href={session.googleCalUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+          Google Calendar
+        </a>
+        <a href={session.icsUrl} className={linkClass}>
+          Apple / Outlook / other
+        </a>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The client's own page. Everything they can do with their sessions, and nothing
@@ -31,6 +57,10 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const [targetId, setTargetId] = useState<string | null>(null);
   const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
   const [receiptEmail, setReceiptEmail] = useState("");
+  // The client's own reminder choices, held locally so a toggle feels instant
+  // and is saved in the background. Seeded from what the server already has.
+  const [leadDays, setLeadDays] = useState<number[]>(view.reminderLeadDays);
+  const [savingReminders, setSavingReminders] = useState(false);
 
   const upcoming = view.upcoming;
   // The session a reschedule is currently working on (its old time, its clinic).
@@ -113,6 +143,27 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       });
       return api<{ sentTo?: string; pending?: boolean }>(`/api/portal/${token}/receipt`, { method: "POST" });
     }, receiptToast);
+
+  // Turn one reminder lead time on or off. Optimistic — the checkbox flips at
+  // once and the choice saves in the background, snapping back only if it fails.
+  async function toggleLead(days: number) {
+    const next = leadDays.includes(days) ? leadDays.filter((d) => d !== days) : [...leadDays, days];
+    const previous = leadDays;
+    setLeadDays(next);
+    setSavingReminders(true);
+    try {
+      const r = await api<{ leadDays: number[] }>(`/api/portal/${token}/reminders`, {
+        method: "POST",
+        body: JSON.stringify({ leadDays: next }),
+      });
+      setLeadDays(r.leadDays);
+    } catch (err) {
+      setLeadDays(previous);
+      toast(err instanceof Error ? err.message : "Couldn't save that — please try again");
+    } finally {
+      setSavingReminders(false);
+    }
+  }
 
   // Reschedule keeps the client on their existing clinic; only a fresh booking
   // gets to choose one. This is the clinic the confirm box names either way.
@@ -254,6 +305,8 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   </div>
                 </div>
 
+                {mode === "idle" && <AddToCalendar session={u} />}
+
                 {mode === "idle" && (
                   <div className="flex flex-wrap gap-2">
                     {u.canReschedule ? (
@@ -350,6 +403,46 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
             </div>
           )}
         </Sheet>
+      </Card>
+
+      {/* ---------- reminders ---------- */}
+      <Card className="flex flex-col gap-3 px-5 py-5">
+        <SectionLabel>Reminders</SectionLabel>
+        <p className="text-[12.5px] leading-relaxed text-muted">
+          Choose how many email reminders you&apos;d like before each session, and how far ahead. Turn them all off if
+          you&apos;d rather not have any.
+        </p>
+        {!view.hasEmail && (
+          <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">
+            There&apos;s no email on file for you yet, so these can&apos;t be sent — add one under Payment below and
+            they&apos;ll start coming through.
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          {REMINDER_LEAD_OPTIONS.map((opt) => {
+            const on = leadDays.includes(opt.days);
+            return (
+              <label key={opt.days} className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={savingReminders}
+                  onChange={() => toggleLead(opt.days)}
+                  className="mt-0.5"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[13px] font-medium text-ink">{opt.label}</span>
+                  <span className="text-[11.5px] leading-[1.5] text-muted">{opt.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">
+          A tip if you keep turning up unsure of the day: add each session to your own calendar using the{" "}
+          <span className="font-medium">Add it to your calendar</span> buttons above. Your phone&apos;s calendar will
+          then show it and can nudge you itself — handy if you don&apos;t use Google Calendar.
+        </p>
       </Card>
 
       {/* ---------- payment ---------- */}
