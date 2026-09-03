@@ -12,7 +12,6 @@ import { composeBookingEmail, fillPreviewLinks, resolveClinicPhoto } from "./ema
 import { parseDataUrl } from "@/lib/google/mime";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
-import { googleCalendarUrl, sessionLocation } from "@/lib/calendarLinks";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
@@ -213,17 +212,11 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
   const { token: portalToken, paymentRef } = await getPortalIdentity(clientId);
   const portalLink = portalUrl(settings, portalToken);
-  // Add-to-calendar links for the client — the piece that reaches someone who
-  // doesn't use Google Calendar, so the session lands somewhere they actually
-  // look rather than only in an invite they might never open.
-  const calendarGoogleUrl = googleCalendarUrl({
-    uid: booking.id,
-    start,
-    location: sessionLocation(req.clinic, address),
-    description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalLink}`,
-  });
+  // Add-to-calendar link for a client who keeps their calendar somewhere other
+  // than Google — a Google-account client already has the session automatically,
+  // as an invited attendee, so no Google link is offered.
   const calendarIcsUrl = icsUrl(settings, portalToken, booking.id);
-  const links = { intakeLink, portalLink, paymentRef, calendarGoogleUrl, calendarIcsUrl };
+  const links = { intakeLink, portalLink, paymentRef, calendarIcsUrl };
   const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.

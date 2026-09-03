@@ -90,21 +90,9 @@ export function buildSessionIcs(d: SessionEventDetails, now = new Date()): strin
   return lines.join("\r\n") + "\r\n";
 }
 
-/**
- * A "add to Google Calendar" link that opens Google's event-create screen
- * pre-filled with the session. Google reads times as a UTC range separated by a
- * slash.
- */
-export function googleCalendarUrl(d: SessionEventDetails): string {
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: d.title ?? SESSION_EVENT_TITLE,
-    dates: `${toCalendarUTC(d.start)}/${toCalendarUTC(endOf(d))}`,
-  });
-  if (d.location) params.set("location", d.location);
-  if (d.description) params.set("details", d.description);
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
-}
+// No "add to Google Calendar" link is generated: a client on a Google account
+// already gets the session on their calendar automatically, as an invited
+// attendee. The .ics above covers everyone who keeps their calendar elsewhere.
 
 /** The clinic address to show as an event location, falling back to the clinic name. */
 export function sessionLocation(clinic: Clinic, address: string | undefined | null): string {
