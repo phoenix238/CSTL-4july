@@ -52,9 +52,10 @@ model Client {
   // of. Set by the client from their own portal (/me/[token]). These are emails
   // the app sends itself (from the daily cron), independent of whether the client
   // uses Google Calendar — the safety net for someone who never added the invite
-  // to a calendar of their own. Empty = they've turned reminders off. Defaults to
-  // a single day-before nudge.
-  reminderLeadDays Int[]      @default([1])
+  // to a calendar of their own. Defaults to empty (off) — nobody gets a reminder
+  // email until they visit their portal and switch one on themselves; an existing
+  // client is never silently opted in by this column's default.
+  reminderLeadDays Int[]      @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
