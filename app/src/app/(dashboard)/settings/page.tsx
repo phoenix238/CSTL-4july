@@ -18,6 +18,7 @@ export default async function SettingsPage() {
       overrides={overrides}
       clients={clients}
       settings={{
+        aiModel: settings.aiModel,
         accessNote: settings.accessNote,
         emailTemplate: settings.emailTemplate,
         emailTemplateReturning: settings.emailTemplateReturning,
