@@ -70,9 +70,9 @@ export interface ClientLinks {
   portalLink?: string;
   /** the reference they put on a bank transfer */
   paymentRef?: string;
-  /** one-tap "add to Google Calendar" link for this session */
-  calendarGoogleUrl?: string;
-  /** download this session as an .ics (Apple Calendar / Outlook / everything else) */
+  /** add this session to a non-Google calendar via .ics (Apple Calendar / Outlook /
+   *  everything else). No Google link: a client on a Google account already gets
+   *  the session on their calendar automatically, as an invited attendee. */
   calendarIcsUrl?: string;
 }
 
@@ -99,23 +99,24 @@ const PREVIEW_PLACEHOLDERS: Record<keyof ClientLinks, string> = {
   intakeLink: "(your personal intake link)",
   portalLink: "(your personal booking page)",
   paymentRef: "(your payment reference)",
-  calendarGoogleUrl: "(your Google Calendar link)",
   calendarIcsUrl: "(your calendar file link)",
 };
 
 /**
- * The "add this to your calendar" block. The Google invite already reaches a
- * client who uses Google Calendar and accepts it; this is what a client who
- * keeps their calendar elsewhere gets — a one-tap Google link and an .ics for
- * Apple Calendar, Outlook and the rest. Empty when the links aren't available
- * (e.g. the browser preview, before the client's tokens exist).
+ * The "add this to your calendar" block. A client on a Google account already
+ * has this session on their calendar automatically (they're an invited
+ * attendee), so there's no Google link here — only the .ics, for a client who
+ * keeps their calendar somewhere else (Apple, Outlook, or another app). Empty
+ * when no .ics link is available (e.g. the browser preview, before the client's
+ * tokens exist — though the sentinel keeps it visible there too).
  */
 function calendarBlock(links: ClientLinks): string {
-  if (!links.calendarGoogleUrl && !links.calendarIcsUrl) return "";
-  const lines = ["Add this to your own calendar so it's there wherever you look:"];
-  if (links.calendarGoogleUrl) lines.push(`  Google Calendar: ${links.calendarGoogleUrl}`);
-  if (links.calendarIcsUrl) lines.push(`  Apple Calendar / Outlook / other: ${links.calendarIcsUrl}`);
-  return lines.join("\n");
+  if (!links.calendarIcsUrl) return "";
+  return [
+    "If you use Google Calendar, this session is added to it automatically.",
+    "Keep your calendar somewhere else — Apple, Outlook or another app? Add it here:",
+    `  ${links.calendarIcsUrl}`,
+  ].join("\n");
 }
 
 /**
@@ -298,11 +299,23 @@ export function composeBookingEmail(
     // Same shape as the first email — voice on top, facts placed around it,
     // signed once at the end — so a sign-off left in the template can't produce
     // an email that ends twice.
-    const { main } = splitSignOff(fillTemplate(resolveReturningTemplate(settings), common));
+    const returningTemplate = resolveReturningTemplate(settings);
+    const { main } = splitSignOff(fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }));
     const calendar = calendarBlock(links);
-    if (calendar) includes.push("Add-to-calendar links (Google, Apple, Outlook)");
-    const body = [main, whereBlock, calendar, resolveSignOff(settings)].filter(Boolean).join("\n\n");
-    return { subject, body, includes };
+    if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
+    const sections = [main, whereBlock, calendar];
+    // A returning client gets their booking page too, not just first-timers —
+    // it's the one link that lets them move this session, cancel it, change
+    // their reminders, or book the next one. Kept to a single line (they already
+    // know what it is), and skipped only if their template already places it.
+    if (portalLink && !returningTemplate.includes("{portalLink}")) {
+      sections.push(
+        `Manage this session — move it, cancel it, or change your reminders — or book your next, from your own page any time:\n${portalLink}`,
+      );
+    }
+    if (portalLink) includes.push("Their own booking page");
+    sections.push(resolveSignOff(settings));
+    return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
   }
 
   // One letter for both clinics — what differs between them (the price, and the
@@ -321,7 +334,7 @@ export function composeBookingEmail(
   const { main } = splitSignOff(filled);
 
   const calendar = calendarBlock(links);
-  if (calendar) includes.push("Add-to-calendar links (Google, Apple, Outlook)");
+  if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
   const sections = [main, whereBlock, calendar];
 
   // Payment, once. The templates already name the price in their own words, so

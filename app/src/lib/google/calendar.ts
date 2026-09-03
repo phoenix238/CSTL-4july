@@ -10,6 +10,7 @@ import {
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
+import { getOrCreatePortalToken, portalUrl } from "@/lib/portal";
 import { fmtTime, londonDateKey, londonMinutes } from "@/lib/time";
 
 const TZ = "Europe/London";
@@ -39,6 +40,17 @@ export async function createBookingEvents(bookingId: string) {
     .join("\n");
   const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
 
+  // The personal (client-facing) event carries the client's own "manage this
+  // session" link in its description, so the session that lands on their own
+  // calendar automatically (they're the attendee) can be moved, cancelled or
+  // have its reminders changed straight from the calendar entry — the same link
+  // the confirmation email gives them. It's a token, not a name, and this event
+  // is only ever on Phoenix's calendar plus the one client attendee's, so it
+  // stays off the shared venue calendars. Token is ensured here (idempotent) so
+  // the description has a real link even on a reschedule.
+  const portalLink = portalUrl(settings, await getOrCreatePortalToken(booking.clientId));
+  const manageNote = `Manage this session — move it, cancel it, or change your reminders: ${portalLink}`;
+
   // Phoenix's own reminders live on the personal (client-facing) session event
   // only — that's his copy. The venue events (room / Chalk Farm) carry his
   // reminders solely when he's opted the venue events in, so one session can't
@@ -65,7 +77,9 @@ export async function createBookingEvents(bookingId: string) {
         sendUpdates: "none",
         requestBody: {
           summary: ev.summary,
-          description: ev.description || undefined,
+          // Personal event → the client's manage link; venue events → their own
+          // venue-facing note (the room/Chalk Farm description), never the link.
+          description: (ev.calendar === "personal" ? manageNote : ev.description) || undefined,
           location: ev.location || undefined,
           colorId: ev.colorId || undefined,
           start: { dateTime: ev.start.toISOString(), timeZone: TZ },

@@ -11,24 +11,25 @@ import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
 import type { PortalUpcoming, PortalView } from "@/lib/portalData";
 
 /**
- * Add-to-calendar links for one session. The Google invite already reaches a
- * client who keeps a Google calendar and accepts it; these cover everyone else —
- * one tap onto Google, or an .ics that Apple Calendar, Outlook and the rest
- * understand — so the session lands in a calendar the client actually looks at,
- * rather than only in an invite they might never open.
+ * Getting one session onto the client's own calendar. A client on a Google
+ * account already has it automatically (they're an invited attendee), so there's
+ * no Google button — just a single "add" link that hands their device an .ics,
+ * for anyone who keeps their calendar in Apple, Outlook or another app. On a
+ * phone that link opens the calendar straight to an "add" screen; on a computer
+ * it saves a small file that opens in their calendar.
  */
 function AddToCalendar({ session }: { session: PortalUpcoming }) {
-  const linkClass =
-    "inline-flex items-center gap-1.5 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] font-medium text-clay-text hover:bg-hoverbg";
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[11.5px] font-semibold text-muted">Add it to your calendar</span>
-      <div className="flex flex-wrap gap-2">
-        <a href={session.googleCalUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
-          Google Calendar
-        </a>
-        <a href={session.icsUrl} className={linkClass}>
-          Apple / Outlook / other
+      <p className="text-[12px] leading-[1.5] text-muted">
+        If you use Google Calendar, this session is already in it. Keep your calendar somewhere else?
+      </p>
+      <div>
+        <a
+          href={session.icsUrl}
+          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] font-medium text-clay-text hover:bg-hoverbg"
+        >
+          Add to Apple, Outlook or another calendar
         </a>
       </div>
     </div>

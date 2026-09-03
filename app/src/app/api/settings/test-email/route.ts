@@ -9,7 +9,7 @@ import { confirmToClient, sendReceipt } from "@/lib/portalNotify";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { intakeUrl } from "@/lib/intake";
 import { portalUrl } from "@/lib/portal";
-import { googleCalendarUrl, sessionLocation } from "@/lib/calendarLinks";
+import { sessionLocation } from "@/lib/calendarLinks";
 import { appBaseUrl } from "@/lib/appUrl";
 import { fmtDayLong, fmtTime, londonAddDays, londonTime, londonYMD } from "@/lib/time";
 
@@ -46,16 +46,10 @@ export const POST = guarded(async (req: Request) => {
     intakeLink: intakeUrl(settings, "sample-token"),
     portalLink,
     paymentRef,
-    // Real, working links — same as a client's actual confirmation email —
-    // so this preview shows exactly what they'd see, add-to-calendar buttons
-    // included. The .ics goes through a query-param-driven sample route since
-    // there's no real booking here for the client-facing one to look up.
-    calendarGoogleUrl: googleCalendarUrl({
-      uid: "sample",
-      start: testStart,
-      location,
-      description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalLink}`,
-    }),
+    // A real, working add-to-calendar link — same as a client's actual
+    // confirmation email — so this preview shows exactly what they'd see. It
+    // goes through a query-param-driven sample route since there's no real
+    // booking here for the client-facing .ics route to look up.
     calendarIcsUrl: `${appBaseUrl(settings)}/api/public/sample-ics?start=${encodeURIComponent(testStart.toISOString())}&location=${encodeURIComponent(location)}`,
   };
 

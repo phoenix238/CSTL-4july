@@ -2,8 +2,8 @@ import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { resolveClientCopy, applyCopy, type ClientCopy } from "@/lib/clientCopy";
 import { resolveSignOff } from "@/lib/booking/email";
-import { CLINIC_LABEL, SESSION_EVENT_TITLE, type Clinic } from "@/lib/booking/rules";
-import { buildSessionIcs, googleCalendarUrl, sessionLocation } from "@/lib/calendarLinks";
+import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { sessionLocation } from "@/lib/calendarLinks";
 import { portalUrl } from "@/lib/portal";
 import { appBaseUrl } from "@/lib/appUrl";
 import { fmtDayLong, fmtTime, londonAddDays, londonDateKey } from "@/lib/time";
@@ -29,7 +29,6 @@ export interface ReminderEmailInput {
   whenLabel: string;
   clinic: Clinic;
   location: string;
-  googleUrl: string;
   icsUrl: string;
   portalLink: string;
 }
@@ -52,9 +51,9 @@ export function composeSessionReminder(
   if (input.location) sections.push(`Where: ${input.location}`);
   sections.push(
     [
-      "Add it to your own calendar so it's there wherever you look:",
-      `• Google Calendar: ${input.googleUrl}`,
-      `• Apple Calendar / Outlook / other: ${input.icsUrl}`,
+      "If you use Google Calendar, this session is already in it. Keep your calendar",
+      "somewhere else — Apple, Outlook or another app? Add it here:",
+      `  ${input.icsUrl}`,
     ].join("\n"),
   );
   sections.push(`Need to move or cancel it? You can do that any time on your own page:\n${input.portalLink}`);
@@ -137,16 +136,9 @@ export async function sweepSessionReminders({
       const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
       const location = sessionLocation(clinic, address);
       const portalLink = token ? portalUrl(settings, token) : "";
-      const google = googleCalendarUrl({
-        uid: b.id,
-        start: b.startsAt,
-        title: SESSION_EVENT_TITLE,
-        location,
-        description: portalLink ? `Manage this session: ${portalLink}` : undefined,
-      });
       const ics = token ? icsUrl(settings, token, b.id) : "";
       const { subject, body } = composeSessionReminder(
-        { clientName: b.client.name, whenLabel, clinic, location, googleUrl: google, icsUrl: ics, portalLink },
+        { clientName: b.client.name, whenLabel, clinic, location, icsUrl: ics, portalLink },
         copy,
         signOff,
       );

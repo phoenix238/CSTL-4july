@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSessionIcs, googleCalendarUrl, toCalendarUTC, sessionLocation } from "./calendarLinks";
+import { buildSessionIcs, toCalendarUTC, sessionLocation } from "./calendarLinks";
 
 describe("toCalendarUTC", () => {
   it("renders a compact UTC stamp", () => {
@@ -50,23 +50,6 @@ describe("buildSessionIcs", () => {
   it("carries no alarms when none are chosen", () => {
     const ics = buildSessionIcs(base);
     expect(ics).not.toContain("VALARM");
-  });
-});
-
-describe("googleCalendarUrl", () => {
-  it("links to Google's create screen with a UTC range and location", () => {
-    const url = googleCalendarUrl({
-      uid: "bk1",
-      start: new Date("2026-09-02T14:00:00Z"),
-      end: new Date("2026-09-02T15:00:00Z"),
-      title: "Craniosacral therapy",
-      location: "1 Test St",
-    });
-    expect(url).toContain("https://calendar.google.com/calendar/render?");
-    expect(url).toContain("action=TEMPLATE");
-    expect(url).toContain("dates=20260902T140000Z%2F20260902T150000Z");
-    expect(url).toContain("text=Craniosacral+therapy");
-    expect(url).toContain("location=1+Test+St");
   });
 });
 
