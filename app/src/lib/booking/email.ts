@@ -62,19 +62,6 @@ export function firstUrl(raw: string): string {
   return m ? m[0] : t;
 }
 
-/**
- * Stand-ins for the links in the browser preview, where the client's tokens
- * don't exist yet (they're minted server-side when the booking is made).
- *
- * They have to be substituted back out before sending, because the preview box
- * is editable and whatever it holds is what gets sent — so a preview shown with
- * "(your personal intake link)" in it was emailing exactly that to the client,
- * in place of the link. See fillPreviewLinks.
- */
-export const PREVIEW_INTAKE_LINK = "(your personal intake link)";
-export const PREVIEW_PORTAL_LINK = "(your personal booking page)";
-export const PREVIEW_PAYMENT_REF = "(your payment reference)";
-
 /** The links and reference that belong to one client, resolved before composing. */
 export interface ClientLinks {
   /** their personal intake form */
@@ -88,6 +75,33 @@ export interface ClientLinks {
   /** download this session as an .ics (Apple Calendar / Outlook / everything else) */
   calendarIcsUrl?: string;
 }
+
+/**
+ * The sentinel text shown in the browser preview for each ClientLinks field,
+ * before the client's tokens exist (they're minted server-side once a real
+ * booking exists — the calendar links need a real booking id, the others need
+ * a real client).
+ *
+ * This is the ONE place to add a placeholder for a new ClientLinks field.
+ * composeBookingEmail's default `links` argument and fillPreviewLinks both
+ * read this exact map (see below) rather than keeping their own separate
+ * lists — so `Record<keyof ClientLinks, string>` fails to compile the moment
+ * a new ClientLinks field is added without a placeholder here, instead of the
+ * two silently drifting apart. That drift is exactly how the add-to-calendar
+ * links first shipped only for a client's own portal booking, not an
+ * admin-booked one: the admin booking panel's preview is composed (and
+ * possibly hand-edited) *before* a real booking exists, and whatever that
+ * preview holds is what fillPreviewLinks patches and actually sends — so a
+ * field missing its sentinel here doesn't error, it just silently never
+ * reaches that client's email.
+ */
+const PREVIEW_PLACEHOLDERS: Record<keyof ClientLinks, string> = {
+  intakeLink: "(your personal intake link)",
+  portalLink: "(your personal booking page)",
+  paymentRef: "(your payment reference)",
+  calendarGoogleUrl: "(your Google Calendar link)",
+  calendarIcsUrl: "(your calendar file link)",
+};
 
 /**
  * The "add this to your calendar" block. The Google invite already reaches a
@@ -257,11 +271,7 @@ export function composeBookingEmail(
   whenLabel: string,
   sendPayment: boolean,
   settings: EmailSettings,
-  links: ClientLinks = {
-    intakeLink: PREVIEW_INTAKE_LINK,
-    portalLink: PREVIEW_PORTAL_LINK,
-    paymentRef: PREVIEW_PAYMENT_REF,
-  },
+  links: ClientLinks = PREVIEW_PLACEHOLDERS,
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
@@ -362,16 +372,17 @@ export function composeBookingEmail(
  * Applied on the way out to whatever body the booking panel sends, edited or
  * not. Without it the preview's own placeholder text is what the client
  * receives — an email politely telling them to visit "(your personal intake
- * link)".
+ * link)". Every ClientLinks field is swapped, driven by PREVIEW_PLACEHOLDERS
+ * above rather than one `.split().join()` per field named here by hand — so a
+ * new field placed in that one map is live in both places it needs to be at
+ * once, not something to separately remember to wire in here too.
  */
 export function fillPreviewLinks(body: string, links: ClientLinks): string {
-  return body
-    .split(PREVIEW_INTAKE_LINK)
-    .join(links.intakeLink)
-    .split(PREVIEW_PORTAL_LINK)
-    .join(links.portalLink ?? "")
-    .split(PREVIEW_PAYMENT_REF)
-    .join(links.paymentRef ?? "");
+  let out = body;
+  for (const key of Object.keys(PREVIEW_PLACEHOLDERS) as (keyof ClientLinks)[]) {
+    out = out.split(PREVIEW_PLACEHOLDERS[key]).join(links[key] ?? "");
+  }
+  return out;
 }
 
 const mapsSearchUrl = (address: string) =>

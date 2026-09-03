@@ -8,6 +8,8 @@ import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { sendEmail } from "@/lib/google/gmail";
 import { isValidEmail } from "@/lib/validate";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
+import { googleCalendarUrl, sessionLocation } from "@/lib/calendarLinks";
+import { icsUrl } from "@/lib/reminders/sessionReminders";
 import type { Clinic } from "@/lib/booking/rules";
 import { COLUMN_KEYS, CONSENT_PARAGRAPHS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
 
@@ -73,10 +75,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           // details and their own booking page — the one message that covers
           // everything, exactly as a client booking online would get.
           const { token: portalToken, paymentRef } = await getPortalIdentity(client.id);
+          const portalLink = portalUrl(settings, portalToken);
+          const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
           const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings, {
             intakeLink: intakeUrl(settings, token),
-            portalLink: portalUrl(settings, portalToken),
+            portalLink,
             paymentRef,
+            calendarGoogleUrl: googleCalendarUrl({
+              uid: booking.id,
+              start: booking.startsAt,
+              location: sessionLocation(clinic, address),
+              description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalLink}`,
+            }),
+            calendarIcsUrl: icsUrl(settings, portalToken, booking.id),
           });
           await sendEmail(finalEmail, welcome.subject, welcome.body);
           await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });

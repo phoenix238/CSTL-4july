@@ -142,6 +142,12 @@ describe("composeBookingEmail", () => {
   it("falls back to a placeholder link string when none is passed (browser preview)", () => {
     const email = composeBookingEmail({ name: "Sam", welcomeSent: false }, "bethnal", "Wed · 10:00 am", false, settings);
     expect(email.body).toContain("(your personal intake link)");
+    // The calendar links need the same treatment: the admin booking panel
+    // composes this preview before a real booking id exists, so if these
+    // sentinels aren't in the default too, the add-to-calendar block just
+    // silently never makes it into what an admin-booked client receives.
+    expect(email.body).toContain("(your Google Calendar link)");
+    expect(email.body).toContain("(your calendar file link)");
   });
 
   it("omits payment details when sendPayment is false", () => {
@@ -289,5 +295,28 @@ describe("fillPreviewLinks", () => {
     expect(sent).toContain(PORTAL_LINK);
     expect(sent).not.toContain("(your personal");
     expect(sent).not.toContain("(your payment reference)");
+  });
+
+  // This is the exact bug the admin booking panel hit: the preview is composed
+  // (with the calendar-link sentinels, since there's no real booking id yet)
+  // before submission, then whatever the admin sees gets sent through here —
+  // so if these two sentinels aren't restored the same way the other three
+  // are, the add-to-calendar block a client's own portal booking gets never
+  // makes it into an admin-booked client's email at all.
+  it("swaps the calendar-link placeholders for the real add-to-calendar links", () => {
+    const preview = composeBookingEmail({ name: "Sam", welcomeSent: false }, "bethnal", "Wed · 10:00 am", true, settings);
+    const GOOGLE_URL = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+    const ICS_URL = "https://cstl.example/api/portal/tok-abc/ics?b=bk1";
+    const sent = fillPreviewLinks(preview.body, {
+      intakeLink: INTAKE_LINK,
+      portalLink: PORTAL_LINK,
+      paymentRef: PAYMENT_REF,
+      calendarGoogleUrl: GOOGLE_URL,
+      calendarIcsUrl: ICS_URL,
+    });
+    expect(sent).toContain(GOOGLE_URL);
+    expect(sent).toContain(ICS_URL);
+    expect(sent).not.toContain("(your Google Calendar link)");
+    expect(sent).not.toContain("(your calendar file link)");
   });
 });
