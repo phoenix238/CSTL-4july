@@ -1,8 +1,11 @@
 // The reminder lead times a client can choose from on their portal — how long
 // before a session the app emails them. Deliberately day-granular: the app's
-// scheduler runs once a day (Vercel Hobby caps it there), so "a week / a day /
+// scheduler runs once a day (Vercel Hobby caps it there), so "the day before /
 // the morning before" are the honest options — anything finer than a day can't
-// be promised at this cadence.
+// be promised at this cadence for an email. (A true hour-before nudge is
+// possible, just not through this list — see the alarm built into the
+// downloadable calendar event in calendarLinks.ts, which fires locally on the
+// client's own phone and isn't bound by our once-a-day cron.)
 //
 // Shared by the portal UI (the checkboxes), the API route (validating what a
 // client sends), and the daily sweep (deciding what to send today), so the three
@@ -16,7 +19,6 @@ export interface ReminderLeadOption {
 }
 
 export const REMINDER_LEAD_OPTIONS: ReminderLeadOption[] = [
-  { days: 7, label: "A week before", hint: "Time to plan around it." },
   { days: 1, label: "The day before", hint: "The usual reminder." },
   { days: 0, label: "On the morning", hint: "A nudge the same day." },
 ];

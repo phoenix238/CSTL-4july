@@ -39,12 +39,12 @@ describe("buildSessionIcs", () => {
   });
 
   it("adds one VALARM per chosen lead time", () => {
-    const ics = buildSessionIcs({ ...base, reminderLeadDays: [7, 1, 0] });
-    expect(ics).toContain("TRIGGER:-P7D");
+    const ics = buildSessionIcs({ ...base, reminderLeadDays: [1, 0] });
     expect(ics).toContain("TRIGGER:-P1D");
-    // "the morning of" has no whole-day trigger — it becomes a couple of hours before
-    expect(ics).toContain("TRIGGER:-PT2H");
-    expect(ics.match(/BEGIN:VALARM/g)?.length).toBe(3);
+    // "the morning of" has no whole-day trigger — it becomes an hour before,
+    // which fires locally on the client's own calendar regardless of our cron.
+    expect(ics).toContain("TRIGGER:-PT1H");
+    expect(ics.match(/BEGIN:VALARM/g)?.length).toBe(2);
   });
 
   it("carries no alarms when none are chosen", () => {

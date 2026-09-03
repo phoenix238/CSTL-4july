@@ -43,14 +43,15 @@ function endOf(d: SessionEventDetails): Date {
 /**
  * One VALARM per chosen lead time, so a client who imports the .ics gets alerts
  * in their own calendar matching the reminders they asked for. Days map to a
- * whole-day trigger; "the morning of" (0) has no whole-day equivalent Google/
- * Apple honour cleanly, so it becomes a couple of hours before — near enough to
- * "that day" for a same-day nudge.
+ * whole-day trigger; "the morning of" (0) has no whole-day equivalent, so it
+ * becomes an hour-before alarm instead — this fires locally on the client's own
+ * phone/calendar app, so it isn't bound by the app's once-a-day email cron the
+ * way the "on the morning" email itself is.
  */
 function alarms(leadDays: number[] | undefined): string[] {
   const lines: string[] = [];
   for (const days of leadDays ?? []) {
-    const trigger = days > 0 ? `-P${days}D` : "-PT2H";
+    const trigger = days > 0 ? `-P${days}D` : "-PT1H";
     lines.push(
       "BEGIN:VALARM",
       "ACTION:DISPLAY",

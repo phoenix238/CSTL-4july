@@ -142,6 +142,12 @@ describe("composeBookingEmail", () => {
   it("falls back to a placeholder link string when none is passed (browser preview)", () => {
     const email = composeBookingEmail({ name: "Sam", welcomeSent: false }, "bethnal", "Wed · 10:00 am", false, settings);
     expect(email.body).toContain("(your personal intake link)");
+    // The calendar links need the same treatment: the admin booking panel
+    // composes this preview before a real booking id exists, so if these
+    // sentinels aren't in the default too, the add-to-calendar block just
+    // silently never makes it into what an admin-booked client receives.
+    expect(email.body).toContain("(your Google Calendar link)");
+    expect(email.body).toContain("(your calendar file link)");
   });
 
   it("omits payment details when sendPayment is false", () => {
@@ -289,5 +295,65 @@ describe("fillPreviewLinks", () => {
     expect(sent).toContain(PORTAL_LINK);
     expect(sent).not.toContain("(your personal");
     expect(sent).not.toContain("(your payment reference)");
+  });
+
+  // This is the exact bug the admin booking panel hit: the preview is composed
+  // (with the calendar-link sentinels, since there's no real booking id yet)
+  // before submission, then whatever the admin sees gets sent through here —
+  // so if these two sentinels aren't restored the same way the other three
+  // are, the add-to-calendar block a client's own portal booking gets never
+  // makes it into an admin-booked client's email at all.
+  it("swaps the calendar-link placeholders for the real add-to-calendar links", () => {
+    const preview = composeBookingEmail({ name: "Sam", welcomeSent: false }, "bethnal", "Wed · 10:00 am", true, settings);
+    const GOOGLE_URL = "https://calendar.google.com/calendar/render?action=TEMPLATE";
+    const ICS_URL = "https://cstl.example/api/portal/tok-abc/ics?b=bk1";
+    const sent = fillPreviewLinks(preview.body, {
+      intakeLink: INTAKE_LINK,
+      portalLink: PORTAL_LINK,
+      paymentRef: PAYMENT_REF,
+      calendarGoogleUrl: GOOGLE_URL,
+      calendarIcsUrl: ICS_URL,
+    });
+    expect(sent).toContain(GOOGLE_URL);
+    expect(sent).toContain(ICS_URL);
+    expect(sent).not.toContain("(your Google Calendar link)");
+    expect(sent).not.toContain("(your calendar file link)");
+  });
+
+  // The general form of the bug above, so a *future* ClientLinks field can't
+  // repeat it: the admin booking panel composes with placeholders (no real
+  // booking exists yet in the browser), Phoenix optionally edits that text,
+  // then this function patches the real links in before sending — while a
+  // client's own portal booking composes with the real links already known,
+  // no preview step involved. Those two routes have to land on exactly the
+  // same body for any client to get the same email regardless of who booked
+  // them. Asserting full equality (not just "contains X") means this fails
+  // for ANY field that's present down one route and missing down the other,
+  // not only the ones a test happens to name — which a per-field test like
+  // the two above can't promise for something added later.
+  it("reaches the exact same body via the preview-and-patch route as composing with the real links directly", () => {
+    const realLinks = {
+      intakeLink: INTAKE_LINK,
+      portalLink: PORTAL_LINK,
+      paymentRef: PAYMENT_REF,
+      calendarGoogleUrl: "https://calendar.google.com/calendar/render?action=TEMPLATE",
+      calendarIcsUrl: "https://cstl.example/api/portal/tok-abc/ics?b=bk1",
+    };
+    const direct = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "waterloo",
+      "Tue 5 Aug · 3:00 pm",
+      true,
+      settings,
+      realLinks,
+    );
+    const previewed = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "waterloo",
+      "Tue 5 Aug · 3:00 pm",
+      true,
+      settings,
+    );
+    expect(fillPreviewLinks(previewed.body, realLinks)).toBe(direct.body);
   });
 });

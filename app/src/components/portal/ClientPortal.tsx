@@ -438,11 +438,6 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
             );
           })}
         </div>
-        <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">
-          A tip if you keep turning up unsure of the day: add each session to your own calendar using the{" "}
-          <span className="font-medium">Add it to your calendar</span> buttons above. Your phone&apos;s calendar will
-          then show it and can nudge you itself — handy if you don&apos;t use Google Calendar.
-        </p>
       </Card>
 
       {/* ---------- payment ---------- */}
