@@ -110,7 +110,7 @@ export async function sweepSessionReminders({
 
   // Only sessions still ahead of us, whose client has an email and at least one
   // reminder switched on. A window to the furthest lead time keeps the scan small.
-  const horizon = londonAddDays(asOf, 8); // largest lead is a week; a day's slack
+  const horizon = londonAddDays(asOf, 2); // largest lead is a day; a day's slack
   const bookings = await prisma.booking.findMany({
     where: {
       status: "confirmed",
