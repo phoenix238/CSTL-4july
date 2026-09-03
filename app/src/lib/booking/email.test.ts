@@ -319,4 +319,41 @@ describe("fillPreviewLinks", () => {
     expect(sent).not.toContain("(your Google Calendar link)");
     expect(sent).not.toContain("(your calendar file link)");
   });
+
+  // The general form of the bug above, so a *future* ClientLinks field can't
+  // repeat it: the admin booking panel composes with placeholders (no real
+  // booking exists yet in the browser), Phoenix optionally edits that text,
+  // then this function patches the real links in before sending — while a
+  // client's own portal booking composes with the real links already known,
+  // no preview step involved. Those two routes have to land on exactly the
+  // same body for any client to get the same email regardless of who booked
+  // them. Asserting full equality (not just "contains X") means this fails
+  // for ANY field that's present down one route and missing down the other,
+  // not only the ones a test happens to name — which a per-field test like
+  // the two above can't promise for something added later.
+  it("reaches the exact same body via the preview-and-patch route as composing with the real links directly", () => {
+    const realLinks = {
+      intakeLink: INTAKE_LINK,
+      portalLink: PORTAL_LINK,
+      paymentRef: PAYMENT_REF,
+      calendarGoogleUrl: "https://calendar.google.com/calendar/render?action=TEMPLATE",
+      calendarIcsUrl: "https://cstl.example/api/portal/tok-abc/ics?b=bk1",
+    };
+    const direct = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "waterloo",
+      "Tue 5 Aug · 3:00 pm",
+      true,
+      settings,
+      realLinks,
+    );
+    const previewed = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "waterloo",
+      "Tue 5 Aug · 3:00 pm",
+      true,
+      settings,
+    );
+    expect(fillPreviewLinks(previewed.body, realLinks)).toBe(direct.body);
+  });
 });
