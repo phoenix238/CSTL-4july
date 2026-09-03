@@ -267,7 +267,7 @@ export function composeBookingEmail(
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
   const { intakeLink, portalLink, paymentRef } = links;
-  const includes: string[] = ["Google Calendar invite attached"];
+  const includes: string[] = [];
 
   // Where it is — one block, not an address line and a separate map line. The
   // address is the human-readable part; the link is attached to it.

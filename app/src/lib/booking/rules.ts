@@ -18,10 +18,15 @@
 // that's what lets Phoenix and the client tap through to navigate. Anonymising
 // the calendar was only ever about the client's *name* — who a session is with
 // is looked up in the app (Today / This Week), which reads from the database.
-// The client is still invited to their own session as an attendee, so they get
-// the invite + reminders.
+// The client is still added as an attendee on their own session, so it lands
+// silently on their own Google Calendar if they have one — but never emailed:
+// Google's own invite/notification email duplicates (and confusingly
+// mis-formats) our own confirmation email, so every calendar mutation on a
+// booking sends with sendUpdates: "none". The confirmation email's own
+// add-to-calendar links are the one channel that actually tells the client.
 //
-// All events get reminders: email 24h before, popup 1h before.
+// Reminders on each event are configurable — Phoenix's own in Settings (see
+// personalEventReminders below), the client's own on their portal.
 
 export type Clinic = "waterloo" | "bethnal";
 
