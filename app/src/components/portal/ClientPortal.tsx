@@ -408,10 +408,10 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
       {/* ---------- reminders ---------- */}
       <Card className="flex flex-col gap-3 px-5 py-5">
-        <SectionLabel>Reminders</SectionLabel>
+        <SectionLabel>Email reminders</SectionLabel>
         <p className="text-[12.5px] leading-relaxed text-muted">
-          Choose how many email reminders you&apos;d like before each session, and how far ahead. Turn them all off if
-          you&apos;d rather not have any.
+          Choose whether you&apos;d like an email reminder before each session, and how far ahead. Off by default —
+          turn one on if you&apos;d like it.
         </p>
         {!view.hasEmail && (
           <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">

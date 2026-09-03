@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma, getSettings } from "@/lib/db";
 import { portalRoute } from "@/lib/portalRoute";
 import { SESSION_EVENT_TITLE, type Clinic } from "@/lib/booking/rules";
-import { buildSessionIcs, sessionLocation } from "@/lib/calendarLinks";
+import { buildSessionIcs, sessionLocation, DEFAULT_CALENDAR_ALARM_LEAD_DAYS } from "@/lib/calendarLinks";
 import { portalUrl } from "@/lib/portal";
 
 /**
  * Download one of the client's sessions as an .ics file — the universal way onto
  * Apple Calendar, Outlook and anything else, for a client who doesn't use Google
- * Calendar (where the invite already reaches them). The file carries alarms
- * matching the reminders they've chosen, so importing it brings their own
- * calendar's alerts with it.
+ * Calendar (where the invite already reaches them). The file carries a plain
+ * default alarm, same as any calendar invite — not tied to whether the client
+ * has opted into email reminders on their portal, so importing it always
+ * brings a nudge with it regardless of that separate choice.
  *
  * Guarded by the portal token like every other portal route, and scoped to this
  * client's own bookings — a token can never fetch anyone else's session.
@@ -25,10 +26,7 @@ export const GET = portalRoute(async (req, client) => {
     return NextResponse.json({ error: "That session isn't on your record." }, { status: 404 });
   }
 
-  const [settings, full] = await Promise.all([
-    getSettings(),
-    prisma.client.findUniqueOrThrow({ where: { id: client.id }, select: { reminderLeadDays: true } }),
-  ]);
+  const settings = await getSettings();
   const clinic = booking.clinic as Clinic;
   const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
   const portalLink = portalUrl(settings, client.portalToken);
@@ -39,7 +37,7 @@ export const GET = portalRoute(async (req, client) => {
     title: SESSION_EVENT_TITLE,
     location: sessionLocation(clinic, address),
     description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalLink}`,
-    reminderLeadDays: full.reminderLeadDays,
+    reminderLeadDays: DEFAULT_CALENDAR_ALARM_LEAD_DAYS,
   });
 
   return new NextResponse(ics, {

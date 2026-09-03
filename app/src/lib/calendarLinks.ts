@@ -36,6 +36,18 @@ export interface SessionEventDetails {
   reminderLeadDays?: number[];
 }
 
+/**
+ * The alarm every session's .ics gets, regardless of whether the client has
+ * opted into email reminders — deliberately not tied to Client.reminderLeadDays.
+ * A calendar event having its own default reminder is normal (every invite
+ * does this); a client who wants none can delete it in their own calendar app,
+ * the same as they would for anyone else's invite. Keeping the two separate
+ * means the portal's email-reminder checkboxes mean exactly one thing — "email
+ * me" — rather than silently also controlling whether an imported event nags
+ * a client who never ticked a box.
+ */
+export const DEFAULT_CALENDAR_ALARM_LEAD_DAYS = [0];
+
 function endOf(d: SessionEventDetails): Date {
   return d.end ?? new Date(d.start.getTime() + SESSION_MINUTES * 60_000);
 }
