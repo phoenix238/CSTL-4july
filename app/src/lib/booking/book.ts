@@ -12,6 +12,8 @@ import { composeBookingEmail, fillPreviewLinks, resolveClinicPhoto } from "./ema
 import { parseDataUrl } from "@/lib/google/mime";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
+import { googleCalendarUrl, sessionLocation } from "@/lib/calendarLinks";
+import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
 import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
@@ -211,7 +213,17 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
   const { token: portalToken, paymentRef } = await getPortalIdentity(clientId);
   const portalLink = portalUrl(settings, portalToken);
-  const links = { intakeLink, portalLink, paymentRef };
+  // Add-to-calendar links for the client — the piece that reaches someone who
+  // doesn't use Google Calendar, so the session lands somewhere they actually
+  // look rather than only in an invite they might never open.
+  const calendarGoogleUrl = googleCalendarUrl({
+    uid: booking.id,
+    start,
+    location: sessionLocation(req.clinic, address),
+    description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalLink}`,
+  });
+  const calendarIcsUrl = icsUrl(settings, portalToken, booking.id);
+  const links = { intakeLink, portalLink, paymentRef, calendarGoogleUrl, calendarIcsUrl };
   const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.
@@ -344,6 +356,9 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
       personalEventId: "",
       secondaryEventId: "",
       rescheduleCount: { increment: 1 },
+      // A moved session earns its reminders afresh against the new date — clear
+      // what was already sent so the day-before / morning-of nudge fires again.
+      remindersSentLead: [],
     },
   });
   await createBookingEvents(bookingId); // re-syncs the new day's Chalk Farm block (Bethnal)

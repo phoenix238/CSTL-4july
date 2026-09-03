@@ -47,6 +47,15 @@ model Client {
   // Set when a client asks for a receipt before anything's confirmed paid yet —
   // the next booking that gets marked paid sends it automatically, then clears this.
   receiptPending Boolean      @default(false)
+  // Which app-sent session reminders the client wants, as lead times in days
+  // before each session: 7 = a week before, 1 = the day before, 0 = the morning
+  // of. Set by the client from their own portal (/me/[token]). These are emails
+  // the app sends itself (from the daily cron), independent of whether the client
+  // uses Google Calendar — the safety net for someone who never added the invite
+  // to a calendar of their own. Defaults to empty (off) — nobody gets a reminder
+  // email until they visit their portal and switch one on themselves; an existing
+  // client is never silently opted in by this column's default.
+  reminderLeadDays Int[]      @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
@@ -155,6 +164,11 @@ model Booking {
   // How the booking was made, so the inbox and stats can tell them apart.
   bookedVia       String @default("admin") // admin | online | portal | offer
   rescheduleCount Int    @default(0)
+  // Which of the client's chosen reminder lead times (see Client.reminderLeadDays)
+  // have already been emailed for this session, so the daily sweep sends each one
+  // once and never repeats. Cleared on reschedule — a moved session earns its
+  // reminders afresh against the new date.
+  remindersSentLead Int[] @default([])
 
   @@index([startsAt])
   @@index([clientId])
@@ -272,6 +286,21 @@ model AppSettings {
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
+  // — Phoenix's own calendar reminders (his copy of each session event only;
+  //   an attendee's reminders are always their own, never set from here) —
+  // How he wants reminding of his own sessions:
+  //   "morning"     — one popup on the morning of the session (see ownReminderMorningHour)
+  //   "before"      — one popup ownReminderMinutesBefore minutes before it
+  //   "email_popup" — the old pair: an email 24h before and a popup 1h before
+  //   "none"        — nothing on the session event (he relies on the app's Today view)
+  ownReminderMode        String @default("morning")
+  ownReminderMinutesBefore Int  @default(60) // used when ownReminderMode = "before"
+  ownReminderMorningHour Int    @default(8)  // London hour the morning-of popup fires (used when mode = "morning")
+  // Whether the venue-facing events (the "R5 - Phoenix" room event and the shared
+  // "Phoenix" Chalk Farm block) also carry his reminders. Off by default so he
+  // isn't reminded twice for one session — once by the personal event, once by
+  // the room/block. Turn on only if he wants the venue events to nag too.
+  venueReminders         Boolean @default(false)
   // — Availability ⇄ Google Calendar two-way sync —
   // A dedicated "CSTL Availability" calendar that mirrors the bookable hours
   // (recurring weekly hours + one-off overrides) as concrete dated blocks,

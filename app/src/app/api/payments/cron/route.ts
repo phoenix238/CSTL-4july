@@ -3,6 +3,7 @@ import { syncBankPayments } from "@/lib/payments/sync";
 import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
 import { runAvailabilitySync } from "@/lib/google/availabilitySync";
+import { sweepSessionReminders } from "@/lib/reminders/sessionReminders";
 
 /**
  * The daily heartbeat: pull new bank payments and match them, flag sessions
@@ -46,11 +47,15 @@ export async function GET(req: Request) {
 
   try {
     if (dryRun) {
-      const [unpaid, calendar] = await Promise.all([
+      const [unpaid, calendar, reminders] = await Promise.all([
         sweepUnpaidSessions({ asOf, dryRun: true }),
         reconcileUpcomingEvents({ asOf, dryRun: true }).catch((err) => {
           console.error("Dry-run reconcile failed", err);
           return { issues: [], newIssues: [] };
+        }),
+        sweepSessionReminders({ asOf, dryRun: true }).catch((err) => {
+          console.error("Dry-run reminder sweep failed", err);
+          return { due: [], sent: 0 };
         }),
       ]);
       return NextResponse.json({
@@ -58,6 +63,7 @@ export async function GET(req: Request) {
         asOf: asOf.toISOString(),
         unpaid: { overdue: unpaid.overdue, wouldNotify: unpaid.newlyFlagged },
         calendar: { issues: calendar.issues, wouldNotify: calendar.newIssues },
+        reminders: { wouldSend: reminders.due },
       });
     }
 
@@ -74,6 +80,12 @@ export async function GET(req: Request) {
       console.error("Availability sync failed", err);
       return { connected: false as const };
     });
+    // The clients' own session reminders, at the lead times they picked. Needs
+    // Google (Gmail); never fail the run over it.
+    const reminders = await sweepSessionReminders({ asOf }).catch((err) => {
+      console.error("Session reminder sweep failed", err);
+      return { due: [], sent: 0 };
+    });
 
     return NextResponse.json({
       ...sync,
@@ -81,6 +93,7 @@ export async function GET(req: Request) {
       unpaidTotal: unpaid.overdue.length,
       calendarIssues: calendar.newIssues.length,
       availabilitySync: availability,
+      remindersSent: reminders.sent,
     });
   } catch (err) {
     console.error("Scheduled sync failed", err);

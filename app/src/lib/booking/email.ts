@@ -83,6 +83,25 @@ export interface ClientLinks {
   portalLink?: string;
   /** the reference they put on a bank transfer */
   paymentRef?: string;
+  /** one-tap "add to Google Calendar" link for this session */
+  calendarGoogleUrl?: string;
+  /** download this session as an .ics (Apple Calendar / Outlook / everything else) */
+  calendarIcsUrl?: string;
+}
+
+/**
+ * The "add this to your calendar" block. The Google invite already reaches a
+ * client who uses Google Calendar and accepts it; this is what a client who
+ * keeps their calendar elsewhere gets — a one-tap Google link and an .ics for
+ * Apple Calendar, Outlook and the rest. Empty when the links aren't available
+ * (e.g. the browser preview, before the client's tokens exist).
+ */
+function calendarBlock(links: ClientLinks): string {
+  if (!links.calendarGoogleUrl && !links.calendarIcsUrl) return "";
+  const lines = ["Add this to your own calendar so it's there wherever you look:"];
+  if (links.calendarGoogleUrl) lines.push(`  Google Calendar: ${links.calendarGoogleUrl}`);
+  if (links.calendarIcsUrl) lines.push(`  Apple Calendar / Outlook / other: ${links.calendarIcsUrl}`);
+  return lines.join("\n");
 }
 
 /**
@@ -270,7 +289,9 @@ export function composeBookingEmail(
     // signed once at the end — so a sign-off left in the template can't produce
     // an email that ends twice.
     const { main } = splitSignOff(fillTemplate(resolveReturningTemplate(settings), common));
-    const body = [main, whereBlock, resolveSignOff(settings)].filter(Boolean).join("\n\n");
+    const calendar = calendarBlock(links);
+    if (calendar) includes.push("Add-to-calendar links (Google, Apple, Outlook)");
+    const body = [main, whereBlock, calendar, resolveSignOff(settings)].filter(Boolean).join("\n\n");
     return { subject, body, includes };
   }
 
@@ -289,7 +310,9 @@ export function composeBookingEmail(
   // emailSignOff below, so every email ends the same way and can't end twice.
   const { main } = splitSignOff(filled);
 
-  const sections = [main, whereBlock];
+  const calendar = calendarBlock(links);
+  if (calendar) includes.push("Add-to-calendar links (Google, Apple, Outlook)");
+  const sections = [main, whereBlock, calendar];
 
   // Payment, once. The templates already name the price in their own words, so
   // repeating it as a "Payment (£30–60 sliding scale):" heading said the same

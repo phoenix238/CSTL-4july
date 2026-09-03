@@ -7,7 +7,9 @@ import {
   type AccountSummary,
 } from "@/lib/account";
 import { getOrCreatePaymentRef, portalUrl } from "@/lib/portal";
-import type { Clinic } from "@/lib/booking/rules";
+import { SESSION_EVENT_TITLE, type Clinic } from "@/lib/booking/rules";
+import { googleCalendarUrl, sessionLocation } from "@/lib/calendarLinks";
+import { icsUrl } from "@/lib/reminders/sessionReminders";
 
 /**
  * Everything the client portal shows, assembled in one place.
@@ -41,6 +43,10 @@ export interface PortalUpcoming extends PortalSession {
   canReschedule: boolean;
   /** goodwill suggested if they cancel right now, in pence (0 outside the window) */
   cancelGoodwillPence: number;
+  /** one-tap "add to Google Calendar" link for this session */
+  googleCalUrl: string;
+  /** download this session as an .ics (Apple Calendar / Outlook / everything else) */
+  icsUrl: string;
 }
 
 export interface PortalView {
@@ -63,6 +69,8 @@ export interface PortalView {
   hasEmail: boolean;
   receiptPending: boolean;
   portalLink: string;
+  /** the client's chosen reminder lead times (days before; 0 = the morning of) */
+  reminderLeadDays: number[];
 }
 
 function toAccountBooking(b: {
@@ -114,16 +122,29 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     cancelled: b.status === "cancelled",
   });
 
-  const upcoming: PortalUpcoming[] = upcomingRows.map((row) => ({
-    ...toSession(row),
-    canReschedule: canRescheduleSelf(row.startsAt, settings.portalNoticeHours, now),
-    cancelGoodwillPence: suggestedGoodwillPence(
-      row.startsAt,
-      settings.portalNoticeHours,
-      settings.lateCancelGoodwillPence,
-      now,
-    ),
-  }));
+  const upcoming: PortalUpcoming[] = upcomingRows.map((row) => {
+    const clinic = row.clinic as Clinic;
+    const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
+    const location = sessionLocation(clinic, address);
+    return {
+      ...toSession(row),
+      canReschedule: canRescheduleSelf(row.startsAt, settings.portalNoticeHours, now),
+      cancelGoodwillPence: suggestedGoodwillPence(
+        row.startsAt,
+        settings.portalNoticeHours,
+        settings.lateCancelGoodwillPence,
+        now,
+      ),
+      googleCalUrl: googleCalendarUrl({
+        uid: row.id,
+        start: row.startsAt,
+        title: SESSION_EVENT_TITLE,
+        location,
+        description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalUrl(settings, client.portalToken)}`,
+      }),
+      icsUrl: icsUrl(settings, client.portalToken, row.id),
+    };
+  });
 
   // Everything that isn't an upcoming session: past sessions and cancellations.
   // Guarded by id so a second future booking can never fall through into here.
@@ -153,5 +174,6 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     hasEmail: Boolean(client.email),
     receiptPending: client.receiptPending,
     portalLink: portalUrl(settings, client.portalToken),
+    reminderLeadDays: client.reminderLeadDays,
   };
 }

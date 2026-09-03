@@ -2,13 +2,15 @@ import { prisma, getSettings } from "@/lib/db";
 import {
   CLINIC_EVENT_COLOR,
   EVENT_REMINDERS,
+  NO_REMINDERS,
   SESSION_EVENT_TITLE,
+  personalEventReminders,
   planBookingEvents,
   type Clinic,
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
-import { fmtTime, londonDateKey } from "@/lib/time";
+import { fmtTime, londonDateKey, londonMinutes } from "@/lib/time";
 
 const TZ = "Europe/London";
 
@@ -37,6 +39,13 @@ export async function createBookingEvents(bookingId: string) {
     .join("\n");
   const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
 
+  // Phoenix's own reminders live on the personal (client-facing) session event
+  // only — that's his copy. The venue events (room / Chalk Farm) carry his
+  // reminders solely when he's opted the venue events in, so one session can't
+  // nag him twice. An attendee's reminders are always their own regardless.
+  const personalReminders = personalEventReminders(settings, londonMinutes(booking.startsAt));
+  const venueEventReminders = settings.venueReminders ? EVENT_REMINDERS : NO_REMINDERS;
+
   let personalEventId = "";
   let secondaryEventId = "";
   for (const ev of plan) {
@@ -52,7 +61,7 @@ export async function createBookingEvents(bookingId: string) {
           colorId: ev.colorId || undefined,
           start: { dateTime: ev.start.toISOString(), timeZone: TZ },
           end: { dateTime: ev.end.toISOString(), timeZone: TZ },
-          reminders: EVENT_REMINDERS,
+          reminders: ev.calendar === "personal" ? personalReminders : venueEventReminders,
           attendees:
             ev.inviteClient && booking.client.email
               ? [{ email: booking.client.email, displayName: booking.client.name }]
