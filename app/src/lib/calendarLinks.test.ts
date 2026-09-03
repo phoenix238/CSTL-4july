@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSessionIcs, toCalendarUTC, sessionLocation } from "./calendarLinks";
+import { buildSessionIcs, toCalendarUTC, sessionLocation, DEFAULT_CALENDAR_ALARM_LEAD_DAYS } from "./calendarLinks";
 
 describe("toCalendarUTC", () => {
   it("renders a compact UTC stamp", () => {
@@ -50,6 +50,18 @@ describe("buildSessionIcs", () => {
   it("carries no alarms when none are chosen", () => {
     const ics = buildSessionIcs(base);
     expect(ics).not.toContain("VALARM");
+  });
+
+  // Every .ics a client downloads (their own portal, the confirmation email,
+  // a daily reminder email) is built with this fixed default — a plain
+  // morning-of alarm every calendar invite would have, regardless of whether
+  // that client has opted into email reminders. Deliberately not derived from
+  // Client.reminderLeadDays: the portal's email-reminder checkboxes control
+  // only the email, never whether an imported event carries an alert.
+  it("DEFAULT_CALENDAR_ALARM_LEAD_DAYS produces a single morning-of alarm", () => {
+    const ics = buildSessionIcs({ ...base, reminderLeadDays: DEFAULT_CALENDAR_ALARM_LEAD_DAYS });
+    expect(ics.match(/BEGIN:VALARM/g)?.length).toBe(1);
+    expect(ics).toContain("TRIGGER:-PT1H");
   });
 });
 

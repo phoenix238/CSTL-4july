@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { buildSessionIcs } from "@/lib/calendarLinks";
+import { buildSessionIcs, DEFAULT_CALENDAR_ALARM_LEAD_DAYS } from "@/lib/calendarLinks";
 
 /**
  * A downloadable .ics for a made-up session, driven entirely by query params —
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Invalid or missing start" }, { status: 400 });
   }
 
-  const ics = buildSessionIcs({ uid: "sample", start, location });
+  const ics = buildSessionIcs({ uid: "sample", start, location, reminderLeadDays: DEFAULT_CALENDAR_ALARM_LEAD_DAYS });
   return new NextResponse(ics, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
