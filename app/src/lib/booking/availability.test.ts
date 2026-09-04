@@ -161,18 +161,32 @@ describe("computeAvailableSlots on ordinary times on DST days", () => {
 
 describe("chalkFarmDayBlockMinutes", () => {
   it("is zero for a day with no sessions", () => {
-    expect(chalkFarmDayBlockMinutes([], 15)).toBe(0);
+    expect(chalkFarmDayBlockMinutes([], 15, 60)).toBe(0);
   });
   it("a lone session is its hour plus both edges", () => {
-    expect(chalkFarmDayBlockMinutes([600], 15)).toBe(60 + 30); // 10:00 session, 15-min edges
+    expect(chalkFarmDayBlockMinutes([600], 15, 60)).toBe(60 + 30); // 10:00 session, 15-min edges
   });
-  it("spans from the first session to the last, gaps included", () => {
-    // 10:00 and 14:00, no edge: 09→15 wall would be 5h, i.e. (840-600)+60 = 300.
-    expect(chalkFarmDayBlockMinutes([600, 840], 0)).toBe(840 - 600 + 60);
+  it("one block spans a cluster's first-to-last, inner gaps included", () => {
+    // 10:00 and 11:30 — 30-min gap, within a 60-min split → one block, no edge:
+    // 10:00→12:30 = (690-600)+60 = 150.
+    expect(chalkFarmDayBlockMinutes([600, 690], 0, 60)).toBe(690 - 600 + 60);
+  });
+  it("splits sessions past the cluster gap into separate blocks, gap not counted", () => {
+    // 10:00 and 14:00 — 3h gap, over the 60-min split → two lone blocks:
+    // each 60 min with no edge → 120 total, the 3h gap uncounted.
+    expect(chalkFarmDayBlockMinutes([600, 840], 0, 60)).toBe(120);
+  });
+  it("keeps a whole day as one block when the split gap is wide enough", () => {
+    // Same 10:00 and 14:00, but a 240-min split → one block: (840-600)+60 = 300.
+    expect(chalkFarmDayBlockMinutes([600, 840], 0, 240)).toBe(840 - 600 + 60);
   });
   it("back-to-back sessions cost only the extra hour, not double the edges", () => {
-    // 10:00 and 11:00 with 15-min edges: 09:45→12:15 = 150.
-    expect(chalkFarmDayBlockMinutes([600, 660], 15)).toBe(660 - 600 + 60 + 30);
+    // 10:00 and 11:00 with 15-min edges, one cluster: 09:45→12:15 = 150.
+    expect(chalkFarmDayBlockMinutes([600, 660], 15, 60)).toBe(660 - 600 + 60 + 30);
+  });
+  it("two split blocks each carry their own edges", () => {
+    // 10:00 and 14:00 with 15-min edges, over the split → two lone blocks of 90 each.
+    expect(chalkFarmDayBlockMinutes([600, 840], 15, 60)).toBe((60 + 30) * 2);
   });
 });
 
@@ -209,6 +223,7 @@ describe("explainEmptyDay", () => {
       weeklyCap: {
         capMinutes: 600,
         edgeBufferMinutes: 0,
+        clusterGapMinutes: 60,
         blockMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 },
         sessionMinsByDay: {},
       },
@@ -788,6 +803,7 @@ describe("computeAvailableSlots", () => {
   const cap = (over: Partial<NonNullable<AvailabilityParams["weeklyCap"]>> = {}) => ({
     capMinutes: 600,
     edgeBufferMinutes: 0,
+    clusterGapMinutes: 60,
     blockMinutesByWeek: {},
     sessionMinsByDay: {},
     ...over,
@@ -823,10 +839,12 @@ describe("computeAvailableSlots", () => {
     expect(slots).toEqual([at(9)]);
   });
 
-  it("counts room-block time, not sessions: a second session the same day only costs the gap it adds", () => {
-    // 9-10 already booked. Cap has 90 min left. A 14:00 session as a *count* is
-    // one hour, but as room time it extends the day's block from 9-10 to 9-15
-    // (+5 hours) — far over. A 10:00 session, back-to-back, adds only its own hour.
+  it("counts room-block time, not sessions: a nearby session extends the block, a distant one starts its own", () => {
+    // 9-10 already booked, 60 min of the 600-min cap left, 60-min cluster gap.
+    // A 10:00 session clusters back-to-back and adds only its own hour (+60). An
+    // 11:00 session still clusters (60-min gap) but extends the block to 9-12
+    // (+120) — over. A 14:00 session is past the cluster gap, so it starts a
+    // *separate* block costing only its own hour (+60) — the empty gap isn't held.
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 960 }]; // 9-16
     const base = {
       clinic: "bethnal" as const,
@@ -843,7 +861,8 @@ describe("computeAvailableSlots", () => {
       weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 540 }, sessionMinsByDay: { [londonDateKey(TUESDAY)]: [540] } }),
     }).map(fmtTime);
     expect(slots).toContain("10:00"); // extends block to 9-11: +60, reaches 600 — allowed
-    expect(slots).not.toContain("11:00"); // would extend to 9-12: +120, over the cap
+    expect(slots).not.toContain("11:00"); // still clusters, extends to 9-12: +120, over the cap
+    expect(slots).toContain("14:00"); // past the gap → its own 60-min block, +60 — allowed
   });
 
   it("weeklyCap only counts the candidate's own week — a different week's total doesn't block it", () => {

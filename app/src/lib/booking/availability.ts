@@ -205,22 +205,60 @@ export interface AvailabilityParams {
   weeklyCap?: {
     capMinutes: number;
     edgeBufferMinutes: number;
+    /** the gap (minutes) up to which two sessions share one Chalk Farm block —
+     * a wider gap splits them into separate blocks, so the empty time between
+     * doesn't count. Must match `chalkFarmClusterGapMinutes` in settings. */
+    clusterGapMinutes: number;
     blockMinutesByWeek: Record<string, number>;
     sessionMinsByDay: Record<string, number[]>;
   };
 }
 
 /**
- * Minutes of shared Chalk Farm room held on one day for a set of session start
- * times (as minutes past London midnight): from `edgeBufferMinutes` before the
- * earliest session to the same after the latest session's end. Empty → 0. Pure,
- * so the cap math is unit-testable and matches the real block in chalkFarm.ts.
+ * Group session start times into clusters: consecutive sessions stay in the same
+ * cluster while the gap between one session's end and the next's start is at most
+ * `gap`; a larger gap starts a new cluster. Returns each cluster's starts, in
+ * order. Units are the caller's — minutes-of-day or epoch-ms — as long as
+ * `starts`, `sessionLen` and `gap` all share them.
+ *
+ * This is the one definition of "which sessions share a Chalk Farm block": the
+ * cap math (below, in minutes) and the real Google block (chalkFarm.ts, in ms)
+ * both cluster through here, so what's counted and what's drawn can't disagree.
  */
-export function chalkFarmDayBlockMinutes(sessionStartMins: number[], edgeBufferMinutes: number): number {
-  if (!sessionStartMins.length) return 0;
-  const first = Math.min(...sessionStartMins);
-  const last = Math.max(...sessionStartMins);
-  return last + SESSION_MINUTES + edgeBufferMinutes - (first - edgeBufferMinutes);
+export function clusterSessions(starts: number[], sessionLen: number, gap: number): number[][] {
+  const sorted = [...starts].sort((a, b) => a - b);
+  const clusters: Array<{ starts: number[]; end: number }> = [];
+  for (const s of sorted) {
+    const current = clusters[clusters.length - 1];
+    if (current && s - current.end <= gap) {
+      current.starts.push(s);
+      current.end = Math.max(current.end, s + sessionLen);
+    } else {
+      clusters.push({ starts: [s], end: s + sessionLen });
+    }
+  }
+  return clusters.map((c) => c.starts);
+}
+
+/**
+ * Minutes of shared Chalk Farm room held on one day for a set of session start
+ * times (as minutes past London midnight): each cluster of nearby sessions
+ * (within `clusterGapMinutes`) holds one block, from `edgeBufferMinutes` before
+ * its earliest session to the same after its latest, and the day's cost is the
+ * sum across clusters. Sessions far enough apart form separate blocks, so the
+ * empty gap between them is not counted. Empty → 0. Pure, so the cap math is
+ * unit-testable and matches the real blocks in chalkFarm.ts.
+ */
+export function chalkFarmDayBlockMinutes(
+  sessionStartMins: number[],
+  edgeBufferMinutes: number,
+  clusterGapMinutes: number,
+): number {
+  return clusterSessions(sessionStartMins, SESSION_MINUTES, clusterGapMinutes).reduce((total, cluster) => {
+    const first = cluster[0];
+    const last = cluster[cluster.length - 1];
+    return total + (last + SESSION_MINUTES + edgeBufferMinutes) - (first - edgeBufferMinutes);
+  }, 0);
 }
 
 const pad = (iv: { start: Date; end: Date }, minutes: number) =>
@@ -338,8 +376,9 @@ function slotFits(
     const weekKey = londonDateKey(londonWeekStart(candidate));
     const dayStarts = weeklyCap.sessionMinsByDay[dateKey] ?? [];
     const edge = weeklyCap.edgeBufferMinutes;
+    const gap = weeklyCap.clusterGapMinutes;
     const delta =
-      chalkFarmDayBlockMinutes([...dayStarts, minute], edge) - chalkFarmDayBlockMinutes(dayStarts, edge);
+      chalkFarmDayBlockMinutes([...dayStarts, minute], edge, gap) - chalkFarmDayBlockMinutes(dayStarts, edge, gap);
     const weekTotal = weeklyCap.blockMinutesByWeek[weekKey] ?? 0;
     if (weekTotal + delta > weeklyCap.capMinutes) return "cap";
   }

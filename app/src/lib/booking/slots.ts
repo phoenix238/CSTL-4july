@@ -35,6 +35,7 @@ export async function loadBethnalWeeklyCap(
   // sum each day's room-block span into its week — so the cap tracks the actual
   // Chalk Farm hours held, edge padding and inter-session gaps included.
   const edge = settings.chalkFarmEdgeBufferMinutes;
+  const gap = settings.chalkFarmClusterGapMinutes;
   const sessionMinsByDay: Record<string, number[]> = {};
   for (const b of weekBookings) {
     const dateKey = londonDateKey(b.startsAt);
@@ -44,11 +45,12 @@ export async function loadBethnalWeeklyCap(
   for (const [dateKey, mins] of Object.entries(sessionMinsByDay)) {
     const [y, m, d] = dateKey.split("-").map(Number);
     const weekKey = londonDateKey(londonWeekStart(londonTime(y, m, d, 12, 0)));
-    blockMinutesByWeek[weekKey] = (blockMinutesByWeek[weekKey] ?? 0) + chalkFarmDayBlockMinutes(mins, edge);
+    blockMinutesByWeek[weekKey] = (blockMinutesByWeek[weekKey] ?? 0) + chalkFarmDayBlockMinutes(mins, edge, gap);
   }
   return {
     capMinutes: settings.chalkFarmWeeklyCapHours * 60,
     edgeBufferMinutes: edge,
+    clusterGapMinutes: gap,
     blockMinutesByWeek,
     sessionMinsByDay,
   };
