@@ -188,39 +188,40 @@ export interface AvailabilityParams {
   now?: Date;
   minNoticeMinutes?: number;
   /**
-   * A cap on Bethnal Green's shared Chalk Farm *room time* per London calendar
-   * week (Mon-Sun) — the real hours held with the studio, not a count of
-   * sessions.
+   * A cap on Phoenix's own Bethnal Green (Chalk Farm) session hours per London
+   * calendar week (Mon-Sun) — a budget of actual session time, counted one
+   * session length per session.
    *
-   * Each day's room block runs from `edgeBufferMinutes` before the first
-   * session to the same after the last (gaps between sessions included — that
-   * time is still the room booked). A candidate is rejected if the extra block
-   * time it would add to its day pushes the week's total past `capMinutes`.
+   * The gaps between sessions don't count: two sessions hours apart on the same
+   * day cost the same two hours as two back-to-back ones. A candidate is
+   * rejected only if its own session hour would push the week's total past
+   * `capMinutes`.
    *
-   * `blockMinutesByWeek` (keyed by `londonDateKey(londonWeekStart(...))`) is the
+   * `capMinutesByWeek` (keyed by `londonDateKey(londonWeekStart(...))`) is the
    * current total, and `sessionMinsByDay` (minute-of-day starts, keyed by
    * `londonDateKey`) lets the marginal cost of adding one session be computed.
    * Both already exclude the booking being rescheduled, if any.
    */
   weeklyCap?: {
     capMinutes: number;
-    edgeBufferMinutes: number;
-    blockMinutesByWeek: Record<string, number>;
+    capMinutesByWeek: Record<string, number>;
     sessionMinsByDay: Record<string, number[]>;
   };
 }
 
 /**
- * Minutes of shared Chalk Farm room held on one day for a set of session start
- * times (as minutes past London midnight): from `edgeBufferMinutes` before the
- * earliest session to the same after the latest session's end. Empty → 0. Pure,
- * so the cap math is unit-testable and matches the real block in chalkFarm.ts.
+ * Minutes of Phoenix's own Bethnal (Chalk Farm) session time on one day that
+ * count toward the weekly cap: one session length per session, and nothing
+ * else. The gaps between sessions and the room's edge padding are deliberately
+ * NOT counted — the cap budgets actual session hours, and Phoenix spaces the
+ * day out himself when he needs to close a gap. (The shared calendar's physical
+ * room block still spans first-to-last plus edges — see chalkFarmBlockRange in
+ * chalkFarm.ts — that's a separate concern from this budget.) `sessionStartMins`
+ * is minutes past London midnight; only its length matters here. Empty → 0.
+ * Pure, so the cap math is unit-testable.
  */
-export function chalkFarmDayBlockMinutes(sessionStartMins: number[], edgeBufferMinutes: number): number {
-  if (!sessionStartMins.length) return 0;
-  const first = Math.min(...sessionStartMins);
-  const last = Math.max(...sessionStartMins);
-  return last + SESSION_MINUTES + edgeBufferMinutes - (first - edgeBufferMinutes);
+export function chalkFarmCapMinutes(sessionStartMins: number[]): number {
+  return sessionStartMins.length * SESSION_MINUTES;
 }
 
 const pad = (iv: { start: Date; end: Date }, minutes: number) =>
@@ -331,16 +332,13 @@ function slotFits(
   if (busyClash) return "busy";
 
   if (weeklyCap) {
-    // The cap counts room-block time, so a session's cost is how much it would
-    // *extend* its day's block — nothing if it slots between two existing
-    // sessions, a full hour-plus-padding if it opens a new day.
+    // The cap counts session hours, so a session costs exactly one session
+    // length wherever it lands that day — the gaps around it don't matter.
     const dateKey = londonDateKey(candidate);
     const weekKey = londonDateKey(londonWeekStart(candidate));
     const dayStarts = weeklyCap.sessionMinsByDay[dateKey] ?? [];
-    const edge = weeklyCap.edgeBufferMinutes;
-    const delta =
-      chalkFarmDayBlockMinutes([...dayStarts, minute], edge) - chalkFarmDayBlockMinutes(dayStarts, edge);
-    const weekTotal = weeklyCap.blockMinutesByWeek[weekKey] ?? 0;
+    const delta = chalkFarmCapMinutes([...dayStarts, minute]) - chalkFarmCapMinutes(dayStarts);
+    const weekTotal = weeklyCap.capMinutesByWeek[weekKey] ?? 0;
     if (weekTotal + delta > weeklyCap.capMinutes) return "cap";
   }
 
