@@ -38,6 +38,12 @@ export interface ClientCopy {
   // — Offer-pick page (client taps one of the offered times) —
   offerPickTitle: string; // {name}
   offerPickIntro: string; // {clinic}
+
+  // — Session reminder email (sent by the daily sweep at the client's chosen
+  //   lead times). Voice only: the composer places the when/where, add-to-
+  //   calendar links and the booking-page link around it. —
+  reminderEmailSubject: string; // {when} {clinic}
+  reminderEmailBody: string; // {name} {when} {clinic}
 }
 
 export const CLIENT_COPY_DEFAULTS: ClientCopy = {
@@ -75,6 +81,10 @@ export const CLIENT_COPY_DEFAULTS: ClientCopy = {
 
   offerPickTitle: "Pick a time, {name}",
   offerPickIntro: "Here are the times offered for {clinic} — tap one to book it straight away.",
+
+  reminderEmailSubject: "A reminder: your session {when}",
+  reminderEmailBody:
+    "Hi {name},\n\nJust a gentle reminder that your craniosacral session is coming up: {when} at {clinic}. Looking forward to seeing you.",
 };
 
 /** Keys of ClientCopy, for iterating in the Settings editor. */

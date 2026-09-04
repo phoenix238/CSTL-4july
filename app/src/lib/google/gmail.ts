@@ -1,8 +1,10 @@
 import { getGmailApi, withRetry } from "./client";
 import { recordGoogleFailure, recordGoogleSuccess } from "./health";
 import { buildMessage, type Attachment } from "./mime";
+import { htmlFromPlainText, type EmailLink } from "./htmlEmail";
 
 export type { Attachment } from "./mime";
+export type { EmailLink } from "./htmlEmail";
 
 /** Set when replying to an enquiry that came in over Gmail — keeps the reply in the client's original thread. */
 export interface GmailThread {
@@ -23,6 +25,18 @@ export interface SendOptions {
   bcc?: string;
   /** Where a reply should go, when it isn't `from` — see MessageParts.replyTo. */
   replyTo?: string;
+}
+
+/** The last, optional argument to `sendEmail`. */
+export interface SendEmailExtras {
+  bcc?: string;
+  replyTo?: string;
+  /**
+   * Token-bearing URLs in `body` (a client's booking page, intake form, …) to
+   * show as a friendly hyperlink instead of the raw link in any inbox that
+   * renders HTML. Omit to send plain text only, as every email always did.
+   */
+  links?: EmailLink[];
 }
 
 /**
@@ -46,7 +60,7 @@ export async function sendEmail(
   body: string,
   thread?: GmailThread,
   attachments?: Attachment[],
-  options?: { bcc?: string; replyTo?: string },
+  options?: SendEmailExtras,
 ) {
   try {
     const gmail = await getGmailApi();
@@ -60,6 +74,7 @@ export async function sendEmail(
       replyTo: options?.replyTo,
       subject: replySubject,
       body,
+      html: options?.links?.length ? htmlFromPlainText(body, options.links) : undefined,
       inReplyTo: thread?.inReplyTo,
       attachments,
     });

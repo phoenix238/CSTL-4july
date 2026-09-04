@@ -2,13 +2,16 @@ import { prisma, getSettings } from "@/lib/db";
 import {
   CLINIC_EVENT_COLOR,
   EVENT_REMINDERS,
+  NO_REMINDERS,
   SESSION_EVENT_TITLE,
+  personalEventReminders,
   planBookingEvents,
   type Clinic,
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
-import { fmtTime, londonDateKey } from "@/lib/time";
+import { getOrCreatePortalToken, portalUrl } from "@/lib/portal";
+import { fmtTime, londonDateKey, londonMinutes } from "@/lib/time";
 
 const TZ = "Europe/London";
 
@@ -37,6 +40,24 @@ export async function createBookingEvents(bookingId: string) {
     .join("\n");
   const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
 
+  // The personal (client-facing) event carries the client's own "manage this
+  // session" link in its description, so the session that lands on their own
+  // calendar automatically (they're the attendee) can be moved, cancelled or
+  // have its reminders changed straight from the calendar entry — the same link
+  // the confirmation email gives them. It's a token, not a name, and this event
+  // is only ever on Phoenix's calendar plus the one client attendee's, so it
+  // stays off the shared venue calendars. Token is ensured here (idempotent) so
+  // the description has a real link even on a reschedule.
+  const portalLink = portalUrl(settings, await getOrCreatePortalToken(booking.clientId));
+  const manageNote = `Manage this session — move it, cancel it, or change your reminders: ${portalLink}`;
+
+  // Phoenix's own reminders live on the personal (client-facing) session event
+  // only — that's his copy. The venue events (room / Chalk Farm) carry his
+  // reminders solely when he's opted the venue events in, so one session can't
+  // nag him twice. An attendee's reminders are always their own regardless.
+  const personalReminders = personalEventReminders(settings, londonMinutes(booking.startsAt));
+  const venueEventReminders = settings.venueReminders ? EVENT_REMINDERS : NO_REMINDERS;
+
   let personalEventId = "";
   let secondaryEventId = "";
   for (const ev of plan) {
@@ -44,15 +65,26 @@ export async function createBookingEvents(bookingId: string) {
     const res = await withRetry(() =>
       calendar.events.insert({
         calendarId: calId,
-        sendUpdates: ev.inviteClient && booking.client.email ? "all" : "none",
+        // Never "all": Google's own invite/notification email is a second,
+        // separately-formatted message on top of our own confirmation email —
+        // and a confusing one, since its subject line shows the time converted
+        // to the recipient's device timezone while the body shows the event's
+        // own timezone with no label, reading as two different times for one
+        // session. The client still gets added as an attendee below (so the
+        // session silently lands on their own Google Calendar, if they have
+        // one) — they just don't get emailed about it a second time; our own
+        // email's add-to-calendar links are the one channel that tells them.
+        sendUpdates: "none",
         requestBody: {
           summary: ev.summary,
-          description: ev.description || undefined,
+          // Personal event → the client's manage link; venue events → their own
+          // venue-facing note (the room/Chalk Farm description), never the link.
+          description: (ev.calendar === "personal" ? manageNote : ev.description) || undefined,
           location: ev.location || undefined,
           colorId: ev.colorId || undefined,
           start: { dateTime: ev.start.toISOString(), timeZone: TZ },
           end: { dateTime: ev.end.toISOString(), timeZone: TZ },
-          reminders: EVENT_REMINDERS,
+          reminders: ev.calendar === "personal" ? personalReminders : venueEventReminders,
           attendees:
             ev.inviteClient && booking.client.email
               ? [{ email: booking.client.email, displayName: booking.client.name }]
@@ -84,10 +116,13 @@ export async function createBookingEvents(bookingId: string) {
 
 /**
  * Retroactively add the client as an attendee on their upcoming booked
- * session(s), so Google emails them the calendar invite. Used once we learn a
- * client's email after they were booked without one (e.g. a WhatsApp enquiry
- * where the email arrives via the intake form). Idempotent — skips a booking
- * the client is already invited to — and stamps `calendarInviteSharedAt`.
+ * session(s), so the session silently lands on their own Google Calendar (if
+ * they have one) once we learn their email after they were booked without one
+ * (e.g. a WhatsApp enquiry where the email arrives via the intake form). Never
+ * emails them about it — same reasoning as createBookingEvents above; if they
+ * need telling, that's a fresh confirmation email, not a Google-generated one.
+ * Idempotent — skips a booking the client is already invited to — and stamps
+ * `calendarInviteSharedAt`.
  */
 export async function shareCalendarInvite(clientId: string) {
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
@@ -112,7 +147,7 @@ export async function shareCalendarInvite(clientId: string) {
       await calendar.events.patch({
         calendarId: calId,
         eventId: booking.personalEventId,
-        sendUpdates: "all",
+        sendUpdates: "none",
         requestBody: {
           attendees: [...(ev.data.attendees ?? []), { email: client.email, displayName: client.name }],
         },
@@ -163,7 +198,12 @@ export async function restyleExistingSessionEvents(): Promise<{ scanned: number;
   return { scanned: bookings.length, updated };
 }
 
-/** Delete a booking's Google events (tolerates already-deleted events). */
+/**
+ * Delete a booking's Google events (tolerates already-deleted events). Never
+ * notifies — the client's own cancellation email (see portalNotify.ts, or the
+ * admin flow) is the one channel that tells them, not a separate
+ * Google-generated cancellation email.
+ */
 export async function deleteBookingGoogleEvents(booking: {
   clinic: string;
   personalEventId: string;
@@ -178,7 +218,7 @@ export async function deleteBookingGoogleEvents(booking: {
   }
   for (const [calId, eventId] of targets) {
     try {
-      await calendar.events.delete({ calendarId: calId, eventId, sendUpdates: "all" });
+      await calendar.events.delete({ calendarId: calId, eventId, sendUpdates: "none" });
     } catch (err: unknown) {
       // Already gone on Google's side — fine, we're freeing the slot either way.
       const status = (err as { status?: number; code?: number }).status ?? (err as { code?: number }).code;

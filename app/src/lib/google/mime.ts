@@ -47,17 +47,54 @@ export interface MessageParts {
   replyTo?: string;
   subject: string;
   body: string;
+  /**
+   * The same message as HTML — sent alongside `body`, never instead of it, so
+   * a link (a client's booking page, say) can read as "Click here for your
+   * booking page" rather than the raw token-bearing URL, in any inbox that
+   * renders HTML. Text-only clients still get the identical plain-text mail.
+   */
+  html?: string;
   inReplyTo?: string;
   attachments?: Attachment[];
 }
 
+/** A random suffix makes it certain the boundary can't appear inside a part's own content. */
+const randomBoundary = (label: string) => `cstl-${label}-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+
+/** Wrap `parts` (each already a full `Content-Type: ...\r\n\r\n<content>` block) in a multipart envelope. */
+function multipart(kind: "alternative" | "mixed", parts: string[]): { contentType: string; content: string } {
+  const boundary = randomBoundary(kind);
+  return {
+    contentType: `multipart/${kind}; boundary="${boundary}"`,
+    content: parts.map((p) => `--${boundary}\r\n${p}`).join("\r\n") + `\r\n--${boundary}--`,
+  };
+}
+
+const textPlainPart = (body: string) =>
+  [
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(Buffer.from(body).toString("base64")),
+  ].join("\r\n");
+
+const textHtmlPart = (html: string) =>
+  [
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(Buffer.from(html).toString("base64")),
+  ].join("\r\n");
+
 /**
  * Build the full message source.
  *
- * With no attachments this is a plain text/plain message, byte for byte what
- * it always was — the personal, unstyled email this practice sends. Add one
- * and it becomes multipart/mixed, with the text still the first part, so the
- * message reads identically and the photo rides along.
+ * With no attachments and no `html`, this is a plain text/plain message, byte
+ * for byte what it always was — the personal, unstyled email this practice
+ * sends. Adding `html` wraps the text in multipart/alternative so an
+ * HTML-capable inbox shows the nicer version while a text-only client still
+ * gets the identical plain text. Attachments add a further multipart/mixed
+ * layer around whichever of those it is, so the photo rides along either way.
  */
 export function buildMessage({
   to,
@@ -67,6 +104,7 @@ export function buildMessage({
   replyTo,
   subject,
   body,
+  html,
   inReplyTo,
   attachments = [],
 }: MessageParts): string {
@@ -82,26 +120,24 @@ export function buildMessage({
     "MIME-Version: 1.0",
   ];
 
+  // The body as one part-block, on its own (text/plain) or paired with the
+  // HTML version (multipart/alternative) — either way, something attachments
+  // can be appended alongside without caring which it is.
+  const bodyBlock: { contentType: string; content: string } = html
+    ? multipart("alternative", [textPlainPart(body), textHtmlPart(html)])
+    : { contentType: 'text/plain; charset="UTF-8"', content: wrapBase64(Buffer.from(body).toString("base64")) };
+
   if (!attachments.length) {
-    return [
-      ...headers,
-      'Content-Type: text/plain; charset="UTF-8"',
-      "Content-Transfer-Encoding: base64",
-      "",
-      wrapBase64(Buffer.from(body).toString("base64")),
-    ].join("\r\n");
+    const encoding = html ? [] : ["Content-Transfer-Encoding: base64"];
+    return [...headers, `Content-Type: ${bodyBlock.contentType}`, ...encoding, "", bodyBlock.content].join("\r\n");
   }
 
-  // Boundary must not appear in any part. A random suffix makes that certain
-  // without having to scan the payload.
-  const boundary = `--cstl-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-  const parts = [
-    [
-      'Content-Type: text/plain; charset="UTF-8"',
-      "Content-Transfer-Encoding: base64",
-      "",
-      wrapBase64(Buffer.from(body).toString("base64")),
-    ].join("\r\n"),
+  const bodyPart = html
+    ? [`Content-Type: ${bodyBlock.contentType}`, "", bodyBlock.content].join("\r\n")
+    : [`Content-Type: ${bodyBlock.contentType}`, "Content-Transfer-Encoding: base64", "", bodyBlock.content].join("\r\n");
+
+  const { contentType, content } = multipart("mixed", [
+    bodyPart,
     ...attachments.map((a) =>
       [
         `Content-Type: ${a.mimeType}; name="${a.filename}"`,
@@ -111,13 +147,7 @@ export function buildMessage({
         wrapBase64(a.base64),
       ].join("\r\n"),
     ),
-  ];
+  ]);
 
-  return [
-    ...headers,
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    "",
-    ...parts.map((p) => `--${boundary}\r\n${p}`),
-    `--${boundary}--`,
-  ].join("\r\n");
+  return [...headers, `Content-Type: ${contentType}`, "", content].join("\r\n");
 }

@@ -20,6 +20,9 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
       client.email,
       copy.intakeEmailSubject,
       applyCopy(copy.intakeEmailBody, { name: client.name, link }),
+      undefined,
+      undefined,
+      { links: [{ url: link, label: "Click here for your intake form" }] },
     );
   } catch (err) {
     // What Google actually said, plus the specific fix for it. "Reconnect

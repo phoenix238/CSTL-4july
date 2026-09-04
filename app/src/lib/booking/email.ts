@@ -62,19 +62,6 @@ export function firstUrl(raw: string): string {
   return m ? m[0] : t;
 }
 
-/**
- * Stand-ins for the links in the browser preview, where the client's tokens
- * don't exist yet (they're minted server-side when the booking is made).
- *
- * They have to be substituted back out before sending, because the preview box
- * is editable and whatever it holds is what gets sent — so a preview shown with
- * "(your personal intake link)" in it was emailing exactly that to the client,
- * in place of the link. See fillPreviewLinks.
- */
-export const PREVIEW_INTAKE_LINK = "(your personal intake link)";
-export const PREVIEW_PORTAL_LINK = "(your personal booking page)";
-export const PREVIEW_PAYMENT_REF = "(your payment reference)";
-
 /** The links and reference that belong to one client, resolved before composing. */
 export interface ClientLinks {
   /** their personal intake form */
@@ -83,6 +70,53 @@ export interface ClientLinks {
   portalLink?: string;
   /** the reference they put on a bank transfer */
   paymentRef?: string;
+  /** add this session to a non-Google calendar via .ics (Apple Calendar / Outlook /
+   *  everything else). No Google link: a client on a Google account already gets
+   *  the session on their calendar automatically, as an invited attendee. */
+  calendarIcsUrl?: string;
+}
+
+/**
+ * The sentinel text shown in the browser preview for each ClientLinks field,
+ * before the client's tokens exist (they're minted server-side once a real
+ * booking exists — the calendar links need a real booking id, the others need
+ * a real client).
+ *
+ * This is the ONE place to add a placeholder for a new ClientLinks field.
+ * composeBookingEmail's default `links` argument and fillPreviewLinks both
+ * read this exact map (see below) rather than keeping their own separate
+ * lists — so `Record<keyof ClientLinks, string>` fails to compile the moment
+ * a new ClientLinks field is added without a placeholder here, instead of the
+ * two silently drifting apart. That drift is exactly how the add-to-calendar
+ * links first shipped only for a client's own portal booking, not an
+ * admin-booked one: the admin booking panel's preview is composed (and
+ * possibly hand-edited) *before* a real booking exists, and whatever that
+ * preview holds is what fillPreviewLinks patches and actually sends — so a
+ * field missing its sentinel here doesn't error, it just silently never
+ * reaches that client's email.
+ */
+const PREVIEW_PLACEHOLDERS: Record<keyof ClientLinks, string> = {
+  intakeLink: "(your personal intake link)",
+  portalLink: "(your personal booking page)",
+  paymentRef: "(your payment reference)",
+  calendarIcsUrl: "(your calendar file link)",
+};
+
+/**
+ * The "add this to your calendar" block. A client on a Google account already
+ * has this session on their calendar automatically (they're an invited
+ * attendee), so there's no Google link here — only the .ics, for a client who
+ * keeps their calendar somewhere else (Apple, Outlook, or another app). Empty
+ * when no .ics link is available (e.g. the browser preview, before the client's
+ * tokens exist — though the sentinel keeps it visible there too).
+ */
+function calendarBlock(links: ClientLinks): string {
+  if (!links.calendarIcsUrl) return "";
+  return [
+    "If you use Google Calendar, this session is added to it automatically.",
+    "Keep your calendar somewhere else — Apple, Outlook or another app? Add it here:",
+    `  ${links.calendarIcsUrl}`,
+  ].join("\n");
 }
 
 /**
@@ -238,17 +272,13 @@ export function composeBookingEmail(
   whenLabel: string,
   sendPayment: boolean,
   settings: EmailSettings,
-  links: ClientLinks = {
-    intakeLink: PREVIEW_INTAKE_LINK,
-    portalLink: PREVIEW_PORTAL_LINK,
-    paymentRef: PREVIEW_PAYMENT_REF,
-  },
+  links: ClientLinks = PREVIEW_PLACEHOLDERS,
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
   const { intakeLink, portalLink, paymentRef } = links;
-  const includes: string[] = ["Google Calendar invite attached"];
+  const includes: string[] = [];
 
   // Where it is — one block, not an address line and a separate map line. The
   // address is the human-readable part; the link is attached to it.
@@ -269,9 +299,23 @@ export function composeBookingEmail(
     // Same shape as the first email — voice on top, facts placed around it,
     // signed once at the end — so a sign-off left in the template can't produce
     // an email that ends twice.
-    const { main } = splitSignOff(fillTemplate(resolveReturningTemplate(settings), common));
-    const body = [main, whereBlock, resolveSignOff(settings)].filter(Boolean).join("\n\n");
-    return { subject, body, includes };
+    const returningTemplate = resolveReturningTemplate(settings);
+    const { main } = splitSignOff(fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }));
+    const calendar = calendarBlock(links);
+    if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
+    const sections = [main, whereBlock, calendar];
+    // A returning client gets their booking page too, not just first-timers —
+    // it's the one link that lets them move this session, cancel it, change
+    // their reminders, or book the next one. Kept to a single line (they already
+    // know what it is), and skipped only if their template already places it.
+    if (portalLink && !returningTemplate.includes("{portalLink}")) {
+      sections.push(
+        `Manage this session — move it, cancel it, or change your reminders — or book your next, from your own page any time:\n${portalLink}`,
+      );
+    }
+    if (portalLink) includes.push("Their own booking page");
+    sections.push(resolveSignOff(settings));
+    return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
   }
 
   // One letter for both clinics — what differs between them (the price, and the
@@ -289,7 +333,9 @@ export function composeBookingEmail(
   // emailSignOff below, so every email ends the same way and can't end twice.
   const { main } = splitSignOff(filled);
 
-  const sections = [main, whereBlock];
+  const calendar = calendarBlock(links);
+  if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
+  const sections = [main, whereBlock, calendar];
 
   // Payment, once. The templates already name the price in their own words, so
   // repeating it as a "Payment (£30–60 sliding scale):" heading said the same
@@ -339,16 +385,17 @@ export function composeBookingEmail(
  * Applied on the way out to whatever body the booking panel sends, edited or
  * not. Without it the preview's own placeholder text is what the client
  * receives — an email politely telling them to visit "(your personal intake
- * link)".
+ * link)". Every ClientLinks field is swapped, driven by PREVIEW_PLACEHOLDERS
+ * above rather than one `.split().join()` per field named here by hand — so a
+ * new field placed in that one map is live in both places it needs to be at
+ * once, not something to separately remember to wire in here too.
  */
 export function fillPreviewLinks(body: string, links: ClientLinks): string {
-  return body
-    .split(PREVIEW_INTAKE_LINK)
-    .join(links.intakeLink)
-    .split(PREVIEW_PORTAL_LINK)
-    .join(links.portalLink ?? "")
-    .split(PREVIEW_PAYMENT_REF)
-    .join(links.paymentRef ?? "");
+  let out = body;
+  for (const key of Object.keys(PREVIEW_PLACEHOLDERS) as (keyof ClientLinks)[]) {
+    out = out.split(PREVIEW_PLACEHOLDERS[key]).join(links[key] ?? "");
+  }
+  return out;
 }
 
 const mapsSearchUrl = (address: string) =>

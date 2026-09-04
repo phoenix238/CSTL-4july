@@ -296,6 +296,7 @@ function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSet
     intakeLink: "https://your-site/intake/ab12cd",
     portalLink: "https://your-site/me/ab12cd",
     paymentRef: "MAYA-4K2",
+    calendarIcsUrl: "https://your-site/api/portal/ab12cd/ics",
   };
   const email = composeBookingEmail(
     { name: "Maya", welcomeSent: which === "returning" },

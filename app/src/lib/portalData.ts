@@ -7,7 +7,8 @@ import {
   type AccountSummary,
 } from "@/lib/account";
 import { getOrCreatePaymentRef, portalUrl } from "@/lib/portal";
-import type { Clinic } from "@/lib/booking/rules";
+import { type Clinic } from "@/lib/booking/rules";
+import { icsUrl } from "@/lib/reminders/sessionReminders";
 
 /**
  * Everything the client portal shows, assembled in one place.
@@ -41,6 +42,9 @@ export interface PortalUpcoming extends PortalSession {
   canReschedule: boolean;
   /** goodwill suggested if they cancel right now, in pence (0 outside the window) */
   cancelGoodwillPence: number;
+  /** add this session to a non-Google calendar via .ics (Apple Calendar / Outlook /
+   *  other). No Google link: a Google-account client already has it automatically. */
+  icsUrl: string;
 }
 
 export interface PortalView {
@@ -63,6 +67,8 @@ export interface PortalView {
   hasEmail: boolean;
   receiptPending: boolean;
   portalLink: string;
+  /** the client's chosen reminder lead times (days before; 0 = the morning of) */
+  reminderLeadDays: number[];
 }
 
 function toAccountBooking(b: {
@@ -123,6 +129,7 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
       settings.lateCancelGoodwillPence,
       now,
     ),
+    icsUrl: icsUrl(settings, client.portalToken, row.id),
   }));
 
   // Everything that isn't an upcoming session: past sessions and cancellations.
@@ -153,5 +160,6 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     hasEmail: Boolean(client.email),
     receiptPending: client.receiptPending,
     portalLink: portalUrl(settings, client.portalToken),
+    reminderLeadDays: client.reminderLeadDays,
   };
 }

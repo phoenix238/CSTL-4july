@@ -51,6 +51,8 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
 
   lines.push("", "Any questions, just reply.", "", "Warm wishes,", "Phoenix");
 
-  await sendEmail(client.email, "Your booking page", lines.join("\n"));
+  await sendEmail(client.email, "Your booking page", lines.join("\n"), undefined, undefined, {
+    links: [{ url, label: "Click here for your booking page" }],
+  });
   return NextResponse.json({ url, paymentRef, sentTo: client.email });
 });

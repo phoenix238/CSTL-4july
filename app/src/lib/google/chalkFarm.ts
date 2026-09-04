@@ -1,6 +1,6 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getCalendarApi, withRetry } from "./client";
-import { EVENT_REMINDERS } from "@/lib/booking/rules";
+import { EVENT_REMINDERS, NO_REMINDERS } from "@/lib/booking/rules";
 import { fmtTime, londonDayStart, londonTime } from "@/lib/time";
 
 const TZ = "Europe/London";
@@ -89,7 +89,10 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
     description,
     start: { dateTime: blockStart.toISOString(), timeZone: TZ },
     end: { dateTime: blockEnd.toISOString(), timeZone: TZ },
-    reminders: EVENT_REMINDERS,
+    // The shared block is venue-facing — it only carries Phoenix's reminders when
+    // he's opted venue events in, so a Bethnal session doesn't remind him twice
+    // (once here, once on his personal session event).
+    reminders: settings.venueReminders ? EVENT_REMINDERS : NO_REMINDERS,
   };
 
   if (existing) {

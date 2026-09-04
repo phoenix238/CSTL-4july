@@ -35,12 +35,6 @@ model Client {
   // another branch (client-message-intake-workflow) — not wired into any code
   // here. Declared so `prisma db push` never proposes dropping this real data.
   calendarInviteSharedAt DateTime?
-  // Present in the shared production DB from the client-portal-reminders
-  // feature (still open, not merged) — not wired into any code here.
-  // Declared so `prisma db push` never proposes dropping this real data.
-  // Which reminder lead times (days before) this client has chosen for their
-  // own bookings — [] once they've turned reminders off.
-  reminderLeadDays Int[] @default([1])
   // Client portal (/me/[token]) — a permanent private link the client bookmarks,
   // where they book their next session, reschedule, and see what they owe.
   // Deliberately a token rather than a password login: nothing to forget, nothing
@@ -53,6 +47,15 @@ model Client {
   // Set when a client asks for a receipt before anything's confirmed paid yet —
   // the next booking that gets marked paid sends it automatically, then clears this.
   receiptPending Boolean      @default(false)
+  // Which app-sent session reminders the client wants, as lead times in days
+  // before each session: 7 = a week before, 1 = the day before, 0 = the morning
+  // of. Set by the client from their own portal (/me/[token]). These are emails
+  // the app sends itself (from the daily cron), independent of whether the client
+  // uses Google Calendar — the safety net for someone who never added the invite
+  // to a calendar of their own. Defaults to empty (off) — nobody gets a reminder
+  // email until they visit their portal and switch one on themselves; an existing
+  // client is never silently opted in by this column's default.
+  reminderLeadDays Int[]      @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
@@ -117,6 +120,10 @@ model Booking {
   status           String   @default("confirmed") // confirmed | cancelled | done
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
   secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
+  // Present in the shared production DB from the WTR-5 fallback-room feature
+  // (still open, not merged) — not wired into any code here. Declared so
+  // `prisma db push` never proposes dropping this real data.
+  roomUsed         String   @default("")
   emailSent        Boolean  @default(false)
   // Set when the booking succeeded but its confirmation email didn't go out, so
   // a client left with nothing in writing is findable and can be followed up —
@@ -161,11 +168,10 @@ model Booking {
   // How the booking was made, so the inbox and stats can tell them apart.
   bookedVia       String @default("admin") // admin | online | portal | offer
   rescheduleCount Int    @default(0)
-  // Present in the shared production DB from the client-portal-reminders
-  // feature (still open, not merged) — not wired into any code here.
-  // Declared so `prisma db push` never proposes dropping this real data.
-  // Which of this booking's chosen reminder lead times (see Client.reminderLeadDays)
-  // have already been sent.
+  // Which of the client's chosen reminder lead times (see Client.reminderLeadDays)
+  // have already been emailed for this session, so the daily sweep sends each one
+  // once and never repeats. Cleared on reschedule — a moved session earns its
+  // reminders afresh against the new date.
   remindersSentLead Int[] @default([])
 
   @@index([startsAt])
@@ -288,16 +294,27 @@ model AppSettings {
   googleLastCheckedAt   DateTime?
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
+  // Present in the shared production DB from the WTR-5 fallback-room feature
+  // (still open, not merged) — not wired into any code here. Declared so
+  // `prisma db push` never proposes dropping this real data.
+  roomFallbackCalendarId String @default("")
+  roomFallbackLabel      String @default("R6")
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
-  // Present in the shared production DB from the client-portal-reminders
-  // feature (still open, not merged) — not wired into any code here.
-  // Declared so `prisma db push` never proposes dropping this real data.
-  // How Phoenix wants reminding of his own sessions ("morning" | "before" |
-  // "email_popup" | "none"), and whether the venue-facing events carry them too.
-  ownReminderMode          String  @default("morning")
-  ownReminderMinutesBefore Int     @default(60)
-  ownReminderMorningHour   Int     @default(8)
-  venueReminders           Boolean @default(false)
+  // — Phoenix's own calendar reminders (his copy of each session event only;
+  //   an attendee's reminders are always their own, never set from here) —
+  // How he wants reminding of his own sessions:
+  //   "morning"     — one popup on the morning of the session (see ownReminderMorningHour)
+  //   "before"      — one popup ownReminderMinutesBefore minutes before it
+  //   "email_popup" — the old pair: an email 24h before and a popup 1h before
+  //   "none"        — nothing on the session event (he relies on the app's Today view)
+  ownReminderMode        String @default("morning")
+  ownReminderMinutesBefore Int  @default(60) // used when ownReminderMode = "before"
+  ownReminderMorningHour Int    @default(8)  // London hour the morning-of popup fires (used when mode = "morning")
+  // Whether the venue-facing events (the "R5 - Phoenix" room event and the shared
+  // "Phoenix" Chalk Farm block) also carry his reminders. Off by default so he
+  // isn't reminded twice for one session — once by the personal event, once by
+  // the room/block. Turn on only if he wants the venue events to nag too.
+  venueReminders         Boolean @default(false)
   // — Availability ⇄ Google Calendar two-way sync —
   // A dedicated "CSTL Availability" calendar that mirrors the bookable hours
   // (recurring weekly hours + one-off overrides) as concrete dated blocks,

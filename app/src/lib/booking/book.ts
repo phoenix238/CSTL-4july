@@ -12,6 +12,7 @@ import { composeBookingEmail, fillPreviewLinks, resolveClinicPhoto } from "./ema
 import { parseDataUrl } from "@/lib/google/mime";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
+import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
 import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
@@ -211,7 +212,11 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const intakeLink = intakeUrl(settings, await getOrCreateIntakeToken(clientId));
   const { token: portalToken, paymentRef } = await getPortalIdentity(clientId);
   const portalLink = portalUrl(settings, portalToken);
-  const links = { intakeLink, portalLink, paymentRef };
+  // Add-to-calendar link for a client who keeps their calendar somewhere other
+  // than Google — a Google-account client already has the session automatically,
+  // as an invited attendee, so no Google link is offered.
+  const calendarIcsUrl = icsUrl(settings, portalToken, booking.id);
+  const links = { intakeLink, portalLink, paymentRef, calendarIcsUrl };
   const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.
@@ -223,6 +228,14 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // client had tokens — so its placeholder links are swapped for the real ones
   // rather than sent as written.
   const body = req.emailBody?.trim() ? fillPreviewLinks(req.emailBody.trim(), links) : email.body;
+  // Each token-bearing link shown as a friendly hyperlink rather than the raw
+  // URL, in any inbox that renders HTML — whichever of these actually made it
+  // into `body` (a hand-edited version might have dropped one).
+  const emailLinks = [
+    { url: portalLink, label: "Click here for your booking page" },
+    { url: intakeLink, label: "Click here for your intake form" },
+    { url: calendarIcsUrl, label: "Add to calendar" },
+  ].filter((l) => l.url);
   // Whether this is the client's very first welcome message — captured before we
   // flip welcomeSent, so the confirmation copy and the flip agree.
   const wasFirstEmail = !client.welcomeSent;
@@ -251,7 +264,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
           body,
           req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
           attachments,
-          { bcc },
+          { bcc, links: emailLinks },
         ),
       );
       emailSent = true;
@@ -344,6 +357,9 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
       personalEventId: "",
       secondaryEventId: "",
       rescheduleCount: { increment: 1 },
+      // A moved session earns its reminders afresh against the new date — clear
+      // what was already sent so the day-before / morning-of nudge fires again.
+      remindersSentLead: [],
     },
   });
   await createBookingEvents(bookingId); // re-syncs the new day's Chalk Farm block (Bethnal)

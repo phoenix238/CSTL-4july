@@ -7,7 +7,34 @@ import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import type { PortalView } from "@/lib/portalData";
+import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
+import type { PortalUpcoming, PortalView } from "@/lib/portalData";
+
+/**
+ * Getting one session onto the client's own calendar. A client on a Google
+ * account already has it automatically (they're an invited attendee), so there's
+ * no Google button — just a single "add" link that hands their device an .ics,
+ * for anyone who keeps their calendar in Apple, Outlook or another app. On a
+ * phone that link opens the calendar straight to an "add" screen; on a computer
+ * it saves a small file that opens in their calendar.
+ */
+function AddToCalendar({ session }: { session: PortalUpcoming }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-[12px] leading-[1.5] text-muted">
+        If you use Google Calendar, this session is already in it. Keep your calendar somewhere else?
+      </p>
+      <div>
+        <a
+          href={session.icsUrl}
+          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-cream px-3 py-1.5 text-[12px] font-medium text-clay-text hover:bg-hoverbg"
+        >
+          Add to Apple, Outlook or another calendar
+        </a>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The client's own page. Everything they can do with their sessions, and nothing
@@ -31,6 +58,10 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const [targetId, setTargetId] = useState<string | null>(null);
   const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
   const [receiptEmail, setReceiptEmail] = useState("");
+  // The client's own reminder choices, held locally so a toggle feels instant
+  // and is saved in the background. Seeded from what the server already has.
+  const [leadDays, setLeadDays] = useState<number[]>(view.reminderLeadDays);
+  const [savingReminders, setSavingReminders] = useState(false);
 
   const upcoming = view.upcoming;
   // The session a reschedule is currently working on (its old time, its clinic).
@@ -113,6 +144,27 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       });
       return api<{ sentTo?: string; pending?: boolean }>(`/api/portal/${token}/receipt`, { method: "POST" });
     }, receiptToast);
+
+  // Turn one reminder lead time on or off. Optimistic — the checkbox flips at
+  // once and the choice saves in the background, snapping back only if it fails.
+  async function toggleLead(days: number) {
+    const next = leadDays.includes(days) ? leadDays.filter((d) => d !== days) : [...leadDays, days];
+    const previous = leadDays;
+    setLeadDays(next);
+    setSavingReminders(true);
+    try {
+      const r = await api<{ leadDays: number[] }>(`/api/portal/${token}/reminders`, {
+        method: "POST",
+        body: JSON.stringify({ leadDays: next }),
+      });
+      setLeadDays(r.leadDays);
+    } catch (err) {
+      setLeadDays(previous);
+      toast(err instanceof Error ? err.message : "Couldn't save that — please try again");
+    } finally {
+      setSavingReminders(false);
+    }
+  }
 
   // Reschedule keeps the client on their existing clinic; only a fresh booking
   // gets to choose one. This is the clinic the confirm box names either way.
@@ -254,6 +306,8 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   </div>
                 </div>
 
+                {mode === "idle" && <AddToCalendar session={u} />}
+
                 {mode === "idle" && (
                   <div className="flex flex-wrap gap-2">
                     {u.canReschedule ? (
@@ -350,6 +404,41 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
             </div>
           )}
         </Sheet>
+      </Card>
+
+      {/* ---------- reminders ---------- */}
+      <Card className="flex flex-col gap-3 px-5 py-5">
+        <SectionLabel>Email reminders</SectionLabel>
+        <p className="text-[12.5px] leading-relaxed text-muted">
+          Choose whether you&apos;d like an email reminder before each session, and how far ahead. Off by default —
+          turn one on if you&apos;d like it.
+        </p>
+        {!view.hasEmail && (
+          <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">
+            There&apos;s no email on file for you yet, so these can&apos;t be sent — add one under Payment below and
+            they&apos;ll start coming through.
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          {REMINDER_LEAD_OPTIONS.map((opt) => {
+            const on = leadDays.includes(opt.days);
+            return (
+              <label key={opt.days} className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={savingReminders}
+                  onChange={() => toggleLead(opt.days)}
+                  className="mt-0.5"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[13px] font-medium text-ink">{opt.label}</span>
+                  <span className="text-[11.5px] leading-[1.5] text-muted">{opt.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </Card>
 
       {/* ---------- payment ---------- */}
