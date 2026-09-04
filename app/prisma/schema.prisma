@@ -366,7 +366,7 @@ model AppSettings {
   bethnalBufferMinutes Int @default(15)  // Bethnal Green: minimum gap between Phoenix's own back-to-back sessions there — separate from Waterloo since they don't need the same spacing
   chalkFarmBufferMinutes Int @default(30) // safety gap around a studio-mate's booking on the shared Chalk Farm calendar (Bethnal Green)
   chalkFarmEdgeBufferMinutes Int @default(15) // padding added before the day's first and after the day's last Bethnal session on the shared "Phoenix" Chalk Farm block, so studio-mates don't book right up against it
-  chalkFarmClusterGapMinutes Int @default(60) // Bethnal Green: two sessions this far apart (or closer) share one Chalk Farm block; a wider gap splits them into separate blocks so the empty time between isn't held as room time or counted against the weekly cap
+  chalkFarmClusterGapMinutes Int @default(45) // Bethnal Green: two sessions this far apart (or closer) share one Chalk Farm block; a wider gap splits them into separate blocks so the empty time between isn't held as room time or counted against the weekly cap. Default 45 so a full hour's gap splits (an hour apart = two blocks), while back-to-back / short gaps stay one block
   chalkFarmWeeklyCapHours Int @default(10) // Bethnal Green: max total hours of Phoenix's own confirmed sessions bookable in one London calendar week (Mon-Sun); 0 = no cap
   // Travel time between the two clinics. Working a Waterloo morning and a Bethnal
   // Green evening on the same day is fine and deliberate — this is the clearance
