@@ -43,6 +43,8 @@ export default async function SettingsPage() {
         appUrl: settings.appUrl,
         personalCalendarId: settings.personalCalendarId,
         roomCalendarId: settings.roomCalendarId,
+        roomFallbackCalendarId: settings.roomFallbackCalendarId,
+        roomFallbackLabel: settings.roomFallbackLabel,
         chalkFarmCalendarId: settings.chalkFarmCalendarId,
         googleConnected: !!settings.googleRefreshToken,
         googleLastError: settings.googleLastError,

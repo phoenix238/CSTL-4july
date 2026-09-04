@@ -30,7 +30,7 @@
 
 export type Clinic = "waterloo" | "bethnal";
 
-export type CalendarKey = "personal" | "room" | "chalkFarm" | "availability";
+export type CalendarKey = "personal" | "room" | "roomFallback" | "chalkFarm" | "availability";
 
 export interface PlannedEvent {
   calendar: CalendarKey;
@@ -103,6 +103,16 @@ const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
  * pin and both Phoenix and the client can tap through to navigate. Falls back
  * to the clinic name only when no address has been set yet in Settings.
  */
+/** Which Waterloo room a booking's venue event goes on — R5 unless it was
+ *  already taken at the exact session time, in which case the configured
+ *  fallback room (see chooseWaterlooRoom in google/calendar.ts). */
+export interface RoomChoice {
+  calendar: "room" | "roomFallback";
+  label: string;
+}
+
+export const PRIMARY_ROOM: RoomChoice = { calendar: "room", label: "R5" };
+
 export function planBookingEvents(
   clinic: Clinic,
   sessionStart: Date,
@@ -110,6 +120,10 @@ export function planBookingEvents(
   /** venue-facing note for the room event's description (session time + contact
    * line); the caller composes it since it needs settings + London-time formatting */
   venueNote?: string,
+  /** which room to book — defaults to R5; the caller resolves this against
+   * live calendar availability before calling in, since that's a network
+   * call this pure function can't make itself */
+  room: RoomChoice = PRIMARY_ROOM,
 ): PlannedEvent[] {
   const sessionEnd = addMinutes(sessionStart, SESSION_MINUTES);
   const location = address?.trim() || CLINIC_LABEL[clinic];
@@ -125,8 +139,8 @@ export function planBookingEvents(
         colorId: CLINIC_EVENT_COLOR.waterloo,
       },
       {
-        calendar: "room",
-        summary: "R5 - Phoenix",
+        calendar: room.calendar,
+        summary: `${room.label} - Phoenix`,
         start: sessionStart,
         end: sessionEnd,
         inviteClient: false,

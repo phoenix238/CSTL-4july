@@ -39,6 +39,8 @@ export interface SettingsData {
   appUrl: string;
   personalCalendarId: string;
   roomCalendarId: string;
+  roomFallbackCalendarId: string;
+  roomFallbackLabel: string;
   chalkFarmCalendarId: string;
   googleConnected: boolean;
   /** the last error Google gave a real send — "" when the last one worked */
@@ -176,6 +178,8 @@ export function SettingsView({
   const [googleDraft, setGoogleDraft] = useState({
     personalCalendarId: settings.personalCalendarId,
     roomCalendarId: settings.roomCalendarId,
+    roomFallbackCalendarId: settings.roomFallbackCalendarId,
+    roomFallbackLabel: settings.roomFallbackLabel,
     chalkFarmCalendarId: settings.chalkFarmCalendarId,
     appUrl: settings.appUrl,
   });
@@ -647,6 +651,11 @@ export function SettingsView({
             <Row label="Intake form">In-app form — {baseUrl}/intake/…</Row>
             <Row label="Personal calendar">{settings.personalCalendarId || "primary"}</Row>
             <Row label="R5 room calendar">{settings.roomCalendarId || "not set — needed for Waterloo bookings"}</Row>
+            <Row label="Fallback room calendar">
+              {settings.roomFallbackCalendarId
+                ? `${settings.roomFallbackCalendarId} — labelled "${settings.roomFallbackLabel || "R6"}"`
+                : "not set — R5 is always used, even if it's already taken"}
+            </Row>
             <Row label="Chalk Farm calendar">
               {settings.chalkFarmCalendarId || "not set — needed for Bethnal Green bookings"}
             </Row>
@@ -668,6 +677,16 @@ export function SettingsView({
               [
                 ["personalCalendarId", "PERSONAL CALENDAR ID", '"primary" or a calendar\'s ID from Google Calendar settings'],
                 ["roomCalendarId", "R5 ROOM CALENDAR ID", "the room calendar's ID (Waterloo bookings)"],
+                [
+                  "roomFallbackCalendarId",
+                  "FALLBACK ROOM CALENDAR ID",
+                  "a second Waterloo room's calendar ID — used only when R5 is already taken at the exact session time. Leave blank to always book R5.",
+                ],
+                [
+                  "roomFallbackLabel",
+                  "FALLBACK ROOM LABEL",
+                  'shown on the fallback room\'s venue event, e.g. "R6" → "R6 - Phoenix"',
+                ],
                 ["chalkFarmCalendarId", "CHALK FARM CALENDAR ID", "the Chalk Farm calendar's ID (Bethnal Green blocks)"],
                 ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-4july.vercel.app"],
               ] as const
