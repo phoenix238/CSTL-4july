@@ -35,6 +35,12 @@ model Client {
   // another branch (client-message-intake-workflow) — not wired into any code
   // here. Declared so `prisma db push` never proposes dropping this real data.
   calendarInviteSharedAt DateTime?
+  // Present in the shared production DB from the client-portal-reminders
+  // feature (still open, not merged) — not wired into any code here.
+  // Declared so `prisma db push` never proposes dropping this real data.
+  // Which reminder lead times (days before) this client has chosen for their
+  // own bookings — [] once they've turned reminders off.
+  reminderLeadDays Int[] @default([1])
   // Client portal (/me/[token]) — a permanent private link the client bookmarks,
   // where they book their next session, reschedule, and see what they owe.
   // Deliberately a token rather than a password login: nothing to forget, nothing
@@ -155,6 +161,12 @@ model Booking {
   // How the booking was made, so the inbox and stats can tell them apart.
   bookedVia       String @default("admin") // admin | online | portal | offer
   rescheduleCount Int    @default(0)
+  // Present in the shared production DB from the client-portal-reminders
+  // feature (still open, not merged) — not wired into any code here.
+  // Declared so `prisma db push` never proposes dropping this real data.
+  // Which of this booking's chosen reminder lead times (see Client.reminderLeadDays)
+  // have already been sent.
+  remindersSentLead Int[] @default([])
 
   @@index([startsAt])
   @@index([clientId])
@@ -277,6 +289,15 @@ model AppSettings {
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
+  // Present in the shared production DB from the client-portal-reminders
+  // feature (still open, not merged) — not wired into any code here.
+  // Declared so `prisma db push` never proposes dropping this real data.
+  // How Phoenix wants reminding of his own sessions ("morning" | "before" |
+  // "email_popup" | "none"), and whether the venue-facing events carry them too.
+  ownReminderMode          String  @default("morning")
+  ownReminderMinutesBefore Int     @default(60)
+  ownReminderMorningHour   Int     @default(8)
+  venueReminders           Boolean @default(false)
   // — Availability ⇄ Google Calendar two-way sync —
   // A dedicated "CSTL Availability" calendar that mirrors the bookable hours
   // (recurring weekly hours + one-off overrides) as concrete dated blocks,
