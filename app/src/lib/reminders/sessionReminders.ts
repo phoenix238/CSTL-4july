@@ -142,7 +142,12 @@ export async function sweepSessionReminders({
         copy,
         signOff,
       );
-      await sendEmail(b.client.email, subject, body);
+      await sendEmail(b.client.email, subject, body, undefined, undefined, {
+        links: [
+          { url: portalLink, label: "Click here for your booking page" },
+          { url: ics, label: "Add to calendar" },
+        ].filter((l) => l.url),
+      });
       await prisma.booking.update({
         where: { id: b.id },
         data: { remindersSentLead: { push: leads } },

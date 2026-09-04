@@ -234,6 +234,14 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // client had tokens — so its placeholder links are swapped for the real ones
   // rather than sent as written.
   const body = req.emailBody?.trim() ? fillPreviewLinks(req.emailBody.trim(), links) : email.body;
+  // Each token-bearing link shown as a friendly hyperlink rather than the raw
+  // URL, in any inbox that renders HTML — whichever of these actually made it
+  // into `body` (a hand-edited version might have dropped one).
+  const emailLinks = [
+    { url: portalLink, label: "Click here for your booking page" },
+    { url: intakeLink, label: "Click here for your intake form" },
+    { url: calendarIcsUrl, label: "Add to calendar" },
+  ].filter((l) => l.url);
   // Whether this is the client's very first welcome message — captured before we
   // flip welcomeSent, so the confirmation copy and the flip agree.
   const wasFirstEmail = !client.welcomeSent;
@@ -262,7 +270,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
           body,
           req.gmailThreadId ? { threadId: req.gmailThreadId, inReplyTo: req.gmailMessageId } : undefined,
           attachments,
-          { bcc },
+          { bcc, links: emailLinks },
         ),
       );
       emailSent = true;

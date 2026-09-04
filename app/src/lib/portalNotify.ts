@@ -148,8 +148,10 @@ export async function confirmToClient(input: NotifyInput, bcc?: string): Promise
   }
   lines.push("", ...resolveSignOff(settings).split("\n"));
 
+  const links = input.portalLink ? [{ url: input.portalLink, label: "Click here for your booking page" }] : undefined;
+
   try {
-    await sendEmail(input.clientEmail, subject, lines.join("\n"), undefined, undefined, { bcc });
+    await sendEmail(input.clientEmail, subject, lines.join("\n"), undefined, undefined, { bcc, links });
     return { sent: true };
   } catch (err) {
     console.error("Couldn't send the portal confirmation email to the client", err);

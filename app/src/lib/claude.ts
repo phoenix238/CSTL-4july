@@ -1,29 +1,39 @@
 import { z } from "zod";
 import { HIGHLIGHT_RUBRIC } from "./cleanLanguage";
+import { getSettings } from "./db";
 
-const MODEL = "anthropic/claude-haiku-4.5";
+// Called directly against Anthropic (api.anthropic.com) — not routed through a
+// third party — since every prompt here can carry a client's case history.
+// Which of these two Claude actually runs is Phoenix's own call, made in
+// Settings ("aiModel": "sonnet" | "haiku") and read fresh on every request.
+const MODEL_SONNET = "claude-sonnet-5";
+const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+
+async function resolveModel(): Promise<string> {
+  const settings = await getSettings();
+  return settings.aiModel === "haiku" ? MODEL_HAIKU : MODEL_SONNET;
+}
 
 async function chat(system: string, user: string, maxTokens: number): Promise<string> {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+      "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: await resolveModel(),
       max_tokens: maxTokens,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      system,
+      messages: [{ role: "user", content: user }],
     }),
   });
   if (!res.ok) {
-    throw new Error(`OpenRouter request failed (${res.status}): ${await res.text()}`);
+    throw new Error(`Anthropic request failed (${res.status}): ${await res.text()}`);
   }
   const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  return data.content?.[0]?.text ?? "";
 }
 
 const enquirySchema = z.object({
