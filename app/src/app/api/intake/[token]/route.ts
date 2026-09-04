@@ -75,13 +75,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
           // everything, exactly as a client booking online would get.
           const { token: portalToken, paymentRef } = await getPortalIdentity(client.id);
           const portalLink = portalUrl(settings, portalToken);
+          const calendarLink = icsUrl(settings, portalToken, booking.id);
           const welcome = composeBookingEmail({ name: finalName, welcomeSent: false }, clinic, whenLabel, true, settings, {
             intakeLink: intakeUrl(settings, token),
             portalLink,
             paymentRef,
-            calendarIcsUrl: icsUrl(settings, portalToken, booking.id),
+            calendarIcsUrl: calendarLink,
           });
-          await sendEmail(finalEmail, welcome.subject, welcome.body);
+          await sendEmail(finalEmail, welcome.subject, welcome.body, undefined, undefined, {
+            links: [
+              { url: portalLink, label: "Click here for your booking page" },
+              { url: calendarLink, label: "Add to calendar" },
+            ],
+          });
           await prisma.booking.update({ where: { id: booking.id }, data: { emailSent: true } });
           if (!client.welcomeSent) {
             await prisma.client.update({ where: { id: client.id }, data: { welcomeSent: true } });

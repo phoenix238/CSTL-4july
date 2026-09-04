@@ -49,6 +49,8 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
       applyCopy(copy.offerEmailSubject, { clinic: CLINIC_LABEL[clinic as Clinic] }),
       body,
       enquiry?.gmailThreadId ? { threadId: enquiry.gmailThreadId, inReplyTo: enquiry.gmailMessageId } : undefined,
+      undefined,
+      { links: [{ url: link, label: "Click here to choose your time" }] },
     );
   }
   revalidateTag("shell");

@@ -91,4 +91,39 @@ describe("buildMessage", () => {
     expect(buildMessage({ ...base, replyTo: "jane@example.com" })).toContain("Reply-To: jane@example.com");
     expect(buildMessage(base)).not.toContain("Reply-To:");
   });
+
+  it("stays plain text/plain when there's no html, even with attachments", () => {
+    const msg = buildMessage({
+      ...base,
+      attachments: [{ filename: "receipt.pdf", mimeType: "application/pdf", base64: "AAAA" }],
+    });
+    expect(msg).not.toContain("multipart/alternative");
+  });
+
+  describe("with html", () => {
+    const html = "<div>Hi Sarah,<br>See you soon.</div>";
+
+    it("becomes multipart/alternative, text first then html, with no attachments", () => {
+      const msg = buildMessage({ ...base, html });
+      const boundary = /boundary="([^"]+)"/.exec(msg)?.[1];
+      expect(boundary).toBeTruthy();
+      expect(msg).toContain("Content-Type: multipart/alternative;");
+      expect(msg.indexOf("text/plain")).toBeLessThan(msg.indexOf("text/html"));
+      expect(msg.trimEnd().endsWith(`--${boundary}--`)).toBe(true);
+      // Both bodies survive: decode each base64 block and check it's there.
+      const b64Html = Buffer.from(html).toString("base64");
+      expect(msg.replace(/\r\n/g, "")).toContain(b64Html.replace(/\r\n/g, ""));
+    });
+
+    it("nests the alternative inside multipart/mixed when there's also an attachment", () => {
+      const msg = buildMessage({
+        ...base,
+        html,
+        attachments: [{ filename: "door.jpg", mimeType: "image/jpeg", base64: TINY_JPEG_B64, inline: true }],
+      });
+      expect(msg).toContain("multipart/mixed");
+      expect(msg).toContain("multipart/alternative");
+      expect(msg.indexOf("multipart/alternative")).toBeLessThan(msg.indexOf("image/jpeg"));
+    });
+  });
 });

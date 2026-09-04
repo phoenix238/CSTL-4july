@@ -53,7 +53,9 @@ export async function POST(req: Request) {
           "",
           ...resolveSignOff(settings).split("\n"),
         ].join("\n");
-        await sendEmail(clean, "Your booking page", body);
+        await sendEmail(clean, "Your booking page", body, undefined, undefined, {
+          links: [{ url: link, label: "Click here for your booking page" }],
+        });
       }
     }
   } catch (err) {

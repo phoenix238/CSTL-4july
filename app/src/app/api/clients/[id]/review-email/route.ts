@@ -16,8 +16,14 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
   const settings = await getSettings();
   const optInLink = preferencesUrl(settings, await getOrCreateIntakeToken(client.id));
   const { subject, body } = composeReviewEmail(client.name, client.clinic as Clinic, settings, optInLink);
+  const mapsUrl = (client.clinic as Clinic) === "waterloo" ? settings.mapsReviewUrlWaterloo : settings.mapsReviewUrlBethnal;
   try {
-    await sendEmail(client.email, subject, body);
+    await sendEmail(client.email, subject, body, undefined, undefined, {
+      links: [
+        { url: optInLink, label: "Manage your email preferences" },
+        ...(mapsUrl ? [{ url: mapsUrl, label: "Leave a Google review" }] : []),
+      ],
+    });
   } catch (err) {
     // Google's own words plus the fix that matches them — see the intake-email
     // route for why a blanket "reconnect Google" was worse than useless here.

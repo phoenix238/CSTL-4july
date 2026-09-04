@@ -175,7 +175,9 @@ export async function sendPaymentReminder(bookingId: string): Promise<{ sentTo: 
     portalLink: portalUrl(settings, token),
   });
 
-  await sendEmail(booking.client.email, subject, body);
+  await sendEmail(booking.client.email, subject, body, undefined, undefined, {
+    links: [{ url: portalUrl(settings, token), label: "Click here for your booking page" }],
+  });
   await prisma.booking.update({ where: { id: bookingId }, data: { paymentReminderSentAt: new Date() } });
   return { sentTo: booking.client.email };
 }
