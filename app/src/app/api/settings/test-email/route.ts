@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
-import { composeBookingEmail } from "@/lib/booking/email";
+import { composeBookingEmail, resolveSignOff } from "@/lib/booking/email";
 import { composeReviewEmail } from "@/lib/booking/review";
 import { composePaymentReminder } from "@/lib/payments/unpaid";
+import { composeSessionReminder } from "@/lib/reminders/sessionReminders";
+import { resolveClientCopy } from "@/lib/clientCopy";
 import { confirmToClient, sendReceipt } from "@/lib/portalNotify";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { intakeUrl } from "@/lib/intake";
@@ -13,7 +15,14 @@ import { sessionLocation } from "@/lib/calendarLinks";
 import { appBaseUrl } from "@/lib/appUrl";
 import { fmtDayLong, fmtTime, londonAddDays, londonTime, londonYMD } from "@/lib/time";
 
-export type TestEmailType = "first" | "returning" | "cancellation" | "receipt" | "reminder" | "review";
+export type TestEmailType =
+  | "first"
+  | "returning"
+  | "cancellation"
+  | "receipt"
+  | "reminder"
+  | "session-reminder"
+  | "review";
 
 /**
  * Send yourself the exact email a client would get, composed against your real
@@ -99,6 +108,20 @@ export const POST = guarded(async (req: Request) => {
         paymentRef,
         portalLink: links.portalLink,
       });
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
+    case "session-reminder": {
+      // The daily reminder sweep's own email — same composer, same sample links
+      // as the "first"/"returning" cases above, so this reads exactly like a real
+      // reminder for a session a client opted into.
+      const copy = resolveClientCopy(settings.clientCopy);
+      const signOff = resolveSignOff(settings);
+      const { subject, body } = composeSessionReminder(
+        { clientName, whenLabel, clinic, location, icsUrl: links.calendarIcsUrl, portalLink: links.portalLink },
+        copy,
+        signOff,
+      );
       await sendEmail(to, `[Test] ${subject}`, body);
       break;
     }
