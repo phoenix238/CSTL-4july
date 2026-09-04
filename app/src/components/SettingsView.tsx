@@ -16,6 +16,7 @@ import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
+  aiModel: string;
   accessNote: string;
   emailTemplate: string;
   emailTemplateReturning: string;
@@ -629,6 +630,28 @@ export function SettingsView({
         title="Behind the scenes"
         blurb="How the app connects to your Google account to create calendar events, save notes to Drive, and send email as you."
       />
+
+      <SectionLabel>AI — CASE NOTES, ENQUIRIES & IMPORT</SectionLabel>
+      <Card className="flex flex-col gap-2.5 px-5 py-4">
+        <p className="text-[12.5px] leading-[1.6] text-muted">
+          Reads new enquiries, turns your dictated notes into bullets, and summarises sessions —
+          always called directly against Anthropic, never a third party. Sonnet reads more
+          carefully (recommended for case notes); Haiku is faster and a little cheaper.
+        </p>
+        <div className="flex gap-1.5 rounded-full bg-hoverbg/60 p-1 self-start">
+          {(["sonnet", "haiku"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => save({ aiModel: m }, () => {}, `AI model set to ${m === "sonnet" ? "Sonnet" : "Haiku"} ✓`)}
+              className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+                (settings.aiModel || "sonnet") === m ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+              }`}
+            >
+              {m === "sonnet" ? "Sonnet — best quality" : "Haiku — fast & cheap"}
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <Dropdown label="GOOGLE — CALENDAR, DRIVE & GMAIL" open={!!open.google} onToggle={() => toggle("google")}>
         <div className="flex items-center justify-end px-0.5">

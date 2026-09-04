@@ -120,6 +120,10 @@ model Booking {
   status           String   @default("confirmed") // confirmed | cancelled | done
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
   secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
+  // Present in the shared production DB from the WTR-5 fallback-room feature
+  // (still open, not merged) — not wired into any code here. Declared so
+  // `prisma db push` never proposes dropping this real data.
+  roomUsed         String   @default("")
   emailSent        Boolean  @default(false)
   // Set when the booking succeeded but its confirmation email didn't go out, so
   // a client left with nothing in writing is findable and can be followed up —
@@ -217,6 +221,11 @@ model BookingAttempt {
 // Single row (id = 1). Holds editable settings and the Google wiring.
 model AppSettings {
   id                    Int    @id @default(1)
+  // Which Claude model powers the enquiry reader, note/session summaries and
+  // client-file import ("sonnet" | "haiku") — see lib/claude.ts. Sonnet is the
+  // more careful reader (worth it for case-history judgment calls); Haiku is
+  // faster/cheaper. Anything else falls back to sonnet.
+  aiModel               String @default("sonnet")
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
   // The one welcome letter, shared by both clinics. What differs between them —
   // price, address, map pin, how to find the door — is filled in around it, so
@@ -285,6 +294,11 @@ model AppSettings {
   googleLastCheckedAt   DateTime?
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
+  // Present in the shared production DB from the WTR-5 fallback-room feature
+  // (still open, not merged) — not wired into any code here. Declared so
+  // `prisma db push` never proposes dropping this real data.
+  roomFallbackCalendarId String @default("")
+  roomFallbackLabel      String @default("R6")
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
   // — Phoenix's own calendar reminders (his copy of each session event only;
   //   an attendee's reminders are always their own, never set from here) —

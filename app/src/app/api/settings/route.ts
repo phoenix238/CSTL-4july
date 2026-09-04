@@ -9,6 +9,7 @@ import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 export const GET = guarded(async () => {
   const s = await getSettings();
   return NextResponse.json({
+    aiModel: s.aiModel,
     accessNote: s.accessNote,
     emailTemplate: s.emailTemplate,
     emailTemplateReturning: s.emailTemplateReturning,
@@ -78,6 +79,7 @@ export const GET = guarded(async () => {
  * silently rather than erroring.
  */
 const EDITABLE_SETTINGS = [
+  "aiModel",
   "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
   "emailTemplate", "emailTemplateReturning", "emailSignOff",
   "waterlooFindIt", "bethnalFindIt", "waterlooPhoto", "bethnalPhoto",
