@@ -152,6 +152,40 @@ export function HomeView({
     }
   }
 
+  // Clears every notification currently on screen in one go. Enquiries are
+  // soft-dismissed (they still need a reply later) while booked-online
+  // notices are hard-deleted, same as their individual dismiss actions above.
+  async function clearAllNotifications() {
+    const targets = visibleNotifications;
+    if (targets.length === 0) return;
+    setDismissedIds((s) => {
+      const next = new Set(s);
+      targets.forEach((n) => next.add(n.id));
+      return next;
+    });
+    const results = await Promise.allSettled(
+      targets.map((n) =>
+        n.kind === "enquiry"
+          ? api(`/api/enquiries/${n.id}/dismiss`, { method: "POST" })
+          : api(`/api/enquiries/${n.id}`, { method: "DELETE" }),
+      ),
+    );
+    const failed = targets.filter((_, i) => results[i].status === "rejected");
+    if (failed.length > 0) {
+      setDismissedIds((s) => {
+        const next = new Set(s);
+        failed.forEach((n) => next.delete(n.id));
+        return next;
+      });
+      toast(
+        failed.length === targets.length
+          ? "Couldn't clear notifications"
+          : `Couldn't clear ${failed.length} notification${failed.length === 1 ? "" : "s"}`,
+      );
+    }
+    router.refresh();
+  }
+
   function weekDayCard(day: WeekDay) {
     return (
       <div key={day.dateKey} className="flex flex-col gap-1.5">
@@ -405,7 +439,18 @@ export function HomeView({
         <div className="flex w-full flex-none flex-col gap-5 lg:w-[300px]">
           {/* ---------- notifications ---------- */}
           <aside className="flex flex-col gap-2.5">
-            <SectionLabel>NOTIFICATIONS</SectionLabel>
+            <div className="flex items-center justify-between gap-3">
+              <SectionLabel>NOTIFICATIONS</SectionLabel>
+              {visibleNotifications.length > 0 && (
+                <button
+                  onClick={clearAllNotifications}
+                  title="Clear all notifications"
+                  className="cursor-pointer text-[12px] font-semibold text-faint hover:text-[oklch(0.55_0.15_25)]"
+                >
+                  Clear all ✕
+                </button>
+              )}
+            </div>
             <Card className="px-4 py-1.5">
               {visibleNotifications.length === 0 && (
                 <div className="py-5 text-center text-[13px] text-muted">
