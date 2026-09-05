@@ -62,6 +62,7 @@ export interface SettingsData {
   bethnalBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
+  chalkFarmClusterGapMinutes: number;
   chalkFarmWeeklyCapHours: number;
   crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
@@ -516,6 +517,7 @@ export function SettingsView({
           bethnalBufferMinutes={settings.bethnalBufferMinutes}
           chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
           chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
+          chalkFarmClusterGapMinutes={settings.chalkFarmClusterGapMinutes}
           chalkFarmWeeklyCapHours={settings.chalkFarmWeeklyCapHours}
           crossClinicGapMinutes={settings.crossClinicGapMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
