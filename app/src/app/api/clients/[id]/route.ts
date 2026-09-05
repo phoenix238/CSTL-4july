@@ -39,7 +39,7 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   return NextResponse.json(client);
 });
 
-/** Delete a client: cancels any upcoming bookings' Google events, then removes the record. */
+/** Delete a client with no booking history — deleteClient throws once they have any. */
 export const DELETE = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
   await deleteClient(id);

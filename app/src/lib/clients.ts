@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ensureClientFolderAndDoc, renameClientDrive } from "@/lib/google/drive";
 import { upsertMarketingRow } from "@/lib/google/sheets";
-import { cancelBookingEvents } from "@/lib/google/calendar";
 
 /**
  * Match a stranger typing into the public booking form to an existing record —
@@ -142,17 +141,23 @@ export async function updateClientDetails(
 }
 
 /**
- * Delete a client entirely: cancel any upcoming bookings (freeing the Google
- * Calendar events) then remove the record — bookings/notes cascade, enquiries
- * that referenced them are unlinked (not deleted). Their Drive folder + Doc
- * are left untouched, so nothing in Drive is ever lost.
+ * Delete a client entirely: notes cascade, enquiries that referenced them are
+ * unlinked (not deleted). Their Drive folder + Doc are left untouched, so
+ * nothing in Drive is ever lost.
+ *
+ * Refuses if the client has ever had a single booking — that history is the
+ * record of what actually happened and this action can't undo itself. The
+ * database enforces this too (Booking.client is onDelete: Restrict), but
+ * checking here first gives a plain error instead of a raw FK-violation.
+ * A client with real booking history isn't meant to be deletable at all; this
+ * is for cleaning up duplicates and enquiries that never became one.
  */
 export async function deleteClient(id: string) {
-  const upcoming = await prisma.booking.findMany({
-    where: { clientId: id, status: "confirmed", startsAt: { gte: new Date() } },
-  });
-  for (const booking of upcoming) {
-    await cancelBookingEvents(booking.id);
+  const bookingCount = await prisma.booking.count({ where: { clientId: id } });
+  if (bookingCount > 0) {
+    throw new Error(
+      `This client has ${bookingCount} booking${bookingCount === 1 ? "" : "s"} on record and can't be deleted — that history is kept permanently.`,
+    );
   }
   await prisma.client.delete({ where: { id } });
 }
