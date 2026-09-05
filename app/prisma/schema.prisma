@@ -385,6 +385,17 @@ model AppSettings {
   // date later re-alerts — same shape as Booking.calendarAlertAt, one level up.
   emptyDayAlerts Json?
 
+  // The daily cron's own heartbeat (see checkCronHealth in cronHealth.ts):
+  // set at the end of every successful, non-dry-run run of /api/payments/cron.
+  // Watched by a separate trigger (a scheduled GitHub Actions workflow, not
+  // another Vercel cron slot — the Hobby plan's one daily schedule is already
+  // spent on the cron this watches) so that if the cron stops running
+  // entirely, something independent of it notices.
+  lastCronRunAt DateTime?
+  // Set once that heartbeat is noticed stale, so the "cron is dead" email only
+  // sends once per outage; cleared once the heartbeat is fresh again.
+  cronDeadAlertSentAt DateTime?
+
   // — Client portal (/me/[token]) —
   portalEnabled      Boolean @default(true) // master switch for the client portal
   portalNotifyEmail  Boolean @default(true) // email Phoenix on every portal book/reschedule/cancel

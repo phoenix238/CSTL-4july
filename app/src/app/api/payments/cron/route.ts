@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { syncBankPayments } from "@/lib/payments/sync";
 import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
@@ -23,6 +24,10 @@ import { sweepCapacityAlerts } from "@/lib/booking/capacityAlerts";
  * booking is flagged once via unpaidNotifiedAt regardless of how often the sweep
  * runs); it just means a session can sit unflagged for up to ~24h longer than an
  * hourly sweep would allow, since the run only happens once a day.
+ *
+ * Every real run writes AppSettings.lastCronRunAt as its last step — a
+ * heartbeat watched independently by /api/cron/healthcheck (see
+ * cronHealth.ts), since this route can't detect its own failure to run at all.
  *
  * `?dryRun=1&asOf=<ISO>` reports what the unpaid sweep and calendar reconcile
  * *would* do at that moment, without emailing, flagging, or touching payments —
@@ -103,6 +108,17 @@ export async function GET(req: Request) {
       console.error("Session reminder sweep failed", err);
       return { due: [], sent: 0 };
     });
+
+    // The dead-man's-switch heartbeat (see cronHealth.ts) — written last, only
+    // once the run has genuinely completed. Every step above already swallows
+    // its own failure, so reaching here means the run went end-to-end even if
+    // Google or the bank feed had a bad day; syncBankPayments/sweepUnpaidSessions
+    // above are the two steps that don't, so a real failure there skips this
+    // and leaves the heartbeat stale, which is the correct outcome. Real wall-
+    // clock time, deliberately not `asOf` — a manually-triggered run with a
+    // backdated `?asOf=` must never make the heartbeat itself look stale.
+    await prisma.appSettings.update({ where: { id: 1 }, data: { lastCronRunAt: new Date() } });
+
     return NextResponse.json({
       ...sync,
       unpaidFlagged: unpaid.newlyFlagged.length,

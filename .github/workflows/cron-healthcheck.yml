@@ -1,0 +1,27 @@
+name: Cron dead-man's switch
+
+# Pings the app's /api/cron/healthcheck on a schedule independent of Vercel's
+# own cron — Vercel's Hobby plan allows only one daily scheduled trigger, and
+# it's already spent on /api/payments/cron. This is the thing that notices if
+# THAT stops running at all: something outside Vercel's scheduler has to be
+# the one watching it, or a scheduler-wide outage would go unnoticed forever.
+#
+# Requires two repository secrets (Settings -> Secrets and variables ->
+# Actions): APP_URL (e.g. https://your-app.vercel.app) and HEALTHCHECK_SECRET
+# (any random string — set the same value as the Vercel env var of the same
+# name). Neither is read by this file directly; GitHub injects them into the
+# step below without ever printing them to the log.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the app's cron healthcheck
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.HEALTHCHECK_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/healthcheck"
