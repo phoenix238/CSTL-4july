@@ -74,6 +74,16 @@ export async function GET(req: Request) {
       });
     }
 
+    // First, and guarded: this is the safety net that tells Phoenix a day has
+    // quietly stopped being bookable. syncBankPayments/sweepUnpaidSessions below
+    // are deliberately unguarded (a bank failure should surface as a 500), so
+    // anything running after them is skipped entirely on a Starling outage —
+    // which is exactly when a silent monitor must not also go silent.
+    const capacity = await sweepCapacityAlerts({ asOf }).catch((err) => {
+      console.error("Capacity alert sweep failed", err);
+      return { issues: [], newIssues: [] };
+    });
+
     const sync = await syncBankPayments();
     const unpaid = await sweepUnpaidSessions({ asOf });
     // Calendar reconcile needs Google; never let it fail the whole run.
@@ -93,14 +103,6 @@ export async function GET(req: Request) {
       console.error("Session reminder sweep failed", err);
       return { due: [], sent: 0 };
     });
-    // Any day in the public booking window that has hours/overrides drawn but
-    // nothing bookable — a setting or a cap silently emptying a day nobody
-    // meant to close. Never fail the run over it.
-    const capacity = await sweepCapacityAlerts({ asOf }).catch((err) => {
-      console.error("Capacity alert sweep failed", err);
-      return { issues: [], newIssues: [] };
-    });
-
     return NextResponse.json({
       ...sync,
       unpaidFlagged: unpaid.newlyFlagged.length,

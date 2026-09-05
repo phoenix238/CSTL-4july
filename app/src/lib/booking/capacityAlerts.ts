@@ -1,8 +1,8 @@
 import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
-import { fmtDayLong, londonTime } from "@/lib/time";
+import { fmtDayLong, londonDateKey, londonTime, londonWeekdayIndex } from "@/lib/time";
 import { loadAvailabilityWithTrace, defaultSlotWindow } from "./slots";
-import { explainEmptyDay, type DayTrace } from "./availability";
+import { explainEmptyDay, resolveWeeklyHours, type DayTrace, type WeeklyWindow } from "./availability";
 import { CLINIC_LABEL, type Clinic } from "./rules";
 
 const CLINICS: Clinic[] = ["waterloo", "bethnal"];
@@ -15,10 +15,53 @@ export interface CapacityIssue {
   reason: string;
 }
 
-/** "YYYY-MM-DD" -> a real London midday instant, for formatting only. */
+/** "YYYY-MM-DD" -> a real London midday instant (midday, so a clock change can't move the day). */
 function dateKeyToDate(dateKey: string): Date {
   const [y, m, d] = dateKey.split("-").map(Number);
   return londonTime(y, m, d, 12, 0);
+}
+
+/**
+ * Why an empty day is worth telling Phoenix about — or null when it isn't.
+ *
+ * Pure, so every branch of the "is this a problem or is this normal?" judgement
+ * is unit-testable without a database, Google, or a clock. `hasOwnBookings` is
+ * whether that clinic already holds confirmed sessions that day, and
+ * `weekdayHasHours` whether the recurring weekly hours cover that weekday.
+ *
+ * What counts as a problem:
+ * - A weekly cap's own accounting emptied it (the original Monday bug).
+ * - The drawn window is too short to hold one session.
+ * - A weekday that normally has hours has been left with no open time at all —
+ *   i.e. a block override is cancelling a day that would otherwise be open.
+ * - Busy time swallowed the whole day *and* nothing is booked into it. A full
+ *   diary is success; a day eaten by calendar events with nothing to show for
+ *   it is the "something ate my Monday" case.
+ *
+ * What doesn't:
+ * - No hours set on a weekday that never has any — a deliberate closure.
+ * - A day full of actual confirmed sessions.
+ * - The minimum-notice window running out (happens on today, every run).
+ * - The clocks changing — nothing to act on.
+ */
+export function emptyDayReason(
+  day: DayTrace,
+  { hasOwnBookings, weekdayHasHours }: { hasOwnBookings: boolean; weekdayHasHours: boolean },
+): string | null {
+  if (day.bookable > 0) return null;
+
+  if (day.openMinutes === 0) {
+    // Only a problem when this weekday normally opens — then something (a block
+    // override) has closed a day that would otherwise have been bookable.
+    return weekdayHasHours ? "Your usual hours for this day are fully blocked out" : null;
+  }
+  if (day.candidates === 0) return "The hours set are shorter than one session";
+  if (day.dropped.cap > 0) return explainEmptyDay(day);
+  if (day.dropped.hours > 0) return "The hours set don't leave room for a full session";
+  if (day.dropped.busy > 0 && !hasOwnBookings) {
+    return "Busy time on your calendar covers the whole day, with nothing booked into it";
+  }
+  return null;
 }
 
 /**
@@ -41,50 +84,48 @@ export function diffCapacityAlerts(
 }
 
 /**
- * Finds any day inside the public booking window that hours/overrides were
- * drawn on but that a *setting* has quietly emptied — the "Monday looked
- * available but wasn't" failure mode. Deliberately narrow about what counts:
+ * Finds any day inside the public booking window that a client can't book into
+ * when it looks like they should be able to — the "Monday looked available but
+ * wasn't" failure mode — and emails Phoenix about it. `emptyDayReason` above
+ * decides what counts.
  *
- * - No hours set at all → a deliberate closure, not a problem.
- * - Everything's taken (`busy`) → a genuinely full diary. That's success, not
- *   a bug, and alerting on it would mean an email most days once the diary
- *   fills up.
- * - Too soon to book (`past`) → the minimum-notice window running out as a day
- *   ends is expected and happens to some degree on `windowStart`(today) every
- *   single run; it isn't a configuration mistake.
- * - The clocks changing (`clockChange`) → nothing to fix.
- *
- * That leaves `cap` (a weekly cap's own accounting reached, as in the Monday
- * bug this replaces) and `hours` (the drawn window is too short for one
- * session) — both are settings math producing an empty day nobody intended.
- *
- * Emails Phoenix once per (clinic, day) via `diffCapacityAlerts`'s dedupe map
- * on AppSettings.emptyDayAlerts — not on every run while it stays broken —
- * and naturally stops mentioning it once that day is bookable again, the same
- * shape as the calendar reconcile sweep's `calendarAlertAt` (see reconcile.ts).
+ * Emails once per (clinic, day) via `diffCapacityAlerts`'s dedupe map on
+ * AppSettings.emptyDayAlerts — not on every run while it stays broken — and
+ * forgets the key once that day is bookable again, so a later recurrence
+ * re-alerts. Same shape as the calendar reconcile sweep's `calendarAlertAt`.
  */
 export async function sweepCapacityAlerts({
   asOf = new Date(),
   dryRun = false,
 }: { asOf?: Date; dryRun?: boolean } = {}): Promise<{ issues: CapacityIssue[]; newIssues: CapacityIssue[] }> {
   const { windowStart, windowEnd } = await defaultSlotWindow();
+  const settings = await getSettings();
+  const weeklyHours = resolveWeeklyHours(settings.weeklyHours);
+
+  // Which (clinic, day) pairs already hold confirmed sessions — the difference
+  // between "the diary is full" (fine) and "something ate this day" (not).
+  const booked = new Set<string>();
+  const confirmed = await prisma.booking.findMany({
+    where: { status: "confirmed", startsAt: { gte: windowStart, lt: windowEnd } },
+    select: { clinic: true, startsAt: true },
+  });
+  for (const b of confirmed) booked.add(`${b.clinic}:${londonDateKey(b.startsAt)}`);
 
   const issues: CapacityIssue[] = [];
   for (const clinic of CLINICS) {
+    const windows: WeeklyWindow[] = weeklyHours[clinic];
     const { days } = await loadAvailabilityWithTrace({ clinic, windowStart, windowEnd });
     for (const day of days as DayTrace[]) {
-      if (day.bookable > 0) continue;
-      // "Shorter than one session" (openMinutes > 0, no candidates at all) and
-      // a footprint that doesn't fit its window (dropped.hours) are the same
-      // "hours don't leave room" family explainEmptyDay reports — both are
-      // config, like the cap. See the filter's rationale in the docstring above.
-      const tooShort = day.openMinutes > 0 && day.candidates === 0;
-      if (!tooShort && day.dropped.cap === 0 && day.dropped.hours === 0) continue;
-      issues.push({ key: `${clinic}:${day.dateKey}`, clinic, dateKey: day.dateKey, reason: explainEmptyDay(day) });
+      const key = `${clinic}:${day.dateKey}`;
+      const weekday = londonWeekdayIndex(dateKeyToDate(day.dateKey));
+      const reason = emptyDayReason(day, {
+        hasOwnBookings: booked.has(key),
+        weekdayHasHours: windows.some((w) => w.weekday === weekday),
+      });
+      if (reason) issues.push({ key, clinic, dateKey: day.dateKey, reason });
     }
   }
 
-  const settings = await getSettings();
   const prevAlerted = (settings.emptyDayAlerts as Record<string, string> | null) ?? {};
   const { nextAlerted, newIssues } = diffCapacityAlerts(issues, prevAlerted, asOf);
 
@@ -96,18 +137,19 @@ export async function sweepCapacityAlerts({
     const to = process.env.ALLOWED_EMAIL;
     if (to) {
       const lines = [
-        `${newIssues.length} day${newIssues.length === 1 ? "" : "s"} in the booking window ${
-          newIssues.length === 1 ? "looks" : "look"
-        } empty even though hours are set:`,
+        `${newIssues.length} day${newIssues.length === 1 ? "" : "s"} in the booking window can't be booked when ${
+          newIssues.length === 1 ? "it" : "they"
+        } probably should:`,
         "",
         ...newIssues.map((i) => `  ${fmtDayLong(dateKeyToDate(i.dateKey))} · ${CLINIC_LABEL[i.clinic]}: ${i.reason}`),
         "",
-        "Check the calendar to see why — this won't repeat once each day is bookable again.",
+        "Open the calendar on those days to see the same reason in place.",
+        "This won't repeat once each day is bookable again.",
       ];
       try {
         await sendEmail(
           to,
-          `${newIssues.length} empty booking day${newIssues.length === 1 ? "" : "s"} to check`,
+          `${newIssues.length} booking day${newIssues.length === 1 ? "" : "s"} to check`,
           lines.join("\n"),
         );
       } catch (err) {
