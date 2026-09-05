@@ -210,15 +210,42 @@ export interface AvailabilityParams {
 }
 
 /**
+ * Group session start times into clusters: consecutive sessions stay in the same
+ * cluster while the gap between one session's end and the next's start is at most
+ * `gap`; a larger gap starts a new cluster. Returns each cluster's starts, in
+ * order. Units are the caller's — minutes-of-day or epoch-ms — as long as
+ * `starts`, `sessionLen` and `gap` all share them.
+ *
+ * This is the definition of "which sessions share a Chalk Farm room block" —
+ * used by chalkFarm.ts to draw one Google event per cluster instead of one that
+ * spans a whole day's gaps. (The weekly cap no longer uses it; see
+ * chalkFarmCapMinutes below, which counts session hours only.)
+ */
+export function clusterSessions(starts: number[], sessionLen: number, gap: number): number[][] {
+  const sorted = [...starts].sort((a, b) => a - b);
+  const clusters: Array<{ starts: number[]; end: number }> = [];
+  for (const s of sorted) {
+    const current = clusters[clusters.length - 1];
+    if (current && s - current.end <= gap) {
+      current.starts.push(s);
+      current.end = Math.max(current.end, s + sessionLen);
+    } else {
+      clusters.push({ starts: [s], end: s + sessionLen });
+    }
+  }
+  return clusters.map((c) => c.starts);
+}
+
+/**
  * Minutes of Phoenix's own Bethnal (Chalk Farm) session time on one day that
  * count toward the weekly cap: one session length per session, and nothing
  * else. The gaps between sessions and the room's edge padding are deliberately
  * NOT counted — the cap budgets actual session hours, and Phoenix spaces the
  * day out himself when he needs to close a gap. (The shared calendar's physical
- * room block still spans first-to-last plus edges — see chalkFarmBlockRange in
- * chalkFarm.ts — that's a separate concern from this budget.) `sessionStartMins`
- * is minutes past London midnight; only its length matters here. Empty → 0.
- * Pure, so the cap math is unit-testable.
+ * room blocks span each cluster first-to-last plus edges — see
+ * chalkFarmBlockRanges in chalkFarm.ts — that's a separate concern from this
+ * budget.) `sessionStartMins` is minutes past London midnight; only its length
+ * matters here. Empty → 0. Pure, so the cap math is unit-testable.
  */
 export function chalkFarmCapMinutes(sessionStartMins: number[]): number {
   return sessionStartMins.length * SESSION_MINUTES;

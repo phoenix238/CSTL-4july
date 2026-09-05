@@ -61,6 +61,7 @@ export function AvailabilitySettings({
   bethnalBufferMinutes,
   chalkFarmBufferMinutes,
   chalkFarmEdgeBufferMinutes,
+  chalkFarmClusterGapMinutes,
   chalkFarmWeeklyCapHours,
   crossClinicGapMinutes,
   bookingNotifyEmail,
@@ -75,6 +76,7 @@ export function AvailabilitySettings({
   bethnalBufferMinutes: number;
   chalkFarmBufferMinutes: number;
   chalkFarmEdgeBufferMinutes: number;
+  chalkFarmClusterGapMinutes: number;
   chalkFarmWeeklyCapHours: number;
   crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
@@ -225,6 +227,7 @@ export function AvailabilitySettings({
     bethnalBufferMinutes,
     chalkFarmBufferMinutes,
     chalkFarmEdgeBufferMinutes,
+    chalkFarmClusterGapMinutes,
     chalkFarmWeeklyCapHours,
     crossClinicGapMinutes,
     notifyEmail: bookingNotifyEmail,
@@ -245,6 +248,7 @@ export function AvailabilitySettings({
           bethnalBufferMinutes: tuning.bethnalBufferMinutes,
           chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
           chalkFarmEdgeBufferMinutes: tuning.chalkFarmEdgeBufferMinutes,
+          chalkFarmClusterGapMinutes: tuning.chalkFarmClusterGapMinutes,
           chalkFarmWeeklyCapHours: tuning.chalkFarmWeeklyCapHours,
           crossClinicGapMinutes: tuning.crossClinicGapMinutes,
           bookingNotifyEmail: tuning.notifyEmail,
@@ -549,6 +553,19 @@ export function AvailabilitySettings({
           hint="Bethnal Green only, outgoing direction. Your daily 'Phoenix' block on the shared Chalk Farm calendar starts this much before your first client and ends this much after your last, so studio-mates see clearance and don't book right onto the front or back of your day."
           onChange={(v) => {
             setTuning((p) => ({ ...p, chalkFarmEdgeBufferMinutes: v }));
+            setTuningDirty(true);
+          }}
+        />
+        <TuningSlider
+          label="Chalk Farm block split gap"
+          value={tuning.chalkFarmClusterGapMinutes}
+          display={`${tuning.chalkFarmClusterGapMinutes} min`}
+          min={0}
+          max={180}
+          step={15}
+          hint="Bethnal Green only. Two sessions this far apart (or closer) share one 'Phoenix' block on the shared Chalk Farm calendar; a wider gap splits them into separate blocks, so a long gap between two clients isn't held as room time or counted against your weekly cap. Lower it to split more eagerly, raise it to keep a whole day as one block."
+          onChange={(v) => {
+            setTuning((p) => ({ ...p, chalkFarmClusterGapMinutes: v }));
             setTuningDirty(true);
           }}
         />

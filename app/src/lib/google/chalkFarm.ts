@@ -1,9 +1,11 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getCalendarApi, withRetry } from "./client";
 import { EVENT_REMINDERS, NO_REMINDERS } from "@/lib/booking/rules";
+import { clusterSessions } from "@/lib/booking/availability";
 import { fmtTime, londonDayStart, londonTime } from "@/lib/time";
 
 const TZ = "Europe/London";
+const SESSION_MS = 60 * 60_000;
 
 /** 404/410 from a delete/patch — the event's already gone on Google's side. */
 function isGone(err: unknown): boolean {
@@ -12,29 +14,43 @@ function isGone(err: unknown): boolean {
 }
 
 /**
- * The [start, end) the shared Chalk Farm block should span for one day's
- * confirmed Bethnal session start times: `edgeBufferMinutes` before the
- * earliest and the same amount after the latest session's end. Pure — split
- * out from `syncChalkFarmDayBlock` so the edge-padding math is unit-testable
- * without mocking Prisma/Google.
+ * The [start, end) each shared Chalk Farm block should span for one day's
+ * confirmed Bethnal session start times. Sessions close together (within
+ * `clusterGapMinutes` of each other) share one block; a wider gap starts a new
+ * block, so two sessions hours apart get two separate blocks rather than one
+ * that holds the empty time between them. Each block runs from
+ * `edgeBufferMinutes` before its earliest session to the same after its latest
+ * session's end, and carries that cluster's own session starts for the
+ * venue-facing note. Pure — split out from `syncChalkFarmDayBlock` so the
+ * clustering + edge-padding math is unit-testable without mocking Prisma/Google.
  */
-export function chalkFarmBlockRange(sessionStarts: Date[], edgeBufferMinutes: number): { start: Date; end: Date } {
+export function chalkFarmBlockRanges(
+  sessionStarts: Date[],
+  edgeBufferMinutes: number,
+  clusterGapMinutes: number,
+): Array<{ start: Date; end: Date; starts: Date[] }> {
   const edgeBufferMs = edgeBufferMinutes * 60_000;
-  return {
-    start: new Date(Math.min(...sessionStarts.map((t) => t.getTime())) - edgeBufferMs),
-    end: new Date(Math.max(...sessionStarts.map((t) => t.getTime() + 60 * 60_000)) + edgeBufferMs),
-  };
+  const clusters = clusterSessions(
+    sessionStarts.map((t) => t.getTime()),
+    SESSION_MS,
+    clusterGapMinutes * 60_000,
+  );
+  return clusters.map((ms) => ({
+    start: new Date(ms[0] - edgeBufferMs),
+    end: new Date(ms[ms.length - 1] + SESSION_MS + edgeBufferMs),
+    starts: ms.map((t) => new Date(t)),
+  }));
 }
 
 /**
- * Keep the single shared "Phoenix" Chalk Farm room block for one day in sync
- * with that day's actual confirmed Bethnal Green bookings. The block grows or
- * shrinks to span from `chalkFarmEdgeBufferMinutes` before the earliest
- * session's start to the same amount after the latest session's end — so
- * studio-mates on the shared calendar see clearance before the first client
- * and after the last one, without a fixed gap between sessions in between
- * (those sit as close together as the schedule allows). Deletes the block
- * once no Bethnal sessions remain that day.
+ * Keep the shared "Phoenix" Chalk Farm room blocks for one day in sync with
+ * that day's actual confirmed Bethnal Green bookings. A run of sessions close
+ * together shares one block (spanning from `chalkFarmEdgeBufferMinutes` before
+ * its first to the same after its last); sessions more than
+ * `chalkFarmClusterGapMinutes` apart get separate blocks, so a big gap between
+ * two clients isn't held as room time. Existing blocks are patched to the new
+ * ranges, extra ones deleted, missing ones inserted; all are removed once no
+ * Bethnal sessions remain that day.
  */
 export async function syncChalkFarmDayBlock(dateKey: string) {
   const settings = await getSettings();
@@ -50,65 +66,94 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
   });
 
   const existing = await prisma.chalkFarmDayBlock.findUnique({ where: { date: dateKey } });
+  // Old rows (before day-blocks could cluster) carry a single `eventId`; new
+  // rows carry the full `eventIds` list. Absorb either, so an existing block is
+  // reused/cleaned up rather than orphaned on Google when the model changes.
+  const existingIds = existing
+    ? existing.eventIds.length
+      ? existing.eventIds
+      : existing.eventId
+        ? [existing.eventId]
+        : []
+    : [];
   const calendar = await getCalendarApi();
 
-  if (bookings.length === 0) {
-    if (existing) {
+  const removeEvents = async (ids: string[]) => {
+    for (const eventId of ids) {
       try {
-        await calendar.events.delete({ calendarId: calId, eventId: existing.eventId });
+        await calendar.events.delete({ calendarId: calId, eventId });
       } catch (err) {
         if (!isGone(err)) throw err;
       }
+    }
+  };
+
+  if (bookings.length === 0) {
+    if (existing) {
+      await removeEvents(existingIds);
       await prisma.chalkFarmDayBlock.delete({ where: { date: dateKey } });
     }
     return;
   }
 
-  const { start: blockStart, end: blockEnd } = chalkFarmBlockRange(
+  const ranges = chalkFarmBlockRanges(
     bookings.map((b) => b.startsAt),
     settings.chalkFarmEdgeBufferMinutes,
+    settings.chalkFarmClusterGapMinutes,
   );
 
-  // Venue-facing note: how many sessions, when each one starts, when the day
-  // finishes, and how to reach Phoenix — without any client names on the shared
-  // Chalk Farm calendar.
-  const startTimes = bookings
-    .map((b) => b.startsAt.getTime())
-    .sort((a, b) => a - b)
-    .map((t) => fmtTime(new Date(t)));
-  const n = bookings.length;
-  const description = [
-    `${n} session${n === 1 ? "" : "s"}: ${startTimes.join(", ")} · finishes ${fmtTime(blockEnd)}`,
-    settings.clinicContactLine.trim(),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const eventIds: string[] = [];
+  for (let i = 0; i < ranges.length; i++) {
+    const range = ranges[i];
+    // Venue-facing note per block: how many sessions in this cluster, when each
+    // starts, when it finishes, and how to reach Phoenix — no client names on
+    // the shared calendar.
+    const startTimes = range.starts.map((t) => fmtTime(t));
+    const n = range.starts.length;
+    const description = [
+      `${n} session${n === 1 ? "" : "s"}: ${startTimes.join(", ")} · finishes ${fmtTime(range.end)}`,
+      settings.clinicContactLine.trim(),
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-  const requestBody = {
-    summary: "Phoenix",
-    description,
-    start: { dateTime: blockStart.toISOString(), timeZone: TZ },
-    end: { dateTime: blockEnd.toISOString(), timeZone: TZ },
-    // The shared block is venue-facing — it only carries Phoenix's reminders when
-    // he's opted venue events in, so a Bethnal session doesn't remind him twice
-    // (once here, once on his personal session event).
-    reminders: settings.venueReminders ? EVENT_REMINDERS : NO_REMINDERS,
-  };
+    const requestBody = {
+      summary: "Phoenix",
+      description,
+      start: { dateTime: range.start.toISOString(), timeZone: TZ },
+      end: { dateTime: range.end.toISOString(), timeZone: TZ },
+      // Venue-facing block — only carries Phoenix's reminders when he's opted
+      // venue events in, so a Bethnal session doesn't remind him twice (once
+      // here, once on his personal session event).
+      reminders: settings.venueReminders ? EVENT_REMINDERS : NO_REMINDERS,
+    };
 
-  if (existing) {
-    try {
-      await withRetry(() => calendar.events.patch({ calendarId: calId, eventId: existing.eventId, requestBody }));
-      return;
-    } catch (err) {
-      if (!isGone(err)) throw err;
-      // vanished on Google's side — fall through and recreate below
+    // Reuse the i-th existing block where there is one; otherwise insert a fresh
+    // event. A reused id that's vanished on Google's side falls through to insert.
+    const reuseId = existingIds[i];
+    let resultId = "";
+    if (reuseId) {
+      try {
+        await withRetry(() => calendar.events.patch({ calendarId: calId, eventId: reuseId, requestBody }));
+        resultId = reuseId;
+      } catch (err) {
+        if (!isGone(err)) throw err;
+      }
     }
+    if (!resultId) {
+      const res = await withRetry(() => calendar.events.insert({ calendarId: calId, requestBody }));
+      resultId = res.data.id!;
+    }
+    eventIds.push(resultId);
   }
 
-  const res = await withRetry(() => calendar.events.insert({ calendarId: calId, requestBody }));
+  // More blocks yesterday than today (sessions moved together, or some
+  // cancelled) — delete the now-surplus events so none are left orphaned.
+  await removeEvents(existingIds.slice(ranges.length));
+
   await prisma.chalkFarmDayBlock.upsert({
     where: { date: dateKey },
-    update: { eventId: res.data.id! },
-    create: { date: dateKey, eventId: res.data.id! },
+    update: { eventIds, eventId: eventIds[0] ?? "" },
+    create: { date: dateKey, eventIds, eventId: eventIds[0] ?? "" },
   });
 }

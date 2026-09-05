@@ -430,8 +430,12 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
   );
 
   // The shared Chalk Farm day block(s) in this window — tagged `roomBlock` so
-  // every collision check below can ignore them (only real sessions count).
-  const chalkFarmBlockEventIds = new Set(chalkFarmBlocks.map((b) => b.eventId));
+  // every collision check below can ignore them (only real sessions count). A
+  // day can hold several cluster blocks now; fold in the legacy single `eventId`
+  // too, so a not-yet-resynced row's block is still recognised.
+  const chalkFarmBlockEventIds = new Set(
+    chalkFarmBlocks.flatMap((b) => [...b.eventIds, ...(b.eventId ? [b.eventId] : [])]),
+  );
 
   const sources: Array<{ id: string; source: SpanSource }> = [];
   // Room/Chalk Farm calendars are optional until configured in Settings.
