@@ -366,7 +366,10 @@ model AppSettings {
   bethnalBufferMinutes Int @default(15)  // Bethnal Green: minimum gap between Phoenix's own back-to-back sessions there — separate from Waterloo since they don't need the same spacing
   chalkFarmBufferMinutes Int @default(30) // safety gap around a studio-mate's booking on the shared Chalk Farm calendar (Bethnal Green)
   chalkFarmEdgeBufferMinutes Int @default(15) // padding added before the day's first and after the day's last Bethnal session on the shared "Phoenix" Chalk Farm block, so studio-mates don't book right up against it
-  chalkFarmClusterGapMinutes Int @default(45) // Bethnal Green: two sessions this far apart (or closer) share one Chalk Farm block; a wider gap splits them into separate blocks so the empty time between isn't held as room time or counted against the weekly cap. Default 45 so a full hour's gap splits (an hour apart = two blocks), while back-to-back / short gaps stay one block
+  // Unwired here — declared only to match production, which already has this column from
+  // #23 (Chalk Farm clustering, still open). Prevents `prisma db push` from proposing to
+  // drop real data on every deploy until #23 merges its actual (wired) definition.
+  chalkFarmClusterGapMinutes Int @default(45)
   chalkFarmWeeklyCapHours Int @default(10) // Bethnal Green: max total hours of Phoenix's own confirmed sessions bookable in one London calendar week (Mon-Sun); 0 = no cap
   // Travel time between the two clinics. Working a Waterloo morning and a Bethnal
   // Green evening on the same day is fine and deliberate — this is the clearance
@@ -444,15 +447,16 @@ model PaymentRefCounter {
   next Int @default(1)
 }
 
-// The shared "Phoenix" room block(s) on the Chalk Farm calendar for one day.
-// Bethnal Green sessions nest inside; a run of nearby sessions shares one block,
-// but sessions more than chalkFarmClusterGapMinutes apart get separate blocks, so
-// a big gap between two clients isn't held as room time. `eventIds` holds each
-// cluster's Google event id.
+// The single shared "Phoenix" room block on the Chalk Farm calendar for one day.
+// Bethnal Green sessions nest inside it; the block auto-grows/shrinks to span the
+// day's sessions, so clients can sit as close as the schedule allows (not 2h apart).
 model ChalkFarmDayBlock {
   date      String   @id // "YYYY-MM-DD" London calendar date
-  eventId   String   @default("") // legacy: first block's id (pre-clustering); kept in sync with eventIds[0]
-  eventIds  String[] @default([]) // the Google event id of each cluster block for the day
+  eventId   String   @default("") // the Google event id of that day's shared block
+  // Unwired here — declared only to match production, which already has this column from
+  // #23 (Chalk Farm clustering, still open). Prevents `prisma db push` from proposing to
+  // drop real data on every deploy until #23 merges its actual (wired) definition.
+  eventIds  String[] @default([])
   updatedAt DateTime @updatedAt
 }
 
