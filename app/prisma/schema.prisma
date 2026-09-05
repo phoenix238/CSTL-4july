@@ -378,6 +378,13 @@ model AppSettings {
   crossClinicGapMinutes Int @default(90)
   bookingNotifyEmail   Boolean @default(true) // email Phoenix when someone books via /book
 
+  // Dedupe state for the daily capacity-alert sweep (sweepCapacityAlerts):
+  // {"<clinic>:<dateKey>": "<ISO first-alerted>"} for every day in the public
+  // booking window that has hours/overrides drawn but nothing bookable. A key
+  // drops out once that day is bookable again, so a fresh problem on the same
+  // date later re-alerts — same shape as Booking.calendarAlertAt, one level up.
+  emptyDayAlerts Json?
+
   // — Client portal (/me/[token]) —
   portalEnabled      Boolean @default(true) // master switch for the client portal
   portalNotifyEmail  Boolean @default(true) // email Phoenix on every portal book/reschedule/cancel

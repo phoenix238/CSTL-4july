@@ -4,11 +4,13 @@ import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
 import { runAvailabilitySync } from "@/lib/google/availabilitySync";
 import { sweepSessionReminders } from "@/lib/reminders/sessionReminders";
+import { sweepCapacityAlerts } from "@/lib/booking/capacityAlerts";
 
 /**
  * The daily heartbeat: pull new bank payments and match them, flag sessions
- * that are overdue for payment, and check upcoming bookings still have their
- * calendar event.
+ * that are overdue for payment, check upcoming bookings still have their
+ * calendar event, and check no day in the public booking window has quietly
+ * gone empty despite hours being set.
  *
  * Not behind the normal sign-in guard, because a scheduler has no session — so
  * it carries its own shared secret instead. Without CRON_SECRET set the route
@@ -47,7 +49,7 @@ export async function GET(req: Request) {
 
   try {
     if (dryRun) {
-      const [unpaid, calendar, reminders] = await Promise.all([
+      const [unpaid, calendar, reminders, capacity] = await Promise.all([
         sweepUnpaidSessions({ asOf, dryRun: true }),
         reconcileUpcomingEvents({ asOf, dryRun: true }).catch((err) => {
           console.error("Dry-run reconcile failed", err);
@@ -57,6 +59,10 @@ export async function GET(req: Request) {
           console.error("Dry-run reminder sweep failed", err);
           return { due: [], sent: 0 };
         }),
+        sweepCapacityAlerts({ asOf, dryRun: true }).catch((err) => {
+          console.error("Dry-run capacity sweep failed", err);
+          return { issues: [], newIssues: [] };
+        }),
       ]);
       return NextResponse.json({
         dryRun: true,
@@ -64,6 +70,7 @@ export async function GET(req: Request) {
         unpaid: { overdue: unpaid.overdue, wouldNotify: unpaid.newlyFlagged },
         calendar: { issues: calendar.issues, wouldNotify: calendar.newIssues },
         reminders: { wouldSend: reminders.due },
+        capacity: { issues: capacity.issues, wouldNotify: capacity.newIssues },
       });
     }
 
@@ -86,6 +93,13 @@ export async function GET(req: Request) {
       console.error("Session reminder sweep failed", err);
       return { due: [], sent: 0 };
     });
+    // Any day in the public booking window that has hours/overrides drawn but
+    // nothing bookable — a setting or a cap silently emptying a day nobody
+    // meant to close. Never fail the run over it.
+    const capacity = await sweepCapacityAlerts({ asOf }).catch((err) => {
+      console.error("Capacity alert sweep failed", err);
+      return { issues: [], newIssues: [] };
+    });
 
     return NextResponse.json({
       ...sync,
@@ -94,6 +108,7 @@ export async function GET(req: Request) {
       calendarIssues: calendar.newIssues.length,
       availabilitySync: availability,
       remindersSent: reminders.sent,
+      capacityIssues: capacity.newIssues.length,
     });
   } catch (err) {
     console.error("Scheduled sync failed", err);
