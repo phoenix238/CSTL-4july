@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { syncBankPayments } from "@/lib/payments/sync";
 import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
 import { runAvailabilitySync } from "@/lib/google/availabilitySync";
 import { sweepSessionReminders } from "@/lib/reminders/sessionReminders";
+import { sweepCapacityAlerts } from "@/lib/booking/capacityAlerts";
 
 /**
  * The daily heartbeat: pull new bank payments and match them, flag sessions
- * that are overdue for payment, and check upcoming bookings still have their
- * calendar event.
+ * that are overdue for payment, check upcoming bookings still have their
+ * calendar event, and check no day in the public booking window has quietly
+ * gone empty despite hours being set.
  *
  * Not behind the normal sign-in guard, because a scheduler has no session — so
  * it carries its own shared secret instead. Without CRON_SECRET set the route
@@ -21,6 +24,10 @@ import { sweepSessionReminders } from "@/lib/reminders/sessionReminders";
  * booking is flagged once via unpaidNotifiedAt regardless of how often the sweep
  * runs); it just means a session can sit unflagged for up to ~24h longer than an
  * hourly sweep would allow, since the run only happens once a day.
+ *
+ * Every real run writes AppSettings.lastCronRunAt as its last step — a
+ * heartbeat watched independently by /api/cron/healthcheck (see
+ * cronHealth.ts), since this route can't detect its own failure to run at all.
  *
  * `?dryRun=1&asOf=<ISO>` reports what the unpaid sweep and calendar reconcile
  * *would* do at that moment, without emailing, flagging, or touching payments —
@@ -47,7 +54,7 @@ export async function GET(req: Request) {
 
   try {
     if (dryRun) {
-      const [unpaid, calendar, reminders] = await Promise.all([
+      const [unpaid, calendar, reminders, capacity] = await Promise.all([
         sweepUnpaidSessions({ asOf, dryRun: true }),
         reconcileUpcomingEvents({ asOf, dryRun: true }).catch((err) => {
           console.error("Dry-run reconcile failed", err);
@@ -57,6 +64,10 @@ export async function GET(req: Request) {
           console.error("Dry-run reminder sweep failed", err);
           return { due: [], sent: 0 };
         }),
+        sweepCapacityAlerts({ asOf, dryRun: true }).catch((err) => {
+          console.error("Dry-run capacity sweep failed", err);
+          return { issues: [], newIssues: [] };
+        }),
       ]);
       return NextResponse.json({
         dryRun: true,
@@ -64,8 +75,19 @@ export async function GET(req: Request) {
         unpaid: { overdue: unpaid.overdue, wouldNotify: unpaid.newlyFlagged },
         calendar: { issues: calendar.issues, wouldNotify: calendar.newIssues },
         reminders: { wouldSend: reminders.due },
+        capacity: { issues: capacity.issues, wouldNotify: capacity.newIssues },
       });
     }
+
+    // First, and guarded: this is the safety net that tells Phoenix a day has
+    // quietly stopped being bookable. syncBankPayments/sweepUnpaidSessions below
+    // are deliberately unguarded (a bank failure should surface as a 500), so
+    // anything running after them is skipped entirely on a Starling outage —
+    // which is exactly when a silent monitor must not also go silent.
+    const capacity = await sweepCapacityAlerts({ asOf }).catch((err) => {
+      console.error("Capacity alert sweep failed", err);
+      return { issues: [], newIssues: [] };
+    });
 
     const sync = await syncBankPayments();
     const unpaid = await sweepUnpaidSessions({ asOf });
@@ -87,6 +109,16 @@ export async function GET(req: Request) {
       return { due: [], sent: 0 };
     });
 
+    // The dead-man's-switch heartbeat (see cronHealth.ts) — written last, only
+    // once the run has genuinely completed. Every step above already swallows
+    // its own failure, so reaching here means the run went end-to-end even if
+    // Google or the bank feed had a bad day; syncBankPayments/sweepUnpaidSessions
+    // above are the two steps that don't, so a real failure there skips this
+    // and leaves the heartbeat stale, which is the correct outcome. Real wall-
+    // clock time, deliberately not `asOf` — a manually-triggered run with a
+    // backdated `?asOf=` must never make the heartbeat itself look stale.
+    await prisma.appSettings.update({ where: { id: 1 }, data: { lastCronRunAt: new Date() } });
+
     return NextResponse.json({
       ...sync,
       unpaidFlagged: unpaid.newlyFlagged.length,
@@ -94,6 +126,7 @@ export async function GET(req: Request) {
       calendarIssues: calendar.newIssues.length,
       availabilitySync: availability,
       remindersSent: reminders.sent,
+      capacityIssues: capacity.newIssues.length,
     });
   } catch (err) {
     console.error("Scheduled sync failed", err);
