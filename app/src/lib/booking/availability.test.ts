@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  chalkFarmDayBlockMinutes,
+  chalkFarmCapMinutes,
   computeAvailability,
   computeAvailableSlots,
   dayOpenIntervals,
@@ -159,20 +159,19 @@ describe("computeAvailableSlots on ordinary times on DST days", () => {
   }
 });
 
-describe("chalkFarmDayBlockMinutes", () => {
+describe("chalkFarmCapMinutes", () => {
   it("is zero for a day with no sessions", () => {
-    expect(chalkFarmDayBlockMinutes([], 15)).toBe(0);
+    expect(chalkFarmCapMinutes([])).toBe(0);
   });
-  it("a lone session is its hour plus both edges", () => {
-    expect(chalkFarmDayBlockMinutes([600], 15)).toBe(60 + 30); // 10:00 session, 15-min edges
+  it("a lone session is exactly its own hour — no edge padding", () => {
+    expect(chalkFarmCapMinutes([600])).toBe(60);
   });
-  it("spans from the first session to the last, gaps included", () => {
-    // 10:00 and 14:00, no edge: 09→15 wall would be 5h, i.e. (840-600)+60 = 300.
-    expect(chalkFarmDayBlockMinutes([600, 840], 0)).toBe(840 - 600 + 60);
+  it("counts one session length per session, gaps between them ignored", () => {
+    // 10:00 and 14:00, hours apart, still just two session hours.
+    expect(chalkFarmCapMinutes([600, 840])).toBe(120);
   });
-  it("back-to-back sessions cost only the extra hour, not double the edges", () => {
-    // 10:00 and 11:00 with 15-min edges: 09:45→12:15 = 150.
-    expect(chalkFarmDayBlockMinutes([600, 660], 15)).toBe(660 - 600 + 60 + 30);
+  it("back-to-back sessions cost the same as far-apart ones — two hours either way", () => {
+    expect(chalkFarmCapMinutes([600, 660])).toBe(120);
   });
 });
 
@@ -208,8 +207,7 @@ describe("explainEmptyDay", () => {
     const trace = run({
       weeklyCap: {
         capMinutes: 600,
-        edgeBufferMinutes: 0,
-        blockMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 },
+        capMinutesByWeek: { [londonDateKey(londonWeekStart(TUESDAY))]: 600 },
         sessionMinsByDay: {},
       },
     });
@@ -787,13 +785,12 @@ describe("computeAvailableSlots", () => {
   const weekKey = londonDateKey(londonWeekStart(TUESDAY));
   const cap = (over: Partial<NonNullable<AvailabilityParams["weeklyCap"]>> = {}) => ({
     capMinutes: 600,
-    edgeBufferMinutes: 0,
-    blockMinutesByWeek: {},
+    capMinutesByWeek: {},
     sessionMinsByDay: {},
     ...over,
   });
 
-  it("weeklyCap excludes a candidate that would push the week's room total past the cap", () => {
+  it("weeklyCap excludes a candidate that would push the week's session total past the cap", () => {
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
     const slots = computeAvailableSlots({
       clinic: "bethnal",
@@ -802,8 +799,8 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      // Already at the 600-min (10 hr) cap this week — one more 60-min block tips it over.
-      weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 600 } }),
+      // Already at the 600-min (10 hr) cap this week — one more 60-min session tips it over.
+      weeklyCap: cap({ capMinutesByWeek: { [weekKey]: 600 } }),
     });
     expect(slots).toEqual([]);
   });
@@ -817,33 +814,29 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      // 540 min held this week — a fresh day adds exactly 60 (no edge padding), reaching 600.
-      weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 540 } }),
+      // 540 min held this week — one more session adds exactly 60, reaching 600.
+      weeklyCap: cap({ capMinutesByWeek: { [weekKey]: 540 } }),
     });
     expect(slots).toEqual([at(9)]);
   });
 
-  it("counts room-block time, not sessions: a second session the same day only costs the gap it adds", () => {
-    // 9-10 already booked. Cap has 90 min left. A 14:00 session as a *count* is
-    // one hour, but as room time it extends the day's block from 9-10 to 9-15
-    // (+5 hours) — far over. A 10:00 session, back-to-back, adds only its own hour.
+  it("counts session hours, not room span: a far-apart session the same day still costs only its own hour", () => {
+    // 9-10 already booked, 540 of the 600-min cap used, so exactly one more
+    // session hour fits. Under session-hour accounting it fits wherever it
+    // lands — a 15:00 session hours away costs the same 60 as a 10:00 one.
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 960 }]; // 9-16
-    const base = {
-      clinic: "bethnal" as const,
+    const slots = computeAvailableSlots({
+      clinic: "bethnal",
       ...dayWindow(TUESDAY),
       weeklyHours,
       overrides: [],
       busy: [{ start: at(9), end: at(10) }], // the existing 9-10 session, as busy time
       slotMinutes: 60,
       now: at(0),
-    };
-    const slots = computeAvailableSlots({
-      ...base,
-      // 540 of the 600-min cap used; the day already holds a 9-10 block.
-      weeklyCap: cap({ blockMinutesByWeek: { [weekKey]: 540 }, sessionMinsByDay: { [londonDateKey(TUESDAY)]: [540] } }),
+      weeklyCap: cap({ capMinutesByWeek: { [weekKey]: 540 }, sessionMinsByDay: { [londonDateKey(TUESDAY)]: [540] } }),
     }).map(fmtTime);
-    expect(slots).toContain("10:00"); // extends block to 9-11: +60, reaches 600 — allowed
-    expect(slots).not.toContain("11:00"); // would extend to 9-12: +120, over the cap
+    expect(slots).toContain("10:00"); // back-to-back: +60, reaches 600 — allowed
+    expect(slots).toContain("15:00"); // hours later: still +60, reaches 600 — allowed (old room-span accounting refused it)
   });
 
   it("weeklyCap only counts the candidate's own week — a different week's total doesn't block it", () => {
@@ -856,14 +849,15 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      weeklyCap: cap({ blockMinutesByWeek: { [otherWeekKey]: 600 } }),
+      weeklyCap: cap({ capMinutesByWeek: { [otherWeekKey]: 600 } }),
     });
     expect(slots).toEqual([at(9)]);
   });
 
-  it("edge padding is part of the room time — a lone session costs its hour plus both edges", () => {
+  it("no edge padding in the cap — a lone session costs exactly its own hour", () => {
     const weeklyHours: WeeklyWindow[] = [{ weekday: tueWeekday, startMin: 540, endMin: 600 }]; // 9-10
-    // Cap 80 min, 15-min edges: a lone session costs 60 + 2×15 = 90 > 80, so none.
+    // Cap 80 min: a lone 60-min session fits (old room-block accounting would
+    // have charged 60 + 2×edge and refused it).
     const slots = computeAvailableSlots({
       clinic: "bethnal",
       ...dayWindow(TUESDAY),
@@ -871,9 +865,9 @@ describe("computeAvailableSlots", () => {
       overrides: [],
       busy: [],
       now: at(0),
-      weeklyCap: cap({ capMinutes: 80, edgeBufferMinutes: 15 }),
+      weeklyCap: cap({ capMinutes: 80 }),
     });
-    expect(slots).toEqual([]);
+    expect(slots).toEqual([at(9)]);
   });
 });
 

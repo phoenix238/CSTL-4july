@@ -1,14 +1,14 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekStart } from "@/lib/time";
-import { chalkFarmDayBlockMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
+import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
 
 /**
  * Bethnal Green's weekly Chalk Farm hours cap, as a `computeAvailableSlots`-
- * ready `weeklyCap` — the shared room time actually held each London week
- * (Mon-Sun), summed from each day's block span rather than counting sessions.
- * Shared by `loadAvailableSlots` and the offer-pick flow
+ * ready `weeklyCap` — Phoenix's own session hours each London week (Mon-Sun),
+ * counted one session length per confirmed session (gaps between them don't
+ * count). Shared by `loadAvailableSlots` and the offer-pick flow
  * (`api/public/offer/[token]`), which re-verifies a hand-picked time without
  * going through that function. Queries a week of margin either side of
  * `windowStart`/`windowEnd` so every week touched by that window is fully
@@ -32,24 +32,22 @@ export async function loadBethnalWeeklyCap(
   });
 
   // Group confirmed sessions by London day (start times as minute-of-day), then
-  // sum each day's room-block span into its week — so the cap tracks the actual
-  // Chalk Farm hours held, edge padding and inter-session gaps included.
-  const edge = settings.chalkFarmEdgeBufferMinutes;
+  // sum each day's session hours into its week — so the cap tracks the actual
+  // Chalk Farm session time held, gaps between sessions excluded.
   const sessionMinsByDay: Record<string, number[]> = {};
   for (const b of weekBookings) {
     const dateKey = londonDateKey(b.startsAt);
     (sessionMinsByDay[dateKey] ??= []).push(londonMinutes(b.startsAt));
   }
-  const blockMinutesByWeek: Record<string, number> = {};
+  const capMinutesByWeek: Record<string, number> = {};
   for (const [dateKey, mins] of Object.entries(sessionMinsByDay)) {
     const [y, m, d] = dateKey.split("-").map(Number);
     const weekKey = londonDateKey(londonWeekStart(londonTime(y, m, d, 12, 0)));
-    blockMinutesByWeek[weekKey] = (blockMinutesByWeek[weekKey] ?? 0) + chalkFarmDayBlockMinutes(mins, edge);
+    capMinutesByWeek[weekKey] = (capMinutesByWeek[weekKey] ?? 0) + chalkFarmCapMinutes(mins);
   }
   return {
     capMinutes: settings.chalkFarmWeeklyCapHours * 60,
-    edgeBufferMinutes: edge,
-    blockMinutesByWeek,
+    capMinutesByWeek,
     sessionMinsByDay,
   };
 }
