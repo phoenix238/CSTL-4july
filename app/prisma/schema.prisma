@@ -114,7 +114,12 @@ model SessionRecording {
 model Booking {
   id               String   @id @default(cuid())
   clientId         String
-  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Restrict, not Cascade: a client's booking history is the record of what
+  // actually happened and must survive a client-record deletion. Postgres
+  // itself refuses to delete a Client while it still has any Booking rows —
+  // deleteClient() in clients.ts checks this up front for a clear error
+  // instead of a raw FK-violation.
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
   startsAt         DateTime // start of the 60-min session
   clinic           String // waterloo | bethnal
   status           String   @default("confirmed") // confirmed | cancelled | done

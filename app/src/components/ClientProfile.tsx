@@ -172,7 +172,7 @@ export function ClientProfile({
   async function deleteThisClient() {
     if (
       !window.confirm(
-        `Delete ${client.name} completely? This removes their record, bookings and session notes from the app (any upcoming session is cancelled first). Their Drive folder and Doc are kept. This can't be undone.`,
+        `Delete ${client.name} completely? Their Drive folder and Doc are kept. This can't be undone — and only works if they have no bookings on record.`,
       )
     )
       return;
