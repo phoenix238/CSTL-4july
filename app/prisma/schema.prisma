@@ -119,10 +119,12 @@ model Booking {
   clinic           String // waterloo | bethnal
   status           String   @default("confirmed") // confirmed | cancelled | done
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
-  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
-  // Present in the shared production DB from the WTR-5 fallback-room feature
-  // (still open, not merged) — not wired into any code here. Declared so
-  // `prisma db push` never proposes dropping this real data.
+  secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event (or the fallback room's) · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
+  // Waterloo only. "" = secondaryEventId lives on the primary R5 room calendar
+  // (also what every pre-existing row means) · "fallback" = R5 was already
+  // taken at this exact time so it was booked on roomFallbackCalendarId
+  // instead — recorded here so cancelling/moving the booking deletes the
+  // event from the calendar it's actually on.
   roomUsed         String   @default("")
   emailSent        Boolean  @default(false)
   // Set when the booking succeeded but its confirmation email didn't go out, so
@@ -294,11 +296,12 @@ model AppSettings {
   googleLastCheckedAt   DateTime?
   personalCalendarId    String @default("primary")
   roomCalendarId        String @default("") // R5 room calendar
-  // Present in the shared production DB from the WTR-5 fallback-room feature
-  // (still open, not merged) — not wired into any code here. Declared so
-  // `prisma db push` never proposes dropping this real data.
+  // A second Waterloo room to fall back to when R5 is already taken at the
+  // exact session time. Checked only at booking time (see chooseWaterlooRoom
+  // in calendar.ts) — availability itself still runs off Phoenix's personal
+  // calendar, same as before. Empty = no fallback, always book R5 as before.
   roomFallbackCalendarId String @default("")
-  roomFallbackLabel      String @default("R6")
+  roomFallbackLabel      String @default("R6") // shown in the fallback room's venue event title
   chalkFarmCalendarId   String @default("") // Bethnal Green shared day blocks
   // — Phoenix's own calendar reminders (his copy of each session event only;
   //   an attendee's reminders are always their own, never set from here) —
