@@ -238,7 +238,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={show}>
       {children}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink px-5 py-2.5 text-[13px] font-medium text-[oklch(0.97_0.01_85)] shadow-[0_8px_24px_oklch(0.3_0.02_60_/_0.25)]">
+        <div className="fixed bottom-6 left-1/2 z-50 w-[calc(100vw-2.5rem)] max-w-[420px] -translate-x-1/2 rounded-2xl bg-ink px-5 py-2.5 text-center text-[13px] font-medium leading-snug break-words text-[oklch(0.97_0.01_85)] shadow-[0_8px_24px_oklch(0.3_0.02_60_/_0.25)]">
           {toast}
         </div>
       )}
