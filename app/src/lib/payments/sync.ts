@@ -4,7 +4,7 @@ import { formatPence } from "@/lib/account";
 import { fmtDayLong } from "@/lib/time";
 import { fetchIncomingPayments, type BankPayment } from "@/lib/starling";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
-import { chooseBookingToSettle, matchReference, type RefCandidate } from "./match";
+import { chooseBookingToSettle, matchReference, normaliseCounterParty, type RefCandidate } from "./match";
 
 /**
  * Pull settled payments from the bank, match them to clients by reference, and
@@ -25,13 +25,15 @@ export interface SyncSummary {
   unmatchedCount: number;
   /** reference fitted more than one client — left for a human */
   ambiguousCount: number;
+  /** no reference, from a sender already ruled out as never-a-client */
+  ignoredCount: number;
   accountLabel?: string;
 }
 
 export async function syncBankPayments({ force = false }: { force?: boolean } = {}): Promise<SyncSummary> {
   const settings = await getSettings();
   if (!settings.starlingEnabled && !force) {
-    return { newCount: 0, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0 };
+    return { newCount: 0, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0, ignoredCount: 0 };
   }
 
   // Re-read a day behind the watermark: a transaction can settle after others
@@ -45,7 +47,7 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
   const payments = await fetchIncomingPayments(since);
   if (!payments.length) {
     await prisma.appSettings.update({ where: { id: 1 }, data: { starlingLastSyncAt: new Date() } });
-    return { newCount: 0, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0 };
+    return { newCount: 0, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0, ignoredCount: 0 };
   }
 
   const seen = await prisma.bankTransaction.findMany({
@@ -62,7 +64,10 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
   const candidates: RefCandidate[] = clients.map((c) => ({ clientId: c.id, paymentRef: c.paymentRef }));
   const nameOf = new Map(clients.map((c) => [c.id, c.name]));
 
-  const summary: SyncSummary = { newCount: fresh.length, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0 };
+  const ignoredPayers = await prisma.ignoredPayer.findMany({ select: { key: true } });
+  const ignoredKeys = new Set(ignoredPayers.map((p) => p.key));
+
+  const summary: SyncSummary = { newCount: fresh.length, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0, ignoredCount: 0 };
   const applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string }> = [];
   const needsAttention: BankPayment[] = [];
 
@@ -70,6 +75,16 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
     const result = matchReference(payment.reference, candidates);
 
     if (result.status === "none") {
+      // No reference matched any client. Before adding it to the queue, check
+      // whether this exact sender was already ruled out by hand — a savings
+      // sweep or a wage payment doesn't gain a reference on its hundredth
+      // appearance, so without this it would come back every single sync.
+      const senderKey = normaliseCounterParty(payment.counterParty);
+      if (senderKey && ignoredKeys.has(senderKey)) {
+        summary.ignoredCount++;
+        await recordTransaction(payment, { status: "ignored" });
+        continue;
+      }
       summary.unmatchedCount++;
       needsAttention.push(payment);
       await recordTransaction(payment, { status: "unmatched" });

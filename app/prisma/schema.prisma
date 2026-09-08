@@ -456,6 +456,19 @@ model BankTransaction {
   @@index([transactedAt])
 }
 
+// A sender the bank feed keeps surfacing that is never a client — an internal
+// savings transfer, a wage payment from another job, and so on. Once a payment
+// with no reference match is set aside by hand, its sender is remembered here so
+// the next payment from the same sender is set aside automatically instead of
+// coming back to the queue. Never suppresses a payment that matched a client by
+// reference — only the no-reference bucket a human already ruled out once.
+model IgnoredPayer {
+  id        String   @id @default(cuid())
+  key       String   @unique // normalised counterparty name — the match key
+  label     String // counterparty name as the bank sent it, for display
+  createdAt DateTime @default(now())
+}
+
 // Single row (id = 1). Hands out the sequential half of a client's bank-transfer
 // reference ("JS-4"). A counter rather than a max()+1 scan so two clients created
 // at the same moment can never be handed the same number — the increment below is

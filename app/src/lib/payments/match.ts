@@ -58,6 +58,20 @@ export function matchReference(reference: string, candidates: RefCandidate[]): M
   return { status: "none" };
 }
 
+/**
+ * Upper-case, collapsed whitespace, letters/digits only — how a counterparty
+ * name is compared when remembering "this sender is never a client" (see
+ * `IgnoredPayer`). Tolerant of the bank's own minor formatting drift (extra
+ * spaces, a stray full stop) while still requiring the same sender.
+ */
+export function normaliseCounterParty(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export interface NameCandidate {
   clientId: string;
   name: string;
