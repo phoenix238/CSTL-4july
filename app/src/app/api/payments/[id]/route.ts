@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
-import { chooseBookingToSettle } from "@/lib/payments/match";
+import { chooseBookingToSettle, normaliseCounterParty } from "@/lib/payments/match";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
 import { fmtDayLong } from "@/lib/time";
 
@@ -20,6 +20,18 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
 
   if (ignore) {
     await prisma.bankTransaction.update({ where: { id }, data: { status: "ignored", clientId: null, bookingId: null } });
+
+    // Remember the sender so the next payment from them is set aside on sync
+    // rather than landing back in this queue — that's the whole point of
+    // marking it, not just clearing today's copy of it.
+    const key = normaliseCounterParty(tx.counterParty);
+    if (key) {
+      await prisma.ignoredPayer.upsert({
+        where: { key },
+        update: {},
+        create: { key, label: tx.counterParty },
+      });
+    }
     return NextResponse.json({ ok: true, status: "ignored" });
   }
 

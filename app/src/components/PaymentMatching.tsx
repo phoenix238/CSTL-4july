@@ -19,6 +19,12 @@ interface PendingTx {
   suggestedClientName?: string | null;
 }
 
+interface IgnoredPayer {
+  id: string;
+  label: string;
+  createdAt: string;
+}
+
 export interface PaymentSettingsData {
   starlingEnabled: boolean;
   starlingAutoMark: boolean;
@@ -49,13 +55,17 @@ export function PaymentMatching({
   const [checking, setChecking] = useState(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [pending, setPending] = useState<PendingTx[]>([]);
+  const [ignoredPayers, setIgnoredPayers] = useState<IgnoredPayer[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
     try {
-      const res = await api<{ configured: boolean; pending: PendingTx[] }>("/api/payments/sync");
+      const res = await api<{ configured: boolean; pending: PendingTx[]; ignoredPayers: IgnoredPayer[] }>(
+        "/api/payments/sync",
+      );
       setConfigured(res.configured);
       setPending(res.pending);
+      setIgnoredPayers(res.ignoredPayers ?? []);
     } catch {
       setConfigured(false);
     }
@@ -93,15 +103,16 @@ export function PaymentMatching({
   async function checkNow() {
     setChecking(true);
     try {
-      const s = await api<{ newCount: number; matchedCount: number; unmatchedCount: number; ambiguousCount: number }>(
-        "/api/payments/sync",
-        { method: "POST", body: JSON.stringify({ force: true }) },
-      );
-      toast(
-        s.newCount === 0
-          ? "No new payments since last time"
-          : `${s.newCount} new · ${s.matchedCount} matched · ${s.unmatchedCount + s.ambiguousCount} need a look`,
-      );
+      const s = await api<{
+        newCount: number;
+        matchedCount: number;
+        unmatchedCount: number;
+        ambiguousCount: number;
+        ignoredCount: number;
+      }>("/api/payments/sync", { method: "POST", body: JSON.stringify({ force: true }) });
+      const bits = [`${s.newCount} new`, `${s.matchedCount} matched`, `${s.unmatchedCount + s.ambiguousCount} need a look`];
+      if (s.ignoredCount) bits.push(`${s.ignoredCount} set aside automatically`);
+      toast(s.newCount === 0 ? "No new payments since last time" : bits.join(" · "));
       await load();
       router.refresh();
     } catch (err) {
@@ -125,6 +136,19 @@ export function PaymentMatching({
     }
   }
 
+  async function unignore(payer: IgnoredPayer) {
+    setBusyId(payer.id);
+    try {
+      await api(`/api/payments/ignored/${payer.id}`, { method: "DELETE" });
+      toast(`${payer.label} will show up again`);
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't save that");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col gap-3 px-4 py-3.5">
@@ -132,7 +156,8 @@ export function PaymentMatching({
         <p className="text-[12px] leading-[1.6] text-muted">
           Your bank feed is checked for money in, and each payment is matched to a client by the reference they used
           (<span className="font-mono">JS4</span> and so on). A match marks their oldest unpaid session as paid, and
-          fills in the amount for sliding-scale sessions. Anything that doesn&apos;t match waits below for you.
+          fills in the amount for sliding-scale sessions. Anything that doesn&apos;t match waits below for you — mark
+          one &ldquo;Not a session payment&rdquo; once and that sender is set aside automatically from then on.
         </p>
         {configured === false && (
           <p className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12px] leading-[1.6] text-clay-text">
@@ -241,13 +266,34 @@ export function PaymentMatching({
                   ))}
                 </select>
                 <button
-                  onClick={() => resolve(tx.id, { ignore: true }, "Set aside")}
+                  onClick={() => resolve(tx.id, { ignore: true }, "Set aside — won't ask about this sender again")}
                   disabled={busyId === tx.id}
                   className="cursor-pointer text-[11.5px] font-semibold text-muted hover:text-ink-soft disabled:cursor-default"
                 >
                   Not a session payment
                 </button>
               </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {ignoredPayers.length > 0 && (
+        <Card className="flex flex-col gap-3 px-4 py-3.5">
+          <div className="text-[13px] font-semibold text-ink">Always set aside</div>
+          <p className="text-[12px] leading-[1.6] text-muted">
+            Payments from these senders are filed away automatically instead of waiting for you above.
+          </p>
+          {ignoredPayers.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-3 border-t border-hairline pt-2.5 first:border-0 first:pt-0">
+              <span className="text-[12.5px] text-ink">{p.label || "Unknown sender"}</span>
+              <button
+                onClick={() => unignore(p)}
+                disabled={busyId === p.id}
+                className="cursor-pointer text-[11.5px] font-semibold text-muted hover:text-ink-soft disabled:cursor-default"
+              >
+                Stop ignoring
+              </button>
             </div>
           ))}
         </Card>

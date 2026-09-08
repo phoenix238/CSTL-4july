@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   chooseBookingToSettle,
   matchReference,
+  normaliseCounterParty,
   normaliseRef,
   suggestClientByName,
   type PayableBooking,
@@ -60,6 +61,18 @@ describe("matchReference", () => {
   it("does not match on the sender's name", () => {
     // Names are exactly what references exist to disambiguate.
     expect(matchReference("JONO SMITH", CANDIDATES)).toEqual({ status: "none" });
+  });
+});
+
+describe("normaliseCounterParty", () => {
+  it("is stable under case and minor formatting drift", () => {
+    expect(normaliseCounterParty("C&B Hospitality Li")).toBe("C B HOSPITALITY LI");
+    expect(normaliseCounterParty("  Tax 25-26  ")).toBe("TAX 25 26");
+    expect(normaliseCounterParty("tax   25-26")).toBe("TAX 25 26");
+  });
+
+  it("treats different senders as different keys", () => {
+    expect(normaliseCounterParty("Tax 25-26")).not.toBe(normaliseCounterParty("Jono Smith"));
   });
 });
 

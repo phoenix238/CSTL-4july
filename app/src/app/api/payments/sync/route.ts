@@ -7,7 +7,7 @@ import { isStarlingConfigured } from "@/lib/starling";
 
 /** Current state of payment matching, plus anything waiting to be assigned. */
 export const GET = guarded(async () => {
-  const [pending, recent, clients] = await Promise.all([
+  const [pending, recent, clients, ignoredPayers] = await Promise.all([
     prisma.bankTransaction.findMany({
       where: { status: { in: ["unmatched", "ambiguous"] } },
       orderBy: { transactedAt: "desc" },
@@ -19,6 +19,7 @@ export const GET = guarded(async () => {
       take: 10,
     }),
     prisma.client.findMany({ select: { id: true, name: true } }),
+    prisma.ignoredPayer.findMany({ orderBy: { createdAt: "desc" } }),
   ]);
 
   // Pre-suggest a client for each unassigned row from the sender's bank name —
@@ -36,7 +37,12 @@ export const GET = guarded(async () => {
     };
   });
 
-  return NextResponse.json({ configured: isStarlingConfigured(), pending: pendingWithSuggestions, recent });
+  return NextResponse.json({
+    configured: isStarlingConfigured(),
+    pending: pendingWithSuggestions,
+    recent,
+    ignoredPayers,
+  });
 });
 
 /**
