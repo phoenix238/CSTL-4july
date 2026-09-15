@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
-import { chooseBookingToSettle } from "@/lib/payments/match";
+import { chooseBookingToSettle, normalisePayerName, normaliseRef } from "@/lib/payments/match";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
 import { fmtDayLong } from "@/lib/time";
 
@@ -25,6 +25,42 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
 
   if (!clientId) throw new Error("Pick a client to assign this payment to.");
   if (tx.status === "matched") throw new Error("That payment has already been applied.");
+
+  // A human has now vouched for this payment belonging to this client — remember
+  // what it looked like, for next time.
+  if (tx.counterParty || tx.reference) {
+    const client = await prisma.client.findUniqueOrThrow({
+      where: { id: clientId },
+      select: { knownPayerNames: true, knownReferences: true, paymentRef: true },
+    });
+    const remember: { knownPayerNames?: { push: string }; knownReferences?: { push: string } } = {};
+
+    // The bank name: remembered as an automatic match next time (matchKnownPayer)
+    // — exact string only, so it stays as safe as a reference. A slightly
+    // different name on a future transfer just falls back to this same queue
+    // rather than being guessed.
+    if (tx.counterParty && !client.knownPayerNames.some((n) => normalisePayerName(n) === normalisePayerName(tx.counterParty))) {
+      remember.knownPayerNames = { push: tx.counterParty };
+    }
+
+    // The reference text they actually typed, when it isn't their issued
+    // reference (which the automatic matcher already recognises on its own).
+    // People tend to reuse whatever they typed the first time, but free text is
+    // weaker evidence than a bank name, so this only ever pre-fills the manual
+    // queue for a one-tap confirm (suggestClientByKnownReference) — never a
+    // definite, automatic match.
+    if (
+      tx.reference &&
+      normaliseRef(tx.reference) !== normaliseRef(client.paymentRef) &&
+      !client.knownReferences.some((r) => normaliseRef(r) === normaliseRef(tx.reference))
+    ) {
+      remember.knownReferences = { push: tx.reference };
+    }
+
+    if (Object.keys(remember).length) {
+      await prisma.client.update({ where: { id: clientId }, data: remember });
+    }
+  }
 
   const bookings = await prisma.booking.findMany({
     where: { clientId },
@@ -52,7 +88,7 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   });
   await prisma.bankTransaction.update({
     where: { id },
-    data: { status: "matched", clientId, bookingId: target.id },
+    data: { status: "matched", clientId, bookingId: target.id, matchedVia: "manual" },
   });
   await sendPendingReceiptIfAny(clientId);
 

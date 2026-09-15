@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   chooseBookingToSettle,
+  matchKnownPayer,
   matchReference,
   normaliseRef,
+  suggestClientByKnownReference,
   suggestClientByName,
   type PayableBooking,
 } from "./match";
@@ -89,6 +91,71 @@ describe("suggestClientByName", () => {
   it("suggests no one for an empty or symbol-only sender", () => {
     expect(suggestClientByName("", clients)).toBeNull();
     expect(suggestClientByName("—", clients)).toBeNull();
+  });
+});
+
+describe("matchKnownPayer", () => {
+  const clients = [
+    { clientId: "a", knownPayerNames: ["MR P PHILLIPS"] },
+    { clientId: "b", knownPayerNames: ["Sarah Kimani"] },
+  ];
+
+  it("matches a remembered payer exactly, ignoring case and punctuation", () => {
+    expect(matchKnownPayer("mr p phillips", clients)).toEqual({ status: "matched", clientId: "a" });
+    expect(matchKnownPayer("Sarah  Kimani", clients)).toEqual({ status: "matched", clientId: "b" });
+  });
+
+  it("does not match a name that only overlaps — remembering is exact, not fuzzy", () => {
+    expect(matchKnownPayer("P PHILLIPS", clients)).toEqual({ status: "none" });
+    expect(matchKnownPayer("MR P PHILLIPS JOINT ACCOUNT", clients)).toEqual({ status: "none" });
+  });
+
+  it("returns none for a sender with no remembered match", () => {
+    expect(matchKnownPayer("Someone Else", clients)).toEqual({ status: "none" });
+    expect(matchKnownPayer("", clients)).toEqual({ status: "none" });
+  });
+
+  it("refuses to guess when the same remembered name was somehow given to two clients", () => {
+    const dup = [
+      { clientId: "a", knownPayerNames: ["Jono Smith"] },
+      { clientId: "b", knownPayerNames: ["Jono Smith"] },
+    ];
+    const result = matchKnownPayer("Jono Smith", dup);
+    expect(result.status).toBe("ambiguous");
+    if (result.status === "ambiguous") expect(result.clientIds.sort()).toEqual(["a", "b"]);
+  });
+
+  it("ignores a client with no remembered payer yet", () => {
+    expect(matchKnownPayer("Anyone", [{ clientId: "nobody", knownPayerNames: [] }])).toEqual({ status: "none" });
+  });
+});
+
+describe("suggestClientByKnownReference", () => {
+  const clients = [
+    { clientId: "a", knownReferences: ["for my session"] },
+    { clientId: "b", knownReferences: ["thanks!"] },
+  ];
+
+  it("suggests the client who typed this exact text before", () => {
+    expect(suggestClientByKnownReference("FOR MY SESSION", clients)).toBe("a");
+    expect(suggestClientByKnownReference("thanks !", clients)).toBe("b");
+  });
+
+  it("does not suggest on a partial repeat — exact only, like matchKnownPayer", () => {
+    expect(suggestClientByKnownReference("for my session in August", clients)).toBeNull();
+  });
+
+  it("returns null for text nobody has typed before", () => {
+    expect(suggestClientByKnownReference("something new", clients)).toBeNull();
+    expect(suggestClientByKnownReference("", clients)).toBeNull();
+  });
+
+  it("suggests no one when two clients share a remembered reference", () => {
+    const dup = [
+      { clientId: "a", knownReferences: ["cash for cranio"] },
+      { clientId: "b", knownReferences: ["cash for cranio"] },
+    ];
+    expect(suggestClientByKnownReference("cash for cranio", dup)).toBeNull();
   });
 });
 

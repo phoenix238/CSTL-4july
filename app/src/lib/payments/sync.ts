@@ -4,7 +4,7 @@ import { formatPence } from "@/lib/account";
 import { fmtDayLong } from "@/lib/time";
 import { fetchIncomingPayments, type BankPayment } from "@/lib/starling";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
-import { chooseBookingToSettle, matchReference, type RefCandidate } from "./match";
+import { chooseBookingToSettle, matchReference, matchKnownPayer, type RefCandidate, type PayerCandidate, type MatchResult } from "./match";
 
 /**
  * Pull settled payments from the bank, match them to clients by reference, and
@@ -55,19 +55,35 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
   const known = new Set(seen.map((s) => s.feedItemUid));
   const fresh = payments.filter((p) => !known.has(p.feedItemUid));
 
-  const clients = await prisma.client.findMany({
-    where: { paymentRef: { not: "" } },
-    select: { id: true, name: true, paymentRef: true },
+  const allClients = await prisma.client.findMany({
+    select: { id: true, name: true, paymentRef: true, knownPayerNames: true },
   });
-  const candidates: RefCandidate[] = clients.map((c) => ({ clientId: c.id, paymentRef: c.paymentRef }));
-  const nameOf = new Map(clients.map((c) => [c.id, c.name]));
+  const candidates: RefCandidate[] = allClients
+    .filter((c) => c.paymentRef)
+    .map((c) => ({ clientId: c.id, paymentRef: c.paymentRef }));
+  const payerCandidates: PayerCandidate[] = allClients
+    .filter((c) => c.knownPayerNames.length)
+    .map((c) => ({ clientId: c.id, knownPayerNames: c.knownPayerNames }));
+  const nameOf = new Map(allClients.map((c) => [c.id, c.name]));
 
   const summary: SyncSummary = { newCount: fresh.length, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0 };
-  const applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string }> = [];
+  const applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string; matchedVia: "reference" | "payer" }> = [];
   const needsAttention: BankPayment[] = [];
 
   for (const payment of fresh) {
-    const result = matchReference(payment.reference, candidates);
+    let result: MatchResult = matchReference(payment.reference, candidates);
+    let matchedVia: "reference" | "payer" = "reference";
+    // No reference match — fall back to a payer a human has vouched for before.
+    // An ambiguous *reference* is left as-is rather than retried here: that's a
+    // real conflict between references, not something a remembered name should
+    // paper over.
+    if (result.status === "none") {
+      const payerResult = matchKnownPayer(payment.counterParty, payerCandidates);
+      if (payerResult.status !== "none") {
+        result = payerResult;
+        matchedVia = "payer";
+      }
+    }
 
     if (result.status === "none") {
       summary.unmatchedCount++;
@@ -112,7 +128,10 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
           // already has one keeps it: the amount agreed isn't ours to overwrite
           // from a transfer that might be part payment or cover something else.
           amountPence: target.amountPence ?? payment.amountPence,
-          paymentNote: `Bank transfer ${fmtDayLong(payment.transactedAt)} · ref ${payment.reference || "—"}`,
+          paymentNote:
+            matchedVia === "payer"
+              ? `Bank transfer ${fmtDayLong(payment.transactedAt)} · from remembered payer ${payment.counterParty || "—"}`
+              : `Bank transfer ${fmtDayLong(payment.transactedAt)} · ref ${payment.reference || "—"}`,
         },
       });
       await sendPendingReceiptIfAny(result.clientId);
@@ -121,11 +140,13 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
       status: "matched",
       clientId: result.clientId,
       bookingId: target.id,
+      matchedVia,
     });
     summary.matchedCount++;
     applied.push({
       payment,
       clientName: nameOf.get(result.clientId) ?? "A client",
+      matchedVia,
       whenLabel: fmtDayLong(target.startsAt),
     });
   }
@@ -140,7 +161,7 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
 
 async function recordTransaction(
   payment: BankPayment,
-  extra: { status: string; clientId?: string; bookingId?: string },
+  extra: { status: string; clientId?: string; bookingId?: string; matchedVia?: "reference" | "payer" },
 ) {
   await prisma.bankTransaction.upsert({
     where: { feedItemUid: payment.feedItemUid },
@@ -160,7 +181,7 @@ async function recordTransaction(
 
 /** Tell Phoenix what landed. Non-fatal — the payments are already recorded. */
 async function notify(
-  applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string }>,
+  applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string; matchedVia: "reference" | "payer" }>,
   needsAttention: BankPayment[],
   autoMarked: boolean,
 ) {
@@ -171,7 +192,8 @@ async function notify(
   if (applied.length) {
     lines.push(autoMarked ? "Payments received and marked paid:" : "Payments received (waiting for you to apply):", "");
     for (const a of applied) {
-      lines.push(`  ${a.clientName} — ${formatPence(a.payment.amountPence)} · session ${a.whenLabel}`);
+      const via = a.matchedVia === "payer" ? " · matched by remembered payer, not reference" : "";
+      lines.push(`  ${a.clientName} — ${formatPence(a.payment.amountPence)} · session ${a.whenLabel}${via}`);
     }
   }
   if (needsAttention.length) {
