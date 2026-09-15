@@ -98,6 +98,35 @@ export function suggestClientByName(counterParty: string, candidates: NameCandid
   return hits.length === 1 ? hits[0] : null;
 }
 
+export interface KnownReferenceCandidate {
+  clientId: string;
+  /** Free-text references this client has been hand-assigned under before. */
+  knownReferences: string[];
+}
+
+/**
+ * A *suggestion* — never an automatic match — from reference text a client has
+ * used before, once a human confirmed it against them once. People tend to
+ * reuse whatever they typed the first time, even when it isn't their issued
+ * reference, so a repeat is worth surfacing — but unlike matchKnownPayer, this
+ * stays a suggestion rather than an automatic credit: a client's issued
+ * reference is something only they'd plausibly type, a name overlap is
+ * constrained to every word matching, but arbitrary free text repeating is
+ * weaker evidence than either, so it only pre-selects the manual queue for a
+ * one-tap confirm, the same as suggestClientByName.
+ */
+export function suggestClientByKnownReference(reference: string, candidates: KnownReferenceCandidate[]): string | null {
+  const whole = normaliseRef(reference);
+  if (!whole) return null;
+
+  const hits = new Set<string>();
+  for (const c of candidates) {
+    if (c.knownReferences.some((r) => normaliseRef(r) === whole)) hits.add(c.clientId);
+  }
+  const ids = [...hits];
+  return ids.length === 1 ? ids[0] : null;
+}
+
 export interface PayerCandidate {
   clientId: string;
   /** Counterparty names this client has previously been hand-assigned under. */

@@ -60,6 +60,11 @@ model Client {
   // payment from the same exact name matches automatically without a reference.
   // Exact match only, never fuzzy — see matchKnownPayer in payments/match.ts.
   knownPayerNames String[]    @default([])
+  // Free-text references (not the issued paymentRef) a payment has been
+  // hand-assigned under, since clients tend to reuse whatever they typed the
+  // first time. Only ever a suggestion on the manual queue, never an automatic
+  // match — see suggestClientByKnownReference in payments/match.ts.
+  knownReferences String[]    @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]

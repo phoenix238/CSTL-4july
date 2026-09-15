@@ -4,6 +4,7 @@ import {
   matchKnownPayer,
   matchReference,
   normaliseRef,
+  suggestClientByKnownReference,
   suggestClientByName,
   type PayableBooking,
 } from "./match";
@@ -126,6 +127,35 @@ describe("matchKnownPayer", () => {
 
   it("ignores a client with no remembered payer yet", () => {
     expect(matchKnownPayer("Anyone", [{ clientId: "nobody", knownPayerNames: [] }])).toEqual({ status: "none" });
+  });
+});
+
+describe("suggestClientByKnownReference", () => {
+  const clients = [
+    { clientId: "a", knownReferences: ["for my session"] },
+    { clientId: "b", knownReferences: ["thanks!"] },
+  ];
+
+  it("suggests the client who typed this exact text before", () => {
+    expect(suggestClientByKnownReference("FOR MY SESSION", clients)).toBe("a");
+    expect(suggestClientByKnownReference("thanks !", clients)).toBe("b");
+  });
+
+  it("does not suggest on a partial repeat — exact only, like matchKnownPayer", () => {
+    expect(suggestClientByKnownReference("for my session in August", clients)).toBeNull();
+  });
+
+  it("returns null for text nobody has typed before", () => {
+    expect(suggestClientByKnownReference("something new", clients)).toBeNull();
+    expect(suggestClientByKnownReference("", clients)).toBeNull();
+  });
+
+  it("suggests no one when two clients share a remembered reference", () => {
+    const dup = [
+      { clientId: "a", knownReferences: ["cash for cranio"] },
+      { clientId: "b", knownReferences: ["cash for cranio"] },
+    ];
+    expect(suggestClientByKnownReference("cash for cranio", dup)).toBeNull();
   });
 });
 

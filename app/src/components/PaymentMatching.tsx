@@ -134,7 +134,8 @@ export function PaymentMatching({
           (<span className="font-mono">JS4</span> and so on). A match marks their oldest unpaid session as paid, and
           fills in the amount for sliding-scale sessions. If a payment has no reference but comes from a bank name
           you&apos;ve assigned to someone before, it matches the same way. Anything else waits below for you — and
-          assigning one by hand teaches it that name for next time.
+          assigning one by hand teaches it that name for next time, and pre-selects the same client if they ever
+          repeat whatever text they typed before, though that&apos;s only ever a one-tap suggestion, not a match.
         </p>
         {configured === false && (
           <p className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12px] leading-[1.6] text-clay-text">
