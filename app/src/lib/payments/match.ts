@@ -4,8 +4,10 @@
  * Pure and unit-tested, because getting this wrong means crediting one person's
  * money to another. The rule is deliberately strict: a reference matches only
  * when it equals a client's reference outright, or appears as a whole word
- * inside it. Nothing is guessed from the sender's name — two clients called Jono
- * are exactly the case references exist to solve.
+ * inside it. Nothing is *guessed* from the sender's name — two clients called
+ * Jono are exactly the case references exist to solve — but matchKnownPayer
+ * below is the one exception: an automatic match on a name a human has already
+ * vouched for once, which is a different, safer thing than guessing.
  */
 
 /** Upper-case, letters and digits only — how a reference is compared. */
@@ -94,6 +96,43 @@ export function suggestClientByName(counterParty: string, candidates: NameCandid
     if (tokens.every((t) => payer.has(t))) hits.push(c.clientId);
   }
   return hits.length === 1 ? hits[0] : null;
+}
+
+export interface PayerCandidate {
+  clientId: string;
+  /** Counterparty names this client has previously been hand-assigned under. */
+  knownPayerNames: string[];
+}
+
+/** Lower-case, collapsed whitespace — how a remembered payer name is compared. */
+export function normalisePayerName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * Match a payment to a client by the sender's bank name — but only when that
+ * exact name has been recorded against the client before, from a human
+ * confirming it once (see the assignment route). Unlike suggestClientByName,
+ * this *is* an automatic match: it's applied the same as a reference match.
+ *
+ * Still exact, never fuzzy — a name has to equal a remembered one outright, not
+ * merely overlap with it. That's what keeps it as safe as a reference once a
+ * human has vouched for the name once; guessing from an unconfirmed name is
+ * exactly what suggestClientByName is for instead.
+ */
+export function matchKnownPayer(counterParty: string, candidates: PayerCandidate[]): MatchResult {
+  const payer = normalisePayerName(counterParty);
+  if (!payer) return { status: "none" };
+
+  const hits = new Set<string>();
+  for (const c of candidates) {
+    if (c.knownPayerNames.some((n) => normalisePayerName(n) === payer)) hits.add(c.clientId);
+  }
+
+  const ids = [...hits];
+  if (ids.length === 1) return { status: "matched", clientId: ids[0] };
+  if (ids.length > 1) return { status: "ambiguous", clientIds: ids };
+  return { status: "none" };
 }
 
 export interface PayableBooking {

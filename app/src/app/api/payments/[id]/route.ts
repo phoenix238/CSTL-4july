@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
-import { chooseBookingToSettle } from "@/lib/payments/match";
+import { chooseBookingToSettle, normalisePayerName } from "@/lib/payments/match";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
 import { fmtDayLong } from "@/lib/time";
 
@@ -25,6 +25,19 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
 
   if (!clientId) throw new Error("Pick a client to assign this payment to.");
   if (tx.status === "matched") throw new Error("That payment has already been applied.");
+
+  // A human has now vouched for this exact bank name belonging to this client —
+  // remember it so the next payment from the same name matches on its own next
+  // time, with no reference needed. Exact string only, so it stays as safe as a
+  // reference: a slightly different name on a future transfer just falls back to
+  // this same queue rather than being guessed.
+  if (tx.counterParty) {
+    const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId }, select: { knownPayerNames: true } });
+    const already = client.knownPayerNames.some((n) => normalisePayerName(n) === normalisePayerName(tx.counterParty));
+    if (!already) {
+      await prisma.client.update({ where: { id: clientId }, data: { knownPayerNames: { push: tx.counterParty } } });
+    }
+  }
 
   const bookings = await prisma.booking.findMany({
     where: { clientId },
@@ -52,7 +65,7 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   });
   await prisma.bankTransaction.update({
     where: { id },
-    data: { status: "matched", clientId, bookingId: target.id },
+    data: { status: "matched", clientId, bookingId: target.id, matchedVia: "manual" },
   });
   await sendPendingReceiptIfAny(clientId);
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   chooseBookingToSettle,
+  matchKnownPayer,
   matchReference,
   normaliseRef,
   suggestClientByName,
@@ -89,6 +90,42 @@ describe("suggestClientByName", () => {
   it("suggests no one for an empty or symbol-only sender", () => {
     expect(suggestClientByName("", clients)).toBeNull();
     expect(suggestClientByName("—", clients)).toBeNull();
+  });
+});
+
+describe("matchKnownPayer", () => {
+  const clients = [
+    { clientId: "a", knownPayerNames: ["MR P PHILLIPS"] },
+    { clientId: "b", knownPayerNames: ["Sarah Kimani"] },
+  ];
+
+  it("matches a remembered payer exactly, ignoring case and punctuation", () => {
+    expect(matchKnownPayer("mr p phillips", clients)).toEqual({ status: "matched", clientId: "a" });
+    expect(matchKnownPayer("Sarah  Kimani", clients)).toEqual({ status: "matched", clientId: "b" });
+  });
+
+  it("does not match a name that only overlaps — remembering is exact, not fuzzy", () => {
+    expect(matchKnownPayer("P PHILLIPS", clients)).toEqual({ status: "none" });
+    expect(matchKnownPayer("MR P PHILLIPS JOINT ACCOUNT", clients)).toEqual({ status: "none" });
+  });
+
+  it("returns none for a sender with no remembered match", () => {
+    expect(matchKnownPayer("Someone Else", clients)).toEqual({ status: "none" });
+    expect(matchKnownPayer("", clients)).toEqual({ status: "none" });
+  });
+
+  it("refuses to guess when the same remembered name was somehow given to two clients", () => {
+    const dup = [
+      { clientId: "a", knownPayerNames: ["Jono Smith"] },
+      { clientId: "b", knownPayerNames: ["Jono Smith"] },
+    ];
+    const result = matchKnownPayer("Jono Smith", dup);
+    expect(result.status).toBe("ambiguous");
+    if (result.status === "ambiguous") expect(result.clientIds.sort()).toEqual(["a", "b"]);
+  });
+
+  it("ignores a client with no remembered payer yet", () => {
+    expect(matchKnownPayer("Anyone", [{ clientId: "nobody", knownPayerNames: [] }])).toEqual({ status: "none" });
   });
 });
 

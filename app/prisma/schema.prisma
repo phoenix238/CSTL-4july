@@ -56,6 +56,10 @@ model Client {
   // email until they visit their portal and switch one on themselves; an existing
   // client is never silently opted in by this column's default.
   reminderLeadDays Int[]      @default([])
+  // Bank counterparty names a payment has been hand-assigned under, so a future
+  // payment from the same exact name matches automatically without a reference.
+  // Exact match only, never fuzzy — see matchKnownPayer in payments/match.ts.
+  knownPayerNames String[]    @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   bookings      Booking[]
@@ -445,9 +449,13 @@ model BankTransaction {
   transactedAt DateTime
   amountPence  Int
   reference    String   @default("") // as the payer typed it
-  counterParty String   @default("") // sender's name — for eyeballing, never for matching
+  counterParty String   @default("") // sender's name — for eyeballing, and for a remembered-payer match once a human has confirmed it once (see matchedVia)
   // matched | unmatched | ambiguous | ignored
   status       String   @default("unmatched")
+  // How a "matched" row got there — "" for anything not matched, or for rows
+  // predating this column. "reference" | "payer" | "manual" (hand-assigned with
+  // no automatic rule involved).
+  matchedVia   String   @default("")
   clientId     String?
   bookingId    String? // the session this settled, when one was chosen
   createdAt    DateTime @default(now())

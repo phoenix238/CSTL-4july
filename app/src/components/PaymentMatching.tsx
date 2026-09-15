@@ -132,7 +132,9 @@ export function PaymentMatching({
         <p className="text-[12px] leading-[1.6] text-muted">
           Your bank feed is checked for money in, and each payment is matched to a client by the reference they used
           (<span className="font-mono">JS4</span> and so on). A match marks their oldest unpaid session as paid, and
-          fills in the amount for sliding-scale sessions. Anything that doesn&apos;t match waits below for you.
+          fills in the amount for sliding-scale sessions. If a payment has no reference but comes from a bank name
+          you&apos;ve assigned to someone before, it matches the same way. Anything else waits below for you — and
+          assigning one by hand teaches it that name for next time.
         </p>
         {configured === false && (
           <p className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12px] leading-[1.6] text-clay-text">
