@@ -47,6 +47,10 @@ export function ClientAccountPanel({
   const [sending, setSending] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // What's typed into each unpaid session's cash box, keyed by booking id —
+  // separate from the saved amountPence so a half-typed figure isn't lost on
+  // every re-render while still defaulting to whatever's already on record.
+  const [cashInput, setCashInput] = useState<Record<string, string>>({});
 
   const account = summariseAccount(
     bookings.map((b): AccountBooking => ({ ...b, startsAt: new Date(b.startsAtISO) })),
@@ -63,6 +67,27 @@ export function ClientAccountPanel({
     } finally {
       setBusyId(null);
     }
+  }
+
+  // Take the cash amount typed for this session and mark it paid in one save —
+  // what actually changed hands, recorded at the moment it's handed over.
+  async function takeCash(bookingId: string) {
+    const raw = cashInput[bookingId] ?? "";
+    const pounds = parseFloat(raw);
+    if (!Number.isFinite(pounds) || pounds < 0) {
+      toast("Enter how much cash they gave you first");
+      return;
+    }
+    await patch(
+      bookingId,
+      { paid: true, amountPence: Math.round(pounds * 100), paymentNote: "Cash" },
+      `Recorded £${pounds % 1 === 0 ? pounds : pounds.toFixed(2)} cash ✓`,
+    );
+    setCashInput((s) => {
+      const next = { ...s };
+      delete next[bookingId];
+      return next;
+    });
   }
 
   async function copyLink() {
@@ -193,24 +218,37 @@ export function ClientAccountPanel({
                       {fmtDate(new Date(b.startsAtISO))}
                       <span className="ml-1.5 text-[11px] text-muted">{CLINIC_LABEL[b.clinic as Clinic]}</span>
                     </span>
-                    {!cancelled && (
+                    {!cancelled && b.paid && (
                       <button
-                        onClick={() =>
-                          patch(b.id, { paid: !b.paid }, b.paid ? "Marked unpaid" : "Marked paid ✓")
-                        }
+                        onClick={() => patch(b.id, { paid: false }, "Marked unpaid")}
                         disabled={busyId === b.id}
-                        className={`cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-semibold disabled:cursor-default disabled:opacity-50 ${
-                          b.paid
-                            ? "bg-clay-tint text-clay-text"
-                            : "border border-line text-[oklch(0.55_0.12_25)] hover:bg-hoverbg"
-                        }`}
+                        className="cursor-pointer rounded-full bg-clay-tint px-2.5 py-0.5 text-[11px] font-semibold text-clay-text disabled:cursor-default disabled:opacity-50"
                       >
-                        {busyId === b.id
-                          ? "…"
-                          : b.paid
-                            ? `Paid${b.amountPence != null ? ` · ${formatPence(b.amountPence)}` : ""}`
-                            : "Mark paid"}
+                        {busyId === b.id ? "…" : `Paid${b.amountPence != null ? ` · ${formatPence(b.amountPence)}` : ""}`}
                       </button>
+                    )}
+                    {!cancelled && !b.paid && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted">£</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          placeholder="cash"
+                          value={cashInput[b.id] ?? (b.amountPence != null ? String(b.amountPence / 100) : "")}
+                          onChange={(e) => setCashInput((s) => ({ ...s, [b.id]: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && takeCash(b.id)}
+                          className="w-14 rounded-full border border-line bg-card px-2 py-0.5 text-[11px] text-ink outline-none focus:border-clay"
+                        />
+                        <button
+                          onClick={() => takeCash(b.id)}
+                          disabled={busyId === b.id}
+                          className="cursor-pointer rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-[oklch(0.55_0.12_25)] hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
+                        >
+                          {busyId === b.id ? "…" : "Paid"}
+                        </button>
+                      </div>
                     )}
                   </div>
                   {openGoodwill && (
