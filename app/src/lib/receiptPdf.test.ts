@@ -6,6 +6,7 @@ describe("buildReceiptPdf", () => {
     const bytes = await buildReceiptPdf({
       clientName: "Rose Purbrick",
       clientRef: "RP14",
+      receiptNumber: "RCT-42",
       lines: [
         {
           whenLabel: "Thursday 17 September",

@@ -481,6 +481,16 @@ model PaymentRefCounter {
   next Int @default(1)
 }
 
+// Single row (id = 1). Hands out the sequential number in a receipt's own
+// number ("RCT-42") — separate from a client's payment reference, which stays
+// the same across every receipt they're ever sent. Same atomic-counter shape
+// as PaymentRefCounter, for the same reason: two receipts issued at the same
+// moment must never collide.
+model ReceiptNumberCounter {
+  id   Int @id @default(1)
+  next Int @default(1)
+}
+
 // The single shared "Phoenix" room block on the Chalk Farm calendar for one day.
 // Bethnal Green sessions nest inside it; the block auto-grows/shrinks to span the
 // day's sessions, so clients can sit as close as the schedule allows (not 2h apart).

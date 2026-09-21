@@ -95,6 +95,8 @@ export const POST = guarded(async (req: Request) => {
         clientName,
         clientEmail: to,
         clientRef: paymentRef,
+        // A made-up number rather than issueReceiptNumber() — a test send shouldn't burn a real one.
+        receiptNumber: "RCT-SAMPLE",
         lines: [{ whenLabel, clinic, clinicLabel: CLINIC_LABEL[clinic], amountPence: 4000, paymentNote: "Cash" }],
         totalPence: 4000,
         unpricedCount: 0,

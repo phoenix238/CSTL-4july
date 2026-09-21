@@ -5,6 +5,27 @@ import { sendReceipt } from "@/lib/portalNotify";
 import { getOrCreatePaymentRef } from "@/lib/portal";
 
 /**
+ * Take the next number in the shared receipt-number sequence. Atomic — Postgres
+ * serialises the increment, so two receipts issued at the same instant can
+ * never collide. Mirrors `nextRefNumber` in lib/portal.ts, which does the same
+ * thing for a client's payment reference; this is a separate counter because a
+ * receipt number needs to be unique *per document issued*, not per client.
+ */
+async function nextReceiptNumber(): Promise<number> {
+  const row = await prisma.receiptNumberCounter.upsert({
+    where: { id: 1 },
+    create: { id: 1, next: 2 },
+    update: { next: { increment: 1 } },
+  });
+  return row.next - 1;
+}
+
+/** A fresh receipt number, e.g. "RCT-42" — a new one every time a receipt is issued. */
+export async function issueReceiptNumber(): Promise<string> {
+  return `RCT-${await nextReceiptNumber()}`;
+}
+
+/**
  * Build and send a client's receipt.
  *
  * Shared by the client's own "email me a receipt" button and Phoenix's from the
@@ -42,6 +63,7 @@ export async function sendClientReceipt(clientId: string): Promise<{ sentTo: str
     clientName: client.name,
     clientEmail: client.email,
     clientRef: await getOrCreatePaymentRef(clientId),
+    receiptNumber: await issueReceiptNumber(),
     lines: paid.map((b) => ({
       whenLabel: fmtDayLong(b.startsAt),
       clinic: b.clinic as Clinic,
