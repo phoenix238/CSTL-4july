@@ -131,7 +131,7 @@ export function composePaymentReminder(
   const lines = [
     `Hi ${first},`,
     "",
-    `Just a gentle note about your session on ${input.whenLabel} at ${CLINIC_LABEL[input.clinic]} — whenever you're able, here's how to settle it.`,
+    `Just a gentle note about your session on ${input.whenLabel} at ${CLINIC_LABEL[input.clinic]}. Whenever you're able, here's how to settle it.`,
   ];
   const bank = [
     settings.bankAccountName?.trim() && `  Account name: ${settings.bankAccountName.trim()}`,
@@ -141,15 +141,15 @@ export function composePaymentReminder(
   ].filter(Boolean) as string[];
   if (bank.length) {
     lines.push("", "For a bank transfer:", ...bank);
-    if (input.paymentRef) lines.push("Please use that reference — it's how I match your payment to you.");
+    if (input.paymentRef) lines.push("Please use that reference. It's how I match your payment to you.");
   }
   if (input.portalLink) lines.push("", "You can also see this any time on your own page:", input.portalLink);
   const price = CLINIC_PRICE[input.clinic];
   lines.push(
     "",
     input.clinic === "bethnal"
-      ? `This is a donation-based practice on a ${price}, so pay what feels fair — if you need more time to pay, just let me know when that'll be.`
-      : `The session is ${price} — if you need more time to pay, just let me know when that'll be.`,
+      ? `This is a donation-based practice on a ${price}, so pay what feels fair. If you need more time to pay, just let me know when that'll be.`
+      : `The session is ${price}. If you need more time to pay, just let me know when that'll be.`,
     "",
     ...resolveSignOff(settings).split("\n"),
   );
