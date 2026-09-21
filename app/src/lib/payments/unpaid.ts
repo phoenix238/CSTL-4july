@@ -148,8 +148,8 @@ export function composePaymentReminder(
   lines.push(
     "",
     input.clinic === "bethnal"
-      ? `This is a donation-based practice on a ${price}, so pay what feels fair — and if now isn't a good time, that's completely okay.`
-      : `The session is ${price} — whenever you're able is fine, and if now isn't a good time, that's completely okay.`,
+      ? `This is a donation-based practice on a ${price}, so pay what feels fair — if you need more time to pay, just let me know when that'll be.`
+      : `The session is ${price} — if you need more time to pay, just let me know when that'll be.`,
     "",
     ...resolveSignOff(settings).split("\n"),
   );
