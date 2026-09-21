@@ -81,6 +81,7 @@ export interface SettingsData {
   bankSortCode: string;
   bankAccountNumber: string;
   bankPaymentNote: string;
+  cstaMembershipId: string;
   starlingEnabled: boolean;
   starlingAutoMark: boolean;
   starlingNotifyEmail: boolean;
@@ -542,6 +543,7 @@ export function SettingsView({
             bankSortCode: settings.bankSortCode,
             bankAccountNumber: settings.bankAccountNumber,
             bankPaymentNote: settings.bankPaymentNote,
+            cstaMembershipId: settings.cstaMembershipId,
           }}
         />
       </Dropdown>

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong } from "@/lib/time";
 import { sendReceipt } from "@/lib/portalNotify";
+import { getOrCreatePaymentRef } from "@/lib/portal";
 
 /**
  * Build and send a client's receipt.
@@ -40,10 +41,13 @@ export async function sendClientReceipt(clientId: string): Promise<{ sentTo: str
   const { sent } = await sendReceipt({
     clientName: client.name,
     clientEmail: client.email,
+    clientRef: await getOrCreatePaymentRef(clientId),
     lines: paid.map((b) => ({
       whenLabel: fmtDayLong(b.startsAt),
+      clinic: b.clinic as Clinic,
       clinicLabel: CLINIC_LABEL[b.clinic as Clinic],
       amountPence: b.amountPence,
+      paymentNote: b.paymentNote,
     })),
     totalPence: paid.reduce((sum, b) => sum + (b.amountPence ?? 0), 0),
     unpricedCount: paid.filter((b) => b.amountPence == null).length,

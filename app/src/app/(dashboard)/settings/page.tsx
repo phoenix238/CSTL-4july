@@ -84,6 +84,7 @@ export default async function SettingsPage() {
         bankSortCode: settings.bankSortCode,
         bankAccountNumber: settings.bankAccountNumber,
         bankPaymentNote: settings.bankPaymentNote,
+        cstaMembershipId: settings.cstaMembershipId,
         starlingEnabled: settings.starlingEnabled,
         starlingAutoMark: settings.starlingAutoMark,
         starlingNotifyEmail: settings.starlingNotifyEmail,

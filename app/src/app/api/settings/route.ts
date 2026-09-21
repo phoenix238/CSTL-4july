@@ -60,6 +60,7 @@ export const GET = guarded(async () => {
     bankSortCode: s.bankSortCode,
     bankAccountNumber: s.bankAccountNumber,
     bankPaymentNote: s.bankPaymentNote,
+    cstaMembershipId: s.cstaMembershipId,
     clientCopy: resolveClientCopy(s.clientCopy),
     // Which calendars are wired up — for the calendar page's event composer.
     calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },
@@ -98,7 +99,7 @@ const EDITABLE_SETTINGS = [
   "portalEnabled", "portalNotifyEmail", "portalNoticeHours", "lateCancelGoodwillPence",
   "portalReceipts", "portalSelfBook",
   "ownReminderMode", "ownReminderMinutesBefore", "ownReminderMorningHour", "venueReminders",
-  "bankAccountName", "bankSortCode", "bankAccountNumber", "bankPaymentNote",
+  "bankAccountName", "bankSortCode", "bankAccountNumber", "bankPaymentNote", "cstaMembershipId",
   "starlingEnabled", "starlingAutoMark", "starlingNotifyEmail", "starlingLookbackDays",
   "personalCalendarId", "roomCalendarId", "chalkFarmCalendarId",
   "availabilityCalendarId", "availabilityDefaultClinic",

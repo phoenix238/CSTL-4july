@@ -14,6 +14,7 @@ export interface PortalSettingsData {
   bankSortCode: string;
   bankAccountNumber: string;
   bankPaymentNote: string;
+  cstaMembershipId: string;
 }
 
 function Toggle({
@@ -130,6 +131,21 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
             onChange={(e) => set("bankPaymentNote", e.target.value)}
             rows={2}
             placeholder="Cash is fine too — whatever's easiest."
+            className={inputClass}
+          />
+        </label>
+      </Card>
+
+      <Card className="flex flex-col gap-3 px-4 py-3.5">
+        <div className="text-[13px] font-semibold text-ink">Your CSTA membership</div>
+        <p className="text-[12px] leading-[1.6] text-muted">
+          Shown on every client receipt — insurers reimbursing craniosacral sessions usually ask for it.
+        </p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11.5px] font-semibold text-ink-soft">CSTA membership ID</span>
+          <input
+            value={draft.cstaMembershipId}
+            onChange={(e) => set("cstaMembershipId", e.target.value)}
             className={inputClass}
           />
         </label>
