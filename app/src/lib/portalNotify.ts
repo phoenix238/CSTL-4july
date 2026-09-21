@@ -185,14 +185,17 @@ export async function sendReceipt({
   clientName,
   clientEmail,
   clientRef,
+  receiptNumber,
   lines: sessions,
   totalPence,
   unpricedCount,
 }: {
   clientName: string;
   clientEmail: string;
-  /** The client's own payment reference — doubles as this receipt's reference number. */
+  /** The client's own payment reference — the same on every receipt they're sent. */
   clientRef?: string;
+  /** A fresh number for this specific receipt document, e.g. "RCT-42" — unlike clientRef, never repeats. */
+  receiptNumber?: string;
   lines: ReceiptLine[];
   totalPence: number;
   unpricedCount: number;
@@ -224,6 +227,7 @@ export async function sendReceipt({
     const pdfBytes = await buildReceiptPdf({
       clientName,
       clientRef,
+      receiptNumber,
       lines: sessions,
       totalPence,
       unpricedCount,
@@ -231,8 +235,9 @@ export async function sendReceipt({
       membershipId: settings.cstaMembershipId,
       addressByClinic: { waterloo: settings.waterlooAddress, bethnal: settings.bethnalAddress },
     });
+    const filename = receiptNumber ? `Receipt ${receiptNumber}.pdf` : `Receipt - ${fmtDate(new Date())}.pdf`;
     await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"), undefined, [
-      { filename: `Receipt - ${fmtDate(new Date())}.pdf`, mimeType: "application/pdf", base64: Buffer.from(pdfBytes).toString("base64") },
+      { filename, mimeType: "application/pdf", base64: Buffer.from(pdfBytes).toString("base64") },
     ]);
   } catch (err) {
     console.error("Couldn't send the receipt to the client", err);

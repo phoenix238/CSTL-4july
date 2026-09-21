@@ -24,6 +24,7 @@ function paymentMethodLabel(note: string | undefined): string {
 export async function buildReceiptPdf({
   clientName,
   clientRef,
+  receiptNumber,
   lines,
   totalPence,
   unpricedCount,
@@ -32,8 +33,10 @@ export async function buildReceiptPdf({
   addressByClinic,
 }: {
   clientName: string;
-  /** The client's own payment reference — doubles as this receipt's reference number. */
+  /** The client's own payment reference — the same on every receipt they're sent. */
   clientRef?: string;
+  /** A fresh number for this specific receipt document, e.g. "RCT-42" — unlike clientRef, never repeats. */
+  receiptNumber?: string;
   lines: ReceiptLine[];
   totalPence: number;
   unpricedCount: number;
@@ -77,6 +80,10 @@ export async function buildReceiptPdf({
 
   text("Receipt", MARGIN, 26, bold);
   y -= 34;
+  if (receiptNumber) {
+    text(`No. ${receiptNumber}`, MARGIN, 11, font, muted);
+    y -= 18;
+  }
   text("Craniosacral therapy with Phoenix Tanner", MARGIN, 12, font, muted);
   y -= 16;
   text(`CSTA Membership ID: ${membershipId}`, MARGIN, 10, font, muted);
@@ -86,7 +93,7 @@ export async function buildReceiptPdf({
   text(`Date issued: ${fmtDate(new Date())}`, MARGIN, 11);
   y -= 16;
   if (clientRef) {
-    text(`Reference: ${clientRef}`, MARGIN, 11);
+    text(`Payment reference: ${clientRef}`, MARGIN, 11);
     y -= 16;
   }
 
