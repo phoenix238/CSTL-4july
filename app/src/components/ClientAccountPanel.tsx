@@ -51,6 +51,9 @@ export function ClientAccountPanel({
   // separate from the saved amountPence so a half-typed figure isn't lost on
   // every re-render while still defaulting to whatever's already on record.
   const [cashInput, setCashInput] = useState<Record<string, string>>({});
+  // Which method is selected for each unpaid session's in-person payment —
+  // defaults to Cash, the long-standing behaviour, until Phoenix picks Card.
+  const [payMethod, setPayMethod] = useState<Record<string, "Cash" | "Card">>({});
 
   const account = summariseAccount(
     bookings.map((b): AccountBooking => ({ ...b, startsAt: new Date(b.startsAtISO) })),
@@ -69,19 +72,21 @@ export function ClientAccountPanel({
     }
   }
 
-  // Take the cash amount typed for this session and mark it paid in one save —
-  // what actually changed hands, recorded at the moment it's handed over.
-  async function takeCash(bookingId: string) {
+  // Take the amount typed for this session and mark it paid in one save —
+  // what actually changed hands, recorded at the moment it's handed over,
+  // with however it was paid (cash or card).
+  async function takeInPersonPayment(bookingId: string) {
     const raw = cashInput[bookingId] ?? "";
     const pounds = parseFloat(raw);
     if (!Number.isFinite(pounds) || pounds < 0) {
-      toast("Enter how much cash they gave you first");
+      toast("Enter how much they gave you first");
       return;
     }
+    const method = payMethod[bookingId] ?? "Cash";
     await patch(
       bookingId,
-      { paid: true, amountPence: Math.round(pounds * 100), paymentNote: "Cash" },
-      `Recorded £${pounds % 1 === 0 ? pounds : pounds.toFixed(2)} cash ✓`,
+      { paid: true, amountPence: Math.round(pounds * 100), paymentNote: method },
+      `Recorded £${pounds % 1 === 0 ? pounds : pounds.toFixed(2)} ${method.toLowerCase()} ✓`,
     );
     setCashInput((s) => {
       const next = { ...s };
@@ -229,20 +234,34 @@ export function ClientAccountPanel({
                     )}
                     {!cancelled && !b.paid && (
                       <div className="flex items-center gap-1">
+                        <div className="flex rounded-full border border-line bg-card p-[1px]">
+                          {(["Cash", "Card"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setPayMethod((s) => ({ ...s, [b.id]: m }))}
+                              className={`cursor-pointer rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                (payMethod[b.id] ?? "Cash") === m ? "bg-clay-tint text-clay-text" : "text-muted"
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
                         <span className="text-muted">£</span>
                         <input
                           type="number"
                           inputMode="decimal"
                           min="0"
                           step="0.01"
-                          placeholder="cash"
+                          placeholder="amount"
                           value={cashInput[b.id] ?? (b.amountPence != null ? String(b.amountPence / 100) : "")}
                           onChange={(e) => setCashInput((s) => ({ ...s, [b.id]: e.target.value }))}
-                          onKeyDown={(e) => e.key === "Enter" && takeCash(b.id)}
+                          onKeyDown={(e) => e.key === "Enter" && takeInPersonPayment(b.id)}
                           className="w-14 rounded-full border border-line bg-card px-2 py-0.5 text-[11px] text-ink outline-none focus:border-clay"
                         />
                         <button
-                          onClick={() => takeCash(b.id)}
+                          onClick={() => takeInPersonPayment(b.id)}
                           disabled={busyId === b.id}
                           className="cursor-pointer rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-[oklch(0.55_0.12_25)] hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
                         >
