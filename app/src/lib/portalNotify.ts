@@ -3,6 +3,8 @@ import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { resolveSignOff } from "@/lib/booking/email";
+import { buildReceiptPdf } from "@/lib/receiptPdf";
+import { fmtDate } from "@/lib/time";
 
 /**
  * Telling both sides what just happened.
@@ -190,11 +192,12 @@ export async function sendReceipt({
   unpricedCount: number;
 }): Promise<{ sent: boolean }> {
   const settings = await getSettings();
+  const signOff = resolveSignOff(settings);
   const first = clientName.split(" ")[0] || "there";
   const body: string[] = [
     `Hi ${first},`,
     "",
-    "Here's your receipt for craniosacral therapy with Phoenix Tanner.",
+    "Here's your receipt for craniosacral therapy with Phoenix Tanner — attached as a PDF you can download and keep.",
     "",
     ...sessions.map(
       (s) =>
@@ -209,10 +212,13 @@ export async function sendReceipt({
       `(${unpricedCount} sliding-scale ${unpricedCount === 1 ? "session is" : "sessions are"} listed without an amount — just reply and I'll add what you paid.)`,
     );
   }
-  body.push("", "Any questions, just reply to this email.", "", ...resolveSignOff(settings).split("\n"));
+  body.push("", "Any questions, just reply to this email.", "", ...signOff.split("\n"));
 
   try {
-    await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"));
+    const pdfBytes = await buildReceiptPdf({ clientName, lines: sessions, totalPence, unpricedCount, signOff });
+    await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"), undefined, [
+      { filename: `Receipt - ${fmtDate(new Date())}.pdf`, mimeType: "application/pdf", base64: Buffer.from(pdfBytes).toString("base64") },
+    ]);
   } catch (err) {
     console.error("Couldn't send the receipt to the client", err);
     return { sent: false };
