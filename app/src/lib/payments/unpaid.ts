@@ -3,7 +3,7 @@ import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveSignOff } from "@/lib/booking/email";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 
 /** How long after a session we start treating it as overdue for payment. */
 export const UNPAID_AFTER_HOURS = 25;
@@ -144,9 +144,12 @@ export function composePaymentReminder(
     if (input.paymentRef) lines.push("Please use that reference — it's how I match your payment to you.");
   }
   if (input.portalLink) lines.push("", "You can also see this any time on your own page:", input.portalLink);
+  const price = CLINIC_PRICE[input.clinic];
   lines.push(
     "",
-    "This is a donation-based practice, so pay what feels right — and if now isn't a good time, that's completely okay.",
+    input.clinic === "bethnal"
+      ? `This is a donation-based practice on a ${price}, so pay what feels fair — and if now isn't a good time, that's completely okay.`
+      : `The session is ${price} — whenever you're able is fine, and if now isn't a good time, that's completely okay.`,
     "",
     ...resolveSignOff(settings).split("\n"),
   );
