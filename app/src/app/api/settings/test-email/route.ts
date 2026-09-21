@@ -94,7 +94,8 @@ export const POST = guarded(async (req: Request) => {
       await sendReceipt({
         clientName,
         clientEmail: to,
-        lines: [{ whenLabel, clinicLabel: CLINIC_LABEL[clinic], amountPence: 4000 }],
+        clientRef: paymentRef,
+        lines: [{ whenLabel, clinic, clinicLabel: CLINIC_LABEL[clinic], amountPence: 4000, paymentNote: "Cash" }],
         totalPence: 4000,
         unpricedCount: 0,
       });

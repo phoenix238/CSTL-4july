@@ -163,8 +163,11 @@ export async function confirmToClient(input: NotifyInput, bcc?: string): Promise
 
 export interface ReceiptLine {
   whenLabel: string;
+  clinic: Clinic;
   clinicLabel: string;
   amountPence: number | null;
+  /** Free-text payment note ("Cash", "Bank transfer 12 Aug · ref RP14", …) — shown on the PDF as a short method label. */
+  paymentNote?: string;
 }
 
 /**
@@ -181,12 +184,15 @@ export interface ReceiptLine {
 export async function sendReceipt({
   clientName,
   clientEmail,
+  clientRef,
   lines: sessions,
   totalPence,
   unpricedCount,
 }: {
   clientName: string;
   clientEmail: string;
+  /** The client's own payment reference — doubles as this receipt's reference number. */
+  clientRef?: string;
   lines: ReceiptLine[];
   totalPence: number;
   unpricedCount: number;
@@ -215,7 +221,16 @@ export async function sendReceipt({
   body.push("", "Any questions, just reply to this email.", "", ...signOff.split("\n"));
 
   try {
-    const pdfBytes = await buildReceiptPdf({ clientName, lines: sessions, totalPence, unpricedCount, signOff });
+    const pdfBytes = await buildReceiptPdf({
+      clientName,
+      clientRef,
+      lines: sessions,
+      totalPence,
+      unpricedCount,
+      signOff,
+      membershipId: settings.cstaMembershipId,
+      addressByClinic: { waterloo: settings.waterlooAddress, bethnal: settings.bethnalAddress },
+    });
     await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"), undefined, [
       { filename: `Receipt - ${fmtDate(new Date())}.pdf`, mimeType: "application/pdf", base64: Buffer.from(pdfBytes).toString("base64") },
     ]);

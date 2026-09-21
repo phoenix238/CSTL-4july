@@ -425,6 +425,9 @@ model AppSettings {
   bankAccountNumber String @default("")
   // Anything extra to show under the bank details on the portal.
   bankPaymentNote   String @default("")
+  // Professional registration — shown on client receipts, since insurers
+  // reimbursing complementary therapy typically ask for it.
+  cstaMembershipId  String @default("2080")
 
   // Last time Phoenix opened Home and its notifications were marked seen — an
   // online booking newer than this still shows a red dot on the Home nav link.

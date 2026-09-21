@@ -1,11 +1,20 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatPence } from "@/lib/account";
 import { fmtDate } from "@/lib/time";
+import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import type { ReceiptLine } from "@/lib/portalNotify";
 
 const PAGE_WIDTH = 595.28; // A4, points
 const PAGE_HEIGHT = 841.89;
 const MARGIN = 56;
+
+/** "Cash" and the bank-transfer auto-match note collapse to a short label; anything else (a free-text note) is shown as-is, trimmed. */
+function paymentMethodLabel(note: string | undefined): string {
+  if (!note) return "—";
+  if (/^cash/i.test(note)) return "Cash";
+  if (/^bank transfer/i.test(note)) return "Bank transfer";
+  return note.length > 18 ? `${note.slice(0, 18)}…` : note;
+}
 
 /**
  * Render a client's receipt as a one-page (or more, if there are enough
@@ -14,16 +23,23 @@ const MARGIN = 56;
  */
 export async function buildReceiptPdf({
   clientName,
+  clientRef,
   lines,
   totalPence,
   unpricedCount,
   signOff,
+  membershipId,
+  addressByClinic,
 }: {
   clientName: string;
+  /** The client's own payment reference — doubles as this receipt's reference number. */
+  clientRef?: string;
   lines: ReceiptLine[];
   totalPence: number;
   unpricedCount: number;
   signOff: string;
+  membershipId: string;
+  addressByClinic: Partial<Record<Clinic, string>>;
 }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -36,7 +52,8 @@ export async function buildReceiptPdf({
   let y = PAGE_HEIGHT - MARGIN;
 
   const colDate = MARGIN;
-  const colClinic = MARGIN + 260;
+  const colClinic = MARGIN + 150;
+  const colMethod = MARGIN + 260;
   const colAmount = PAGE_WIDTH - MARGIN - 70;
 
   const text = (s: string, x: number, size: number, f: PDFFont = font, color = ink) =>
@@ -45,6 +62,7 @@ export async function buildReceiptPdf({
   const drawTableHeader = () => {
     text("Session", colDate, 11, bold);
     text("Location", colClinic, 11, bold);
+    text("Payment", colMethod, 11, bold);
     text("Amount", colAmount, 11, bold);
     y -= 6;
     page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_WIDTH - MARGIN, y }, thickness: 0.75, color: rule });
@@ -60,11 +78,30 @@ export async function buildReceiptPdf({
   text("Receipt", MARGIN, 26, bold);
   y -= 34;
   text("Craniosacral therapy with Phoenix Tanner", MARGIN, 12, font, muted);
-  y -= 28;
+  y -= 16;
+  text(`CSTA Membership ID: ${membershipId}`, MARGIN, 10, font, muted);
+  y -= 26;
   text(`Issued to: ${clientName}`, MARGIN, 11);
   y -= 16;
   text(`Date issued: ${fmtDate(new Date())}`, MARGIN, 11);
-  y -= 28;
+  y -= 16;
+  if (clientRef) {
+    text(`Reference: ${clientRef}`, MARGIN, 11);
+    y -= 16;
+  }
+
+  // Only the address(es) of clinics this client actually has sessions at —
+  // in the order those clinics first appear, not a fixed Waterloo-then-Bethnal order.
+  const clinicsUsed: Clinic[] = [];
+  for (const line of lines) if (!clinicsUsed.includes(line.clinic)) clinicsUsed.push(line.clinic);
+  for (const clinic of clinicsUsed) {
+    const address = addressByClinic[clinic];
+    if (address) {
+      text(`${CLINIC_LABEL[clinic]}: ${address}`, MARGIN, 10, font, muted);
+      y -= 14;
+    }
+  }
+  y -= 12;
 
   drawTableHeader();
 
@@ -72,6 +109,7 @@ export async function buildReceiptPdf({
     if (y < MARGIN + 60) newPage();
     text(line.whenLabel, colDate, 11);
     text(line.clinicLabel, colClinic, 11);
+    text(paymentMethodLabel(line.paymentNote), colMethod, 11);
     text(line.amountPence != null ? formatPence(line.amountPence) : "—", colAmount, 11);
     y -= 20;
   }
