@@ -132,3 +132,19 @@ own icon and opens full-screen like an app.
 
 You never repeat any of this. When new code is pushed to GitHub, Vercel redeploys the
 live site automatically within a couple of minutes.
+
+## 10. Link to Honey, the finance app (optional, 3 min)
+
+Honey (the `honeytracker` repo) keeps the tax ledger from the bank feed. With this link,
+every session paid here labels its own bank payment there, and cash sessions are added
+to the ledger automatically.
+
+1. Make one long random value (https://generate-secret.vercel.app/32).
+2. **This** project in Vercel → Settings → Environment Variables → add
+   `FINANCE_API_TOKEN` = that value → redeploy.
+3. **Honey's** project in Vercel → add `CSTL_URL` = this app's URL (e.g.
+   `https://cstl-control-tower.vercel.app`) and `CSTL_FINANCE_TOKEN` = the same value →
+   redeploy.
+
+Only money facts cross over: amount, date, how it was paid, the matching bank
+transaction and the client's payment reference. No names, notes or health information.

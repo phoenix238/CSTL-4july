@@ -33,6 +33,10 @@ phone, and updates itself whenever this repo changes.
 - **Import** — drop old files; Claude extracts client records, duplicates are merged,
   originals stored in each client's folder, legacy notes appended to their Doc.
 - **Settings** — clinic rules, access note, per-location email templates, Google wiring.
+- **Finance feed for Honey** — `GET /api/finance/events` hands Phoenix's finance app
+  (honeytracker) the money facts of paid sessions — amount, date, cash/bank/other, the
+  Starling transaction that settled it, payment reference — and nothing clinical. Honey
+  keeps the tax ledger; this app stays the practice. See SETUP.md step 10.
 - **Gmail add-on** (`../gmail-addon`) — a button inside Gmail (desktop + mobile) that turns
   an open client email into an enquiry here, one tap, with the reply landing back in the
   same Gmail thread. See `gmail-addon/README.md` for setup.
