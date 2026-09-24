@@ -277,6 +277,8 @@ export function BookingFlow({
                 : undefined
             }
             boxed={false}
+            layout="responsive"
+            sessionMinutes={SESSION_TYPE_MINUTES[sessionType]}
           />
         </section>
       </Card>
