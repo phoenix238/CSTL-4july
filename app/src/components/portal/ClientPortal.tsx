@@ -4,7 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
-import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import {
+  CLINIC_BOOKING_LABEL,
+  CLINIC_LABEL,
+  SESSION_TYPE_LABEL,
+  SESSION_TYPE_MINUTES,
+  sessionPrice,
+  type Clinic,
+  type SessionType,
+} from "@/lib/booking/rules";
+import { SessionTypePicker } from "@/components/SessionTypePicker";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
@@ -46,6 +55,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
   const [mode, setMode] = useState<"idle" | "book" | "reschedule">("idle");
   const [clinic, setClinic] = useState<Clinic>(view.preferredClinic);
+  // A new session starts as the standard 60 minutes; the 90-minute Clean
+  // Language session is there to be chosen.
+  const [sessionType, setSessionType] = useState<SessionType>("cst");
   const [selected, setSelected] = useState<string | null>(null);
   // Separate from `selected` on purpose. Picking a time opens the confirm box
   // over the page — the same treatment the first-booking flow gives it, rather
@@ -71,6 +83,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
   function reset() {
     setMode("idle");
+    setSessionType("cst");
     setSelected(null);
     setSheetOpen(false);
     setTargetId(null);
@@ -105,7 +118,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       () =>
         api<{ whenLabel: string }>(`/api/portal/${token}/book`, {
           method: "POST",
-          body: JSON.stringify({ clinic, startISO: selected }),
+          body: JSON.stringify({ clinic, sessionType, startISO: selected }),
         }),
       (r) => toast(`Booked — ${r.whenLabel}`),
     );
@@ -169,6 +182,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   // Reschedule keeps the client on their existing clinic; only a fresh booking
   // gets to choose one. This is the clinic the confirm box names either way.
   const pickerClinic = mode === "reschedule" && target ? target.clinic : clinic;
+  // Likewise a moved session keeps its own length — a 90-minute session moves as one.
+  const pickerType: SessionType = mode === "reschedule" && target ? target.sessionType : sessionType;
+  const pickerSummary = `${SESSION_TYPE_LABEL[pickerType]} · ${SESSION_TYPE_MINUTES[pickerType]} min · ${sessionPrice(pickerClinic, pickerType)}`;
 
   const picker = (
     <div className="flex flex-col gap-3 border-t border-hairline pt-4">
@@ -191,7 +207,18 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           ))}
         </div>
       )}
-      {mode === "book" && <div className="text-[12.5px] text-muted">{CLINIC_PRICE[clinic]} · 60 minutes</div>}
+      {mode === "book" && (
+        <SessionTypePicker
+          value={sessionType}
+          clinic={clinic}
+          onChange={(t) => {
+            setSessionType(t);
+            setSelected(null);
+            setSheetOpen(false);
+          }}
+        />
+      )}
+      {mode === "book" && <div className="text-[12.5px] font-semibold text-clay-text">{pickerSummary}</div>}
 
       {mode === "reschedule" && target && (
         <div className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12.5px] text-clay-text">
@@ -211,7 +238,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           setSheetOpen(true);
         }}
         slotsUrl={(c) =>
-          `/api/portal/${token}/slots?clinic=${c}${mode === "reschedule" ? "&moving=1" : ""}`
+          mode === "reschedule"
+            ? `/api/portal/${token}/slots?clinic=${c}&moving=1${targetId ? `&b=${encodeURIComponent(targetId)}` : ""}`
+            : `/api/portal/${token}/slots?clinic=${c}${sessionType === "clean" ? "&type=clean" : ""}`
         }
         emptyMessage="No times free at the moment — please check back in a few days, or message Phoenix directly."
       />
@@ -242,6 +271,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                 <div className="mt-1 text-[12.5px] text-muted">
                   {CLINIC_BOOKING_LABEL[pickerClinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
                 </div>
+                <div className="mt-0.5 text-[12.5px] font-semibold text-clay-text">{pickerSummary}</div>
               </div>
               <button
                 type="button"
@@ -303,6 +333,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   <div className="text-[15px] font-semibold">{fmtDayLong(new Date(u.startsAtISO))}</div>
                   <div className="text-[13px] text-muted">
                     {fmtTime(new Date(u.startsAtISO))} · {CLINIC_LABEL[u.clinic]}
+                    {u.sessionType === "clean" && " · 90-min Clean Language"}
                   </div>
                 </div>
 
@@ -599,7 +630,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                       ? "Cancelled"
                       : s.paid
                         ? `Paid${s.amountPence != null ? ` · ${formatPence(s.amountPence)}` : ""}`
-                        : sessionPriceLabel(s.clinic, s.amountPence)}
+                        : sessionPriceLabel(s.clinic, s.amountPence, s.sessionType)}
                   </span>
                 </li>
               );

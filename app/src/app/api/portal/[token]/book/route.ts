@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
-import type { Clinic } from "@/lib/booking/rules";
+import { parseSessionType, type Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable } from "@/lib/booking/slots";
 import { bookSession } from "@/lib/booking/book";
 import { portalRoute, PortalRuleError } from "@/lib/portalRoute";
 import { notifyPhoenix } from "@/lib/portalNotify";
 import { portalUrl } from "@/lib/portal";
 
-/** Book the client's next session themselves. Body: { clinic, startISO } */
+/** Book the client's next session themselves. Body: { clinic, startISO, sessionType? } */
 export const POST = portalRoute(async (req, client) => {
   const settings = await getSettings();
   if (!settings.portalSelfBook) {
     throw new PortalRuleError("Online booking is turned off at the moment — please message Phoenix to arrange a time.", 403);
   }
 
-  const { clinic, startISO } = (await req.json()) as { clinic?: string; startISO?: string };
+  const body = (await req.json()) as { clinic?: string; startISO?: string; sessionType?: string };
+  const { clinic, startISO } = body;
+  const sessionType = parseSessionType(body.sessionType);
   if (clinic !== "waterloo" && clinic !== "bethnal") {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }
@@ -27,13 +29,14 @@ export const POST = portalRoute(async (req, client) => {
   // This route adds a session; it doesn't move one. So the client's existing
   // booking is real busy time here and blocks normally — moving is what
   // /reschedule is for, and that route excludes the booking being moved.
-  await assertSlotAvailable({ clinic: clinic as Clinic, start });
+  await assertSlotAvailable({ clinic: clinic as Clinic, start, sessionType });
 
   // bookSession sends the client their own confirmation (calendar invite, address,
   // payment details), so there's no separate confirmToClient here — one email, not two.
   const result = await bookSession({
     clientId: client.id,
     clinic: clinic as Clinic,
+    sessionType,
     startISO: start.toISOString(),
     sendEmail: true,
     sendPayment: true,

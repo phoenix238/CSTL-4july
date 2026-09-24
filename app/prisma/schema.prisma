@@ -124,8 +124,13 @@ model Booking {
   id               String   @id @default(cuid())
   clientId         String
   client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  startsAt         DateTime // start of the 60-min session
+  startsAt         DateTime // start of the session — 60 min, or 90 for a Clean Language session
   clinic           String // waterloo | bethnal
+  // What kind of session: "cst" (craniosacral, 60 min — the default) or
+  // "clean" (Clean Language + craniosacral, 90 min). Sets the session's length
+  // everywhere it's used — availability, calendar events, the Chalk Farm block —
+  // and its price. Existing rows read as "cst", so nothing already booked moves.
+  sessionType      String   @default("cst")
   status           String   @default("confirmed") // confirmed | cancelled | done
   personalEventId  String   @default("") // "(Client) — Clinic" on the personal calendar
   secondaryEventId String   @default("") // Waterloo: "R5 - Phoenix" room event · Bethnal: the day's shared auto-sized "Phoenix" Chalk Farm block
@@ -141,8 +146,9 @@ model Booking {
   createdAt        DateTime @default(now())
 
   // — Payment —
-  // What this session costs, in pence. Waterloo is a fixed £80; Bethnal Green is a
-  // £30–60 sliding scale, so it stays null until the actual amount is known (set
+  // What this session costs, in pence. Waterloo is a fixed £80 (£120 for a
+  // 90-min Clean Language session); Bethnal Green is a £30–60 sliding scale
+  // (£45–75 for 90 min), so it stays null until the actual amount is known (set
   // from the client profile after the session, or when they tell you what they paid).
   amountPence   Int?
   paid          Boolean   @default(false)

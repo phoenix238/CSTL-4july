@@ -7,7 +7,7 @@ import {
   type AccountSummary,
 } from "@/lib/account";
 import { getOrCreatePaymentRef, portalUrl } from "@/lib/portal";
-import { type Clinic } from "@/lib/booking/rules";
+import { parseSessionType, type Clinic, type SessionType } from "@/lib/booking/rules";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 
 /**
@@ -28,6 +28,8 @@ export interface PortalSession {
   id: string;
   startsAtISO: string;
   clinic: Clinic;
+  /** "cst" (60 min) or "clean" (90-min Clean Language + craniosacral) */
+  sessionType: SessionType;
   paid: boolean;
   amountPence: number | null;
   goodwillPence: number;
@@ -111,6 +113,7 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     id: b.id,
     startsAtISO: b.startsAt.toISOString(),
     clinic: b.clinic as Clinic,
+    sessionType: parseSessionType(b.sessionType),
     paid: b.paid,
     amountPence: b.amountPence,
     goodwillPence: b.goodwillPence,

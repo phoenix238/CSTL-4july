@@ -184,6 +184,12 @@ export interface AvailabilityParams {
    */
   busy: Array<{ start: Date; end: Date; bufferMinutes?: number }>;
   slotMinutes?: number;
+  /**
+   * How long the session being looked for runs — 60 for a standard session
+   * (the default), 90 for a Clean Language one. A slot is only offered when
+   * the whole session fits: inside the open hours and clear of busy time.
+   */
+  sessionMinutes?: number;
   bufferMinutes?: number;
   now?: Date;
   minNoticeMinutes?: number;
@@ -205,9 +211,16 @@ export interface AvailabilityParams {
   weeklyCap?: {
     capMinutes: number;
     capMinutesByWeek: Record<string, number>;
-    sessionMinsByDay: Record<string, number[]>;
+    sessionMinsByDay: Record<string, CapSession[]>;
   };
 }
+
+/**
+ * One session counted toward the weekly cap: a bare minute-of-day start is a
+ * standard 60-minute session; a longer one (a 90-minute Clean Language
+ * session) carries its own length.
+ */
+export type CapSession = number | { start: number; minutes: number };
 
 /**
  * Group session start times into clusters: consecutive sessions stay in the same
@@ -221,16 +234,23 @@ export interface AvailabilityParams {
  * spans a whole day's gaps. (The weekly cap no longer uses it; see
  * chalkFarmCapMinutes below, which counts session hours only.)
  */
-export function clusterSessions(starts: number[], sessionLen: number, gap: number): number[][] {
-  const sorted = [...starts].sort((a, b) => a - b);
+export function clusterSessions(
+  /** a bare start runs `sessionLen`; an object carries its own length (a longer session) */
+  starts: Array<number | { start: number; len: number }>,
+  sessionLen: number,
+  gap: number,
+): number[][] {
+  const sorted = starts
+    .map((s) => (typeof s === "number" ? { start: s, len: sessionLen } : s))
+    .sort((a, b) => a.start - b.start);
   const clusters: Array<{ starts: number[]; end: number }> = [];
-  for (const s of sorted) {
+  for (const { start: s, len } of sorted) {
     const current = clusters[clusters.length - 1];
     if (current && s - current.end <= gap) {
       current.starts.push(s);
-      current.end = Math.max(current.end, s + sessionLen);
+      current.end = Math.max(current.end, s + len);
     } else {
-      clusters.push({ starts: [s], end: s + sessionLen });
+      clusters.push({ starts: [s], end: s + len });
     }
   }
   return clusters.map((c) => c.starts);
@@ -244,11 +264,13 @@ export function clusterSessions(starts: number[], sessionLen: number, gap: numbe
  * day out himself when he needs to close a gap. (The shared calendar's physical
  * room blocks span each cluster first-to-last plus edges — see
  * chalkFarmBlockRanges in chalkFarm.ts — that's a separate concern from this
- * budget.) `sessionStartMins` is minutes past London midnight; only its length
- * matters here. Empty → 0. Pure, so the cap math is unit-testable.
+ * budget.) Each entry is a start in minutes past London midnight — a bare
+ * number is a standard 60-minute session, and a longer one carries its own
+ * length — so a 90-minute Clean Language session costs 90. Empty → 0. Pure, so
+ * the cap math is unit-testable.
  */
-export function chalkFarmCapMinutes(sessionStartMins: number[]): number {
-  return sessionStartMins.length * SESSION_MINUTES;
+export function chalkFarmCapMinutes(sessions: CapSession[]): number {
+  return sessions.reduce<number>((sum, s) => sum + (typeof s === "number" ? SESSION_MINUTES : s.minutes), 0);
 }
 
 const pad = (iv: { start: Date; end: Date }, minutes: number) =>
@@ -308,6 +330,7 @@ function slotFits(
   busy: AvailabilityParams["busy"],
   bufferMinutes: number,
   weeklyCap?: AvailabilityParams["weeklyCap"],
+  sessionMin: number = SESSION_MINUTES,
 ): FitResult {
   // Both clinics currently footprint to exactly the session hour (see
   // blockedRange in rules.ts), but this stays generic in case a future
@@ -319,17 +342,17 @@ function slotFits(
   // it here would make the first and last slot of every window unbookable,
   // and would wipe out any window shorter than a session plus two buffers
   // (e.g. a 1-hour evening segment) entirely.
-  const rawFootprint = blockedRange(clinic, candidate);
+  const rawFootprint = blockedRange(clinic, candidate, sessionMin);
   const startPadMin = Math.round((candidate.getTime() - rawFootprint.start.getTime()) / 60_000);
   const endPadMin = Math.round(
-    (rawFootprint.end.getTime() - (candidate.getTime() + SESSION_MINUTES * 60_000)) / 60_000,
+    (rawFootprint.end.getTime() - (candidate.getTime() + sessionMin * 60_000)) / 60_000,
   );
   // Deliberately NOT padded by `bufferMinutes`. The buffer is breathing room
   // between Phoenix and *other bookings* — it is not clearance he needs from the
   // edge of his own working day. Padding it here cost an hour a day: hours of
   // 09:00–17:00 with a 15-min buffer offered nothing before 09:30 or after 15:30.
   const footprintStart = minute - startPadMin;
-  const footprintEnd = minute + SESSION_MINUTES + endPadMin;
+  const footprintEnd = minute + sessionMin + endPadMin;
   const openInterval = intervals.find((iv) => footprintStart >= iv.start && footprintEnd <= iv.end);
   if (!openInterval) return "hours";
 
@@ -359,12 +382,13 @@ function slotFits(
   if (busyClash) return "busy";
 
   if (weeklyCap) {
-    // The cap counts session hours, so a session costs exactly one session
+    // The cap counts session hours, so a session costs exactly its own
     // length wherever it lands that day — the gaps around it don't matter.
     const dateKey = londonDateKey(candidate);
     const weekKey = londonDateKey(londonWeekStart(candidate));
     const dayStarts = weeklyCap.sessionMinsByDay[dateKey] ?? [];
-    const delta = chalkFarmCapMinutes([...dayStarts, minute]) - chalkFarmCapMinutes(dayStarts);
+    const delta =
+      chalkFarmCapMinutes([...dayStarts, { start: minute, minutes: sessionMin }]) - chalkFarmCapMinutes(dayStarts);
     const weekTotal = weeklyCap.capMinutesByWeek[weekKey] ?? 0;
     if (weekTotal + delta > weeklyCap.capMinutes) return "cap";
   }
@@ -401,6 +425,7 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
     overrides,
     busy,
     slotMinutes = 30,
+    sessionMinutes = SESSION_MINUTES,
     bufferMinutes = 0,
     now = new Date(),
     minNoticeMinutes = 0,
@@ -437,7 +462,7 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
     // isn't offered twice.
     const candidateMinutes = new Set<number>();
     for (const interval of gridIntervals) {
-      for (let minute = interval.start; minute + SESSION_MINUTES <= interval.end; minute += slotMinutes) {
+      for (let minute = interval.start; minute + sessionMinutes <= interval.end; minute += slotMinutes) {
         candidateMinutes.add(minute);
       }
     }
@@ -452,7 +477,7 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
     // candidate can't land inside an exact-start window and spawn a second
     // pickable time there.
     const fitsGrid = (minute: number) =>
-      gridIntervals.some((iv) => minute >= iv.start && minute + SESSION_MINUTES <= iv.end);
+      gridIntervals.some((iv) => minute >= iv.start && minute + sessionMinutes <= iv.end);
     for (const b of busy) {
       if (londonDateKey(b.end) === dateKey) {
         const endMinute = londonMinutes(b.end);
@@ -465,7 +490,7 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
         const startMinute = londonMinutes(b.start);
         const hostIv = fitIntervals.find((iv) => startMinute >= iv.start && startMinute <= iv.end);
         const gap = busyGapMinutes(b, hostIv ? intervalWindow(hostIv, y, m, d) : null, bufferMinutes);
-        const beforeMinute = startMinute - SESSION_MINUTES - gap;
+        const beforeMinute = startMinute - sessionMinutes - gap;
         if (beforeMinute >= 0 && beforeMinute < 1440 && fitsGrid(beforeMinute)) candidateMinutes.add(beforeMinute);
       }
     }
@@ -482,7 +507,7 @@ export function computeAvailability(params: AvailabilityParams): { slots: Date[]
         trace.dropped.past++;
         continue;
       }
-      const fit = slotFits(candidate, minute, fitIntervals, clinic, busy, bufferMinutes, weeklyCap);
+      const fit = slotFits(candidate, minute, fitIntervals, clinic, busy, bufferMinutes, weeklyCap, sessionMinutes);
       if (fit !== "ok") {
         trace.dropped[fit]++;
         continue;
@@ -536,6 +561,7 @@ export function isSlotAvailable(
     weeklyHours,
     overrides,
     busy,
+    sessionMinutes = SESSION_MINUTES,
     bufferMinutes = 0,
     now = new Date(),
     minNoticeMinutes = 0,
@@ -550,5 +576,5 @@ export function isSlotAvailable(
   if (!intervals.length) return false;
 
   const minute = londonMinutes(candidate);
-  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap) === "ok";
+  return slotFits(candidate, minute, intervals, clinic, busy, bufferMinutes, weeklyCap, sessionMinutes) === "ok";
 }

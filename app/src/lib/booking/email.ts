@@ -1,4 +1,4 @@
-import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "./rules";
+import { CLINIC_LABEL, parseSessionType, sessionPrice, type Clinic, type SessionType } from "./rules";
 
 export interface ComposedEmail {
   subject: string;
@@ -273,12 +273,24 @@ export function composeBookingEmail(
   sendPayment: boolean,
   settings: EmailSettings,
   links: ClientLinks = PREVIEW_PLACEHOLDERS,
+  sessionType: SessionType = "cst",
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
-  const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
+  const clean = parseSessionType(sessionType) === "clean";
+  const price = sessionPrice(clinic, sessionType);
+  const subject = clean
+    ? `Your Clean Language + craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`
+    : `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
+  // A 90-minute session is one the client chose on purpose, so the email says
+  // what it is and how long to set aside — the templates are written for the
+  // standard hour and don't know the difference.
+  const sessionNote = clean
+    ? `This is a 90-minute Clean Language + craniosacral session (${price}). We'll begin with around 25 minutes of Clean Language, then move to the table for the hands-on work — please allow the full 90 minutes.`
+    : "";
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
   const { intakeLink, portalLink, paymentRef } = links;
   const includes: string[] = [];
+  if (clean) includes.push("What the 90-minute Clean Language session involves");
 
   // Where it is — one block, not an address line and a separate map line. The
   // address is the human-readable part; the link is attached to it.
@@ -292,7 +304,7 @@ export function composeBookingEmail(
     name: client.name,
     when: whenLabel,
     clinic: CLINIC_LABEL[clinic],
-    price: CLINIC_PRICE[clinic],
+    price,
   };
 
   if (!isFirstEmail) {
@@ -303,7 +315,7 @@ export function composeBookingEmail(
     const { main } = splitSignOff(fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }));
     const calendar = calendarBlock(links);
     if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
-    const sections = [main, whereBlock, calendar];
+    const sections = [main, sessionNote, whereBlock, calendar];
     // A returning client gets their booking page too, not just first-timers —
     // it's the one link that lets them move this session, cancel it, change
     // their reminders, or book the next one. Kept to a single line (they already
@@ -335,7 +347,7 @@ export function composeBookingEmail(
 
   const calendar = calendarBlock(links);
   if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
-  const sections = [main, whereBlock, calendar];
+  const sections = [main, sessionNote, whereBlock, calendar];
 
   // Payment, once. The templates already name the price in their own words, so
   // repeating it as a "Payment (£30–60 sliding scale):" heading said the same
@@ -345,7 +357,7 @@ export function composeBookingEmail(
     if (payment) {
       sections.push(payment);
       includes.push(
-        paymentRef ? `Payment details & their reference ${paymentRef}` : `Payment details — ${CLINIC_PRICE[clinic]}`,
+        paymentRef ? `Payment details & their reference ${paymentRef}` : `Payment details — ${price}`,
       );
     }
   }

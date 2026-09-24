@@ -1,10 +1,16 @@
 // Phoenix's booking rules — the heart of the control tower.
 //
-//   Waterloo (£80 · 60 min):
+// Two kinds of session, bookable at either clinic (see SessionType below):
+//   "cst"   — craniosacral therapy, 60 min. The default everywhere.
+//   "clean" — Clean Language + craniosacral therapy, 90 min: about 25 min of
+//             Clean Language, then the hands-on work.
+// Whatever the length, every event below spans the booking's own session.
+//
+//   Waterloo (£80 · 60 min | £120 · 90 min):
 //     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
 //     1h  "R5 - Phoenix"          on the room calendar
 //
-//   Bethnal Green (£30–60 sliding · 60 min):
+//   Bethnal Green (£30–60 sliding · 60 min | £45–75 sliding · 90 min):
 //     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
 //     A single shared "Phoenix" block on the Chalk Farm calendar, one per day,
 //     auto-sized to span that day's Bethnal sessions — see
@@ -48,11 +54,50 @@ export interface PlannedEvent {
   colorId?: string;
 }
 
+/** The standard craniosacral session — what every booking is unless it says otherwise. */
 export const SESSION_MINUTES = 60;
+
+/**
+ * What kind of session a booking is. "cst" is the plain 60-minute craniosacral
+ * session and the default on every path; "clean" is the 90-minute Clean
+ * Language + craniosacral session a client has to choose on purpose.
+ */
+export type SessionType = "cst" | "clean";
+
+export const SESSION_TYPES: readonly SessionType[] = ["cst", "clean"];
+
+export const SESSION_TYPE_MINUTES: Record<SessionType, number> = {
+  cst: SESSION_MINUTES,
+  clean: 90,
+};
+
+/** The longest any session can run — the look-behind window for overlap checks. */
+export const MAX_SESSION_MINUTES = Math.max(...Object.values(SESSION_TYPE_MINUTES));
+
+/** Anything stored or posted → a known session type, falling back to the standard one. */
+export function parseSessionType(value: unknown): SessionType {
+  return value === "clean" ? "clean" : "cst";
+}
+
+/** How long a session of this type runs, in minutes. Unknown/missing → 60. */
+export function sessionMinutes(type?: string | null): number {
+  return SESSION_TYPE_MINUTES[parseSessionType(type)];
+}
+
+/** Plain name of the session type, for emails, receipts and the booking pages. */
+export const SESSION_TYPE_LABEL: Record<SessionType, string> = {
+  cst: "Craniosacral therapy",
+  clean: "Clean Language + craniosacral therapy",
+};
 
 /** The title on every session's calendar event — deliberately generic, so no
  *  client name ever appears on a Google calendar. */
 export const SESSION_EVENT_TITLE = "Craniosacral therapy";
+
+/** The calendar event title for a session of this type — still no client name. */
+export function sessionEventTitle(type?: string | null): string {
+  return SESSION_TYPE_LABEL[parseSessionType(type)];
+}
 
 export const CLINIC_LABEL: Record<Clinic, string> = {
   waterloo: "Waterloo",
@@ -71,10 +116,25 @@ export const CLINIC_BOOKING_LABEL: Record<Clinic, string> = {
   bethnal: "Low cost Bethnal Green",
 };
 
+/** The standard 60-minute session's price at each clinic. */
 export const CLINIC_PRICE: Record<Clinic, string> = {
   waterloo: "£80",
   bethnal: "£30–60 sliding scale",
 };
+
+/** What each kind of session costs at each clinic, as the client reads it. */
+export const SESSION_PRICE: Record<SessionType, Record<Clinic, string>> = {
+  cst: CLINIC_PRICE,
+  clean: {
+    waterloo: "£120",
+    bethnal: "£45–75 sliding scale",
+  },
+};
+
+/** The price label for one session — the 60-minute price unless it's a Clean Language session. */
+export function sessionPrice(clinic: Clinic, type?: string | null): string {
+  return SESSION_PRICE[parseSessionType(type)][clinic];
+}
 
 /**
  * Which colour each clinic's session shows as in Google Calendar, so a glance
@@ -110,14 +170,17 @@ export function planBookingEvents(
   /** venue-facing note for the room event's description (session time + contact
    * line); the caller composes it since it needs settings + London-time formatting */
   venueNote?: string,
+  /** 60-minute craniosacral unless told otherwise — sets both the length and the title */
+  sessionType: SessionType = "cst",
 ): PlannedEvent[] {
-  const sessionEnd = addMinutes(sessionStart, SESSION_MINUTES);
+  const sessionEnd = addMinutes(sessionStart, sessionMinutes(sessionType));
+  const title = sessionEventTitle(sessionType);
   const location = address?.trim() || CLINIC_LABEL[clinic];
   if (clinic === "waterloo") {
     return [
       {
         calendar: "personal",
-        summary: SESSION_EVENT_TITLE,
+        summary: title,
         start: sessionStart,
         end: sessionEnd,
         inviteClient: true,
@@ -134,12 +197,12 @@ export function planBookingEvents(
       },
     ];
   }
-  // Bethnal Green: just the 1h session — the shared Chalk Farm room block is
+  // Bethnal Green: just the session itself — the shared Chalk Farm room block is
   // computed separately (src/lib/google/chalkFarm.ts) from the day's bookings.
   return [
     {
       calendar: "personal",
-      summary: SESSION_EVENT_TITLE,
+      summary: title,
       start: sessionStart,
       end: sessionEnd,
       inviteClient: true,
@@ -223,6 +286,6 @@ export function personalEventReminders(cfg: OwnReminderConfig, sessionMinuteOfDa
  * since the shared Chalk Farm block (see chalkFarm.ts) doesn't factor into
  * availability itself, only the real 1h sessions do.
  */
-export function blockedRange(clinic: Clinic, sessionStart: Date) {
-  return { start: sessionStart, end: addMinutes(sessionStart, SESSION_MINUTES) };
+export function blockedRange(clinic: Clinic, sessionStart: Date, minutes: number = SESSION_MINUTES) {
+  return { start: sessionStart, end: addMinutes(sessionStart, minutes) };
 }

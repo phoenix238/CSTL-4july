@@ -4,7 +4,15 @@ import { useState } from "react";
 import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
-import { CLINIC_BOOKING_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import { SessionTypePicker } from "./SessionTypePicker";
+import {
+  CLINIC_BOOKING_LABEL,
+  SESSION_TYPE_LABEL,
+  SESSION_TYPE_MINUTES,
+  sessionPrice,
+  type Clinic,
+  type SessionType,
+} from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { ClientCopy } from "@/lib/clientCopy";
 
@@ -23,11 +31,23 @@ const SITE_ORIGINS = [
   "http://localhost:8090",
 ];
 
-function notifyParentOfBooking(clinic: Clinic) {
+function notifyParentOfBooking(clinic: Clinic, sessionType: SessionType) {
   if (window.parent === window) return; // not embedded — nothing to tell
   for (const origin of SITE_ORIGINS) {
-    window.parent.postMessage({ type: "cstl:booking_confirmed", clinic }, origin);
+    window.parent.postMessage({ type: "cstl:booking_confirmed", clinic, sessionType }, origin);
   }
+}
+
+/** A numbered step heading, so the page reads as: what → where → when. */
+function Step({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-clay text-[12px] font-semibold text-cream">
+        {n}
+      </span>
+      <h2 className="font-serif text-[18px] leading-tight font-medium">{children}</h2>
+    </div>
+  );
 }
 
 function MapsLink({ address }: { address: string }) {
@@ -51,15 +71,19 @@ export function BookingFlow({
   waterlooNote,
   bethnalNote,
   copy,
+  initialSessionType = "cst",
 }: {
   waterlooAddress: string;
   bethnalAddress: string;
   waterlooNote: string;
   bethnalNote: string;
   copy: ClientCopy;
+  /** "clean" when arriving from a link to the Clean Language session; otherwise the standard 60 minutes */
+  initialSessionType?: SessionType;
 }) {
   const toast = useToast();
   const [clinic, setClinic] = useState<Clinic>("bethnal");
+  const [sessionType, setSessionType] = useState<SessionType>(initialSessionType);
   const [selected, setSelected] = useState<string | null>(null);
   // Separate from `selected` on purpose. Closing the box leaves the time they
   // picked highlighted in the list behind it, and the box needs to keep
@@ -129,13 +153,13 @@ export function BookingFlow({
     try {
       const result = await api<BookResponse>("/api/public/book", {
         method: "POST",
-        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning }),
+        body: JSON.stringify({ clinic, sessionType, startISO: selected, name, email, phone, company, confirmReturning }),
       });
       if (result.needsConfirm) {
         setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
         return;
       }
-      notifyParentOfBooking(clinic);
+      notifyParentOfBooking(clinic, sessionType);
       setConfirmed({
         whenLabel: result.whenLabel,
         email,
@@ -175,6 +199,10 @@ export function BookingFlow({
     setLinkSent(false);
   }
 
+  // The one line that says exactly what's being booked — repeated in the details
+  // box so nobody confirms a time without seeing the session and price with it.
+  const bookingSummary = `${SESSION_TYPE_LABEL[sessionType]} · ${SESSION_TYPE_MINUTES[sessionType]} min · ${sessionPrice(clinic, sessionType)}`;
+
   return (
     <div className="mx-auto max-w-[820px] px-5 py-10">
       <header className="mb-6 text-center">
@@ -182,45 +210,75 @@ export function BookingFlow({
         <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.bookPageIntro}</p>
       </header>
 
-      <Card className="flex flex-col gap-4 px-5 py-6">
-        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-          {(["bethnal", "waterloo"] as const).map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                setClinic(c);
-                setSelected(null);
-                setSheetOpen(false);
-              }}
-              className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold select-none ${
-                clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-              }`}
-            >
-              {CLINIC_BOOKING_LABEL[c]}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
-          <div>{CLINIC_PRICE[clinic]} · 60 minutes</div>
-          {address && (
-            <div className="flex flex-col gap-1 text-[12px] leading-relaxed text-[oklch(0.45_0.02_60)]">
-              <span>{address}</span>
-              <MapsLink address={address} />
-            </div>
-          )}
-          {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
-        </div>
+      <Card className="flex flex-col gap-6 px-5 py-6 sm:px-6">
+        <section className="flex flex-col gap-3">
+          <Step n={1}>Choose your session</Step>
+          <SessionTypePicker
+            value={sessionType}
+            clinic={clinic}
+            onChange={(t) => {
+              setSessionType(t);
+              // A time free for an hour isn't necessarily free for ninety
+              // minutes, so a new session type means picking the time afresh.
+              setSelected(null);
+              setSheetOpen(false);
+            }}
+          />
+        </section>
 
-        <BookSlotPicker
-          clinic={clinic}
-          selected={selected}
-          onSelect={(iso) => {
-            setSelected(iso);
-            setRecognised(null);
-            setSheetOpen(true);
-          }}
-          boxed={false}
-        />
+        <section className="flex flex-col gap-3 border-t border-hairline pt-5">
+          <Step n={2}>Where</Step>
+          <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+            {(["bethnal", "waterloo"] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  setClinic(c);
+                  setSelected(null);
+                  setSheetOpen(false);
+                }}
+                className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold select-none ${
+                  clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                }`}
+              >
+                {CLINIC_BOOKING_LABEL[c]}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
+            {address && (
+              <div className="flex flex-col gap-1 text-[12px] leading-relaxed text-[oklch(0.45_0.02_60)]">
+                <span>{address}</span>
+                <MapsLink address={address} />
+              </div>
+            )}
+            {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3 border-t border-hairline pt-5">
+          <Step n={3}>Pick a time</Step>
+          <div className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12.5px] text-clay-text">
+            <span className="font-semibold">{bookingSummary}</span> · {CLINIC_BOOKING_LABEL[clinic]}
+          </div>
+          <BookSlotPicker
+            clinic={clinic}
+            selected={selected}
+            onSelect={(iso) => {
+              setSelected(iso);
+              setRecognised(null);
+              setSheetOpen(true);
+            }}
+            slotsUrl={(c) => `/api/public/slots?clinic=${c}${sessionType === "clean" ? "&type=clean" : ""}`}
+            emptyMessage={
+              sessionType === "clean"
+                ? "No 90-minute times free right now. Try the other location, the 60-minute session, or get in touch directly."
+                : undefined
+            }
+            boxed={false}
+          />
+        </section>
       </Card>
 
       <Sheet open={sheetOpen} onClose={closeSheet} label="Your details">
@@ -234,6 +292,7 @@ export function BookingFlow({
                 <div className="mt-1 text-[12.5px] text-muted">
                   {CLINIC_BOOKING_LABEL[clinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
                 </div>
+                <div className="mt-0.5 text-[12.5px] font-semibold text-clay-text">{bookingSummary}</div>
               </div>
               <button
                 type="button"

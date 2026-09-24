@@ -3,7 +3,7 @@ import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveSignOff } from "@/lib/booking/email";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
-import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import { CLINIC_LABEL, sessionPrice, type Clinic } from "@/lib/booking/rules";
 
 /** How long after a session we start treating it as overdue for payment. */
 export const UNPAID_AFTER_HOURS = 25;
@@ -125,7 +125,15 @@ export interface ReminderSettings {
  */
 export function composePaymentReminder(
   settings: ReminderSettings,
-  input: { clientName: string; whenLabel: string; clinic: Clinic; paymentRef?: string; portalLink?: string },
+  input: {
+    clientName: string;
+    whenLabel: string;
+    clinic: Clinic;
+    /** "clean" for a 90-minute Clean Language session — it has its own price */
+    sessionType?: string;
+    paymentRef?: string;
+    portalLink?: string;
+  },
 ): { subject: string; body: string } {
   const first = input.clientName.split(" ")[0] || "there";
   const lines = [
@@ -144,7 +152,7 @@ export function composePaymentReminder(
     if (input.paymentRef) lines.push("Please use that reference. It's how I match your payment to you.");
   }
   if (input.portalLink) lines.push("", "You can also see this any time on your own page:", input.portalLink);
-  const price = CLINIC_PRICE[input.clinic];
+  const price = sessionPrice(input.clinic, input.sessionType);
   lines.push(
     "",
     input.clinic === "bethnal"
@@ -174,6 +182,7 @@ export async function sendPaymentReminder(bookingId: string): Promise<{ sentTo: 
     clientName: booking.client.name,
     whenLabel: `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`,
     clinic: booking.clinic as Clinic,
+    sessionType: booking.sessionType,
     paymentRef,
     portalLink: portalUrl(settings, token),
   });

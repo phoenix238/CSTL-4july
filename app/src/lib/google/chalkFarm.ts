@@ -1,6 +1,6 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getCalendarApi, withRetry } from "./client";
-import { EVENT_REMINDERS, NO_REMINDERS } from "@/lib/booking/rules";
+import { EVENT_REMINDERS, NO_REMINDERS, sessionMinutes } from "@/lib/booking/rules";
 import { clusterSessions } from "@/lib/booking/availability";
 import { fmtTime, londonDayStart, londonTime } from "@/lib/time";
 
@@ -21,23 +21,27 @@ function isGone(err: unknown): boolean {
  * that holds the empty time between them. Each block runs from
  * `edgeBufferMinutes` before its earliest session to the same after its latest
  * session's end, and carries that cluster's own session starts for the
- * venue-facing note. Pure — split out from `syncChalkFarmDayBlock` so the
+ * venue-facing note. A bare Date is a standard 60-minute session; a longer one
+ * (a 90-minute Clean Language session) is passed with its own length. Pure — split out from `syncChalkFarmDayBlock` so the
  * clustering + edge-padding math is unit-testable without mocking Prisma/Google.
  */
 export function chalkFarmBlockRanges(
-  sessionStarts: Date[],
+  sessions: Array<Date | { start: Date; minutes: number }>,
   edgeBufferMinutes: number,
   clusterGapMinutes: number,
 ): Array<{ start: Date; end: Date; starts: Date[] }> {
   const edgeBufferMs = edgeBufferMinutes * 60_000;
-  const clusters = clusterSessions(
-    sessionStarts.map((t) => t.getTime()),
-    SESSION_MS,
-    clusterGapMinutes * 60_000,
+  const spans = sessions.map((s) =>
+    s instanceof Date ? { start: s.getTime(), len: SESSION_MS } : { start: s.start.getTime(), len: s.minutes * 60_000 },
   );
+  const clusters = clusterSessions(spans, SESSION_MS, clusterGapMinutes * 60_000);
+  // A cluster ends when its last-finishing session does — with mixed lengths
+  // that isn't necessarily the one that starts last.
+  const endOf = (ms: number[]) =>
+    Math.max(...spans.filter((sp) => ms.includes(sp.start)).map((sp) => sp.start + sp.len));
   return clusters.map((ms) => ({
     start: new Date(ms[0] - edgeBufferMs),
-    end: new Date(ms[ms.length - 1] + SESSION_MS + edgeBufferMs),
+    end: new Date(endOf(ms) + edgeBufferMs),
     starts: ms.map((t) => new Date(t)),
   }));
 }
@@ -97,7 +101,7 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
   }
 
   const ranges = chalkFarmBlockRanges(
-    bookings.map((b) => b.startsAt),
+    bookings.map((b) => ({ start: b.startsAt, minutes: sessionMinutes(b.sessionType) })),
     settings.chalkFarmEdgeBufferMinutes,
     settings.chalkFarmClusterGapMinutes,
   );

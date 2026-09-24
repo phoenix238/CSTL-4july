@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
-import type { Clinic } from "@/lib/booking/rules";
+import { parseSessionType, type Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
 import { describeReturningClient, findClientByEmail } from "@/lib/clients";
 import { bookSession } from "@/lib/booking/book";
@@ -15,8 +15,9 @@ import { sendEmail } from "@/lib/google/gmail";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { clinic, startISO, name, email, phone, company, confirmReturning } = body as {
+    const { clinic, startISO, name, email, phone, company, confirmReturning, sessionType: postedType } = body as {
       clinic?: string;
+      sessionType?: string;
       startISO?: string;
       name?: string;
       email?: string;
@@ -46,6 +47,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Please add a valid email" }, { status: 400 });
     }
     const cleanPhone = phone?.trim() ?? "";
+    // 60-minute craniosacral unless the visitor chose the Clean Language session.
+    const sessionType = parseSessionType(postedType);
 
     // Before anything that costs: a Drive folder, a Doc, calendar events and an
     // email all follow from here, so the ceiling is checked first, not after.
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
     const settings = await getSettings();
-    await assertSlotAvailable({ clinic: clinic as Clinic, start });
+    await assertSlotAvailable({ clinic: clinic as Clinic, start, sessionType });
 
     // Email only — never the fuzzy name/phone match. See findClientByEmail.
     const existing = await findClientByEmail(cleanEmail);
@@ -83,6 +86,7 @@ export async function POST(req: Request) {
       clientId: existing?.id,
       newClient: existing ? undefined : { name: cleanName, email: cleanEmail, phone: cleanPhone },
       clinic: clinic as Clinic,
+      sessionType,
       startISO: start.toISOString(),
       sendEmail: true,
       sendPayment: true,
