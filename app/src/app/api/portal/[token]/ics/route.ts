@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma, getSettings } from "@/lib/db";
 import { portalRoute } from "@/lib/portalRoute";
-import { SESSION_EVENT_TITLE, type Clinic } from "@/lib/booking/rules";
+import { sessionEventTitle, sessionMinutes, SESSION_TYPE_LABEL, parseSessionType, type Clinic } from "@/lib/booking/rules";
 import { buildSessionIcs, sessionLocation, DEFAULT_CALENDAR_ALARM_LEAD_DAYS } from "@/lib/calendarLinks";
 import { portalUrl } from "@/lib/portal";
 
@@ -34,9 +34,10 @@ export const GET = portalRoute(async (req, client) => {
   const ics = buildSessionIcs({
     uid: booking.id,
     start: booking.startsAt,
-    title: SESSION_EVENT_TITLE,
+    end: new Date(booking.startsAt.getTime() + sessionMinutes(booking.sessionType) * 60_000),
+    title: sessionEventTitle(booking.sessionType),
     location: sessionLocation(clinic, address),
-    description: `Craniosacral therapy with Phoenix Tanner. Manage this session: ${portalLink}`,
+    description: `${SESSION_TYPE_LABEL[parseSessionType(booking.sessionType)]} with Phoenix Tanner. Manage this session: ${portalLink}`,
     reminderLeadDays: DEFAULT_CALENDAR_ALARM_LEAD_DAYS,
   });
 

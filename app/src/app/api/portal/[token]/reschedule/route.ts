@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
-import type { Clinic } from "@/lib/booking/rules";
+import { parseSessionType, type Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable } from "@/lib/booking/slots";
 import { rescheduleBooking } from "@/lib/booking/book";
 import { canRescheduleSelf } from "@/lib/account";
@@ -46,7 +46,12 @@ export const POST = portalRoute(async (req, client) => {
 
   const clinic = booking.clinic as Clinic;
   // Excluding their own booking, since that's the slot they're moving off.
-  await assertSlotAvailable({ clinic, start, excludeBookingId: booking.id });
+  await assertSlotAvailable({
+    clinic,
+    start,
+    excludeBookingId: booking.id,
+    sessionType: parseSessionType(booking.sessionType),
+  });
 
   const result = await rescheduleBooking(booking.id, start.toISOString());
 

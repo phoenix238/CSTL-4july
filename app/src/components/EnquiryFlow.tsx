@@ -16,7 +16,14 @@ import {
   useIsPhone,
   useToast,
 } from "./ui";
-import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
+import {
+  CLINIC_LABEL,
+  SESSION_TYPE_MINUTES,
+  planBookingEvents,
+  sessionPrice,
+  type Clinic,
+  type SessionType,
+} from "@/lib/booking/rules";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
 import { composeOfferMessage, composeOfferTimesOnly } from "@/lib/booking/offer";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -95,9 +102,14 @@ export function EnquiryFlow({
   );
   const [saving, setSaving] = useState(false);
   const [clinic, setClinic] = useState<Clinic>((existingClient?.clinic as Clinic) || "bethnal");
+  // 60-minute craniosacral unless the 90-minute Clean Language session is chosen.
+  // Only a directly confirmed booking can be the longer session — offered times
+  // go out as standard 60-minute sessions.
+  const [chosenSessionType, setSessionType] = useState<SessionType>("cst");
   const [weekStart, setWeekStart] = useState(() => londonWeekStart());
   const [selected, setSelected] = useState<Date[]>([]);
   const [bookMode, setBookMode] = useState<"confirm" | "offer">("offer");
+  const sessionType: SessionType = bookMode === "confirm" ? chosenSessionType : "cst";
   const [offeredTimes, setOfferedTimes] = useState<Date[]>([]);
 
   // booking panel
@@ -187,8 +199,10 @@ export function EnquiryFlow({
       whenLabel,
       sendPayment,
       settings,
+      undefined,
+      sessionType,
     );
-  }, [settings, bookMode, selected, confirmSlot, clinic, sendPayment, activeClient, name]);
+  }, [settings, bookMode, selected, confirmSlot, clinic, sessionType, sendPayment, activeClient, name]);
 
   useEffect(() => {
     if (composed && !emailDirty) setEmailBody(composed.body);
@@ -516,6 +530,7 @@ export function EnquiryFlow({
     try {
       const req: Record<string, unknown> = {
         clinic,
+        sessionType,
         startISO: confirmSlot.toISOString(),
         // Email the confirmation unless you've unticked it for this booking. Either
         // way bookSession falls back to clipboard text when there's no email on file.
@@ -653,7 +668,7 @@ export function EnquiryFlow({
   /* ---------------- grid / book ---------------- */
 
   const clinicAddress = settings ? (clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress) : undefined;
-  const plan = confirmSlot ? planBookingEvents(clinic, confirmSlot, clinicAddress) : [];
+  const plan = confirmSlot ? planBookingEvents(clinic, confirmSlot, clinicAddress, undefined, sessionType) : [];
   const isReturning = !!activeClient?.welcomeSent;
   const canStartOver = !!(saved || match || name.trim() || enquiryId);
 
@@ -806,7 +821,7 @@ export function EnquiryFlow({
             <div className="text-[12.5px] text-muted">
               {[analysis?.phone, analysis?.email].filter(Boolean).join(" · ") ||
                 (existingClient ? "Booking a returning client" : "No contact details found")}{" "}
-              · 60 min session
+              · {SESSION_TYPE_MINUTES[sessionType]} min session
             </div>
           </div>
           <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
@@ -821,10 +836,25 @@ export function EnquiryFlow({
                   clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
                 }`}
               >
-                {CLINIC_LABEL[c]} · {c === "waterloo" ? "£80" : "£30–60"}
+                {CLINIC_LABEL[c]} · {sessionPrice(c, sessionType).split(" ")[0]}
               </button>
             ))}
           </div>
+          {bookMode === "confirm" && (
+            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+              {(["cst", "clean"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSessionType(t)}
+                  className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+                    sessionType === t ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                  }`}
+                >
+                  {t === "cst" ? "Craniosacral · 60 min" : "Clean Language · 90 min"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {analysis?.clinicReason && (
           <div className="text-xs text-muted">Suggested: {analysis.clinicReason} — change it above if that&apos;s wrong.</div>
@@ -1010,7 +1040,7 @@ export function EnquiryFlow({
                   setEmailDirty(false);
                 }}
               />
-              New client — include payment details ({CLINIC_PRICE[clinic]})
+              New client — include payment details ({sessionPrice(clinic, sessionType)})
             </label>
           )}
           <textarea
