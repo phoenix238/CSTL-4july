@@ -15,6 +15,7 @@ async function resolveModel(): Promise<string> {
 }
 
 async function chat(system: string, user: string, maxTokens: number): Promise<string> {
+  const model = await resolveModel();
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -23,8 +24,13 @@ async function chat(system: string, user: string, maxTokens: number): Promise<st
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: await resolveModel(),
+      model,
       max_tokens: maxTokens,
+      // Sonnet 5 thinks by default: that spends these small max_tokens budgets
+      // before any answer is written, and puts a thinking block (not the
+      // answer) first in `content`. These are short extraction jobs — no
+      // thinking needed. Haiku 4.5 doesn't think unless asked.
+      ...(model === MODEL_SONNET ? { thinking: { type: "disabled" } } : {}),
       system,
       messages: [{ role: "user", content: user }],
     }),
@@ -32,8 +38,26 @@ async function chat(system: string, user: string, maxTokens: number): Promise<st
   if (!res.ok) {
     throw new Error(`Anthropic request failed (${res.status}): ${await res.text()}`);
   }
-  const data = await res.json();
-  return data.content?.[0]?.text ?? "";
+  const data = (await res.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+    stop_reason?: string;
+  };
+  if (data.stop_reason === "refusal") throw new Error("Claude declined to process this text");
+  return (data.content ?? [])
+    .filter((b) => b.type === "text")
+    .map((b) => b.text ?? "")
+    .join("");
+}
+
+/** Pull the JSON object/array out of Claude's reply, with a readable error when there isn't one. */
+function parseJsonFrom(text: string, open: "{" | "["): unknown {
+  const close = open === "{" ? "}" : "]";
+  const start = text.indexOf(open);
+  const end = text.lastIndexOf(close);
+  if (start === -1 || end < start) {
+    throw new Error("Claude didn't return a usable answer — please try again");
+  }
+  return JSON.parse(text.slice(start, end + 1));
 }
 
 const enquirySchema = z.object({
@@ -73,7 +97,7 @@ Extract from the message and reply with ONLY a JSON object, no other text:
     message,
     500,
   );
-  const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  const json = parseJsonFrom(text, "{");
   return enquirySchema.parse(json);
 }
 
@@ -98,7 +122,7 @@ export async function summariseNote(raw: string): Promise<string[]> {
     raw,
     400,
   );
-  const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
+  const arr = parseJsonFrom(text, "[");
   return z.array(z.string()).min(1).parse(arr);
 }
 
@@ -123,7 +147,7 @@ export async function summariseSession(input: {
     parts.join("\n\n"),
     400,
   );
-  const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
+  const arr = parseJsonFrom(text, "[");
   return z.array(z.string()).min(1).parse(arr);
 }
 
@@ -201,6 +225,6 @@ The filename often contains the client's name (e.g. "Case History — Jane Doe �
     `File: ${filename}\n\n${content.slice(0, 40_000)}`,
     4000,
   );
-  const arr = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1));
+  const arr = parseJsonFrom(text, "[");
   return z.array(importedClientSchema).parse(arr);
 }
