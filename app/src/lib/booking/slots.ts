@@ -2,7 +2,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekStart } from "@/lib/time";
 import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type CapSession, type DayTrace, type OverrideWindow } from "./availability";
-import { SESSION_MINUTES, sessionMinutes, type Clinic, type SessionType } from "./rules";
+import { SESSION_MINUTES, sessionMinutes, WATERLOO_ROOM_PAD_MINUTES, type Clinic, type SessionType } from "./rules";
 
 /**
  * Bethnal Green's weekly Chalk Farm hours cap, as a `computeAvailableSlots`-
@@ -82,12 +82,19 @@ function spanBuffer(
   span: BusySpan,
   clinic: Clinic,
   settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
+  sessionType?: SessionType,
 ): number | undefined {
   // A confirmed session at the *other* clinic — Phoenix has to physically get
   // there. This is what makes a Waterloo morning and a Bethnal Green evening
   // safe on the same day: the two are allowed to coexist, just not back to back.
   if (span.clinic && span.clinic !== clinic) return settings.crossClinicGapMinutes;
   if (span.source === "chalkFarm") return settings.chalkFarmBufferMinutes;
+  // A 90-minute Waterloo session holds the R5 room 15 minutes either side, so
+  // anything already on the room calendar has to clear that wider booking.
+  if (span.source === "room" && clinic === "waterloo") {
+    const pad = WATERLOO_ROOM_PAD_MINUTES[sessionType ?? "cst"];
+    if (pad > 0) return pad;
+  }
   return undefined;
 }
 
@@ -103,12 +110,14 @@ export function filterBusyForClinic(
   clinic: Clinic,
   settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
   excludeBookingId?: string,
+  /** the session being looked for — a 90-minute Waterloo one needs more room clearance */
+  sessionType?: SessionType,
 ): Array<BusySpan & { bufferMinutes?: number }> {
   return busy
     .filter((b) => !b.roomBlock)
     .filter((b) => !excludeBookingId || b.ownBookingId !== excludeBookingId)
     .filter((b) => appliesToClinic(b, clinic))
-    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, clinic, settings) }));
+    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, clinic, settings, sessionType) }));
 }
 
 /**
@@ -195,7 +204,7 @@ async function availabilityParams({
     windowEnd,
     weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic],
     overrides,
-    busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId),
+    busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId, sessionType),
     slotMinutes: settings.bookingSlotMinutes,
     sessionMinutes: sessionMinutes(sessionType),
     // Waterloo and Bethnal Green don't need the same spacing between Phoenix's

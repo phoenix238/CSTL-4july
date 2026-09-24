@@ -9,6 +9,7 @@ import {
 } from "./rules";
 import { chalkFarmCapMinutes, computeAvailableSlots, isSlotAvailable } from "./availability";
 import { chalkFarmBlockRanges } from "@/lib/google/chalkFarm";
+import { filterBusyForClinic } from "./slots";
 import { defaultAmountPence, sessionPriceLabel } from "@/lib/account";
 import { composeBookingEmail, type EmailSettings } from "./email";
 import { fmtTime, londonDayStart, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
@@ -53,12 +54,53 @@ describe("session types", () => {
 });
 
 describe("calendar events for a Clean Language session", () => {
-  it("runs every Waterloo event — personal and room — for the full 90 minutes", () => {
+  it("runs the Waterloo session for 90 minutes and books the R5 room for two hours around it", () => {
     const start = new Date(Date.UTC(2026, 6, 7, 9));
     const plan = planBookingEvents("waterloo", start, "1 Rd", undefined, "clean");
     expect(plan).toHaveLength(2);
-    for (const ev of plan) expect(ev.end.getTime() - ev.start.getTime()).toBe(90 * 60_000);
-    expect(plan.find((e) => e.calendar === "personal")!.summary).toBe("Clean Language + craniosacral therapy");
+    const personal = plan.find((e) => e.calendar === "personal")!;
+    expect(personal.summary).toBe("Clean Language + craniosacral therapy");
+    expect(personal.start).toEqual(start);
+    expect(personal.end).toEqual(new Date(Date.UTC(2026, 6, 7, 10, 30)));
+    // R5: 8:45 → 10:45, 15 minutes either side of the session.
+    const room = plan.find((e) => e.calendar === "room")!;
+    expect(room.start).toEqual(new Date(Date.UTC(2026, 6, 7, 8, 45)));
+    expect(room.end).toEqual(new Date(Date.UTC(2026, 6, 7, 10, 45)));
+  });
+
+  it("still books the R5 room for exactly the hour on a standard session", () => {
+    const start = new Date(Date.UTC(2026, 6, 7, 9));
+    const room = planBookingEvents("waterloo", start).find((e) => e.calendar === "room")!;
+    expect(room.start).toEqual(start);
+    expect(room.end).toEqual(new Date(Date.UTC(2026, 6, 7, 10)));
+  });
+
+  it("holds the Bethnal Green room from 15 minutes before a 90-minute session to 15 after", () => {
+    const d = (h: number, m = 0) => new Date(`2026-08-11T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`);
+    const [range] = chalkFarmBlockRanges([{ start: d(14), minutes: 90 }], 15, 45);
+    expect(range.start).toEqual(d(13, 45));
+    expect(range.end).toEqual(d(15, 45));
+  });
+
+  it("makes a 90-minute Waterloo session clear anything on the room calendar by 15 minutes", () => {
+    const settings = { chalkFarmBufferMinutes: 30, crossClinicGapMinutes: 60 };
+    const room = [{ start: at(11), end: at(12), title: "Someone else", known: false, source: "room" as const }];
+    expect(filterBusyForClinic(room, "waterloo", settings, undefined, "clean").map((b) => b.bufferMinutes)).toEqual([15]);
+    expect(filterBusyForClinic(room, "waterloo", settings).map((b) => b.bufferMinutes)).toEqual([undefined]);
+    // So with the room taken from 11:00, a 90-minute session can start at 9:15
+    // (room held until 11:00) but not 9:30 (room held until 11:15).
+    const weeklyHours = [{ weekday: tueWeekday, startMin: 9 * 60, endMin: 17 * 60 }];
+    const busy = filterBusyForClinic(room, "waterloo", settings, undefined, "clean");
+    const params = {
+      clinic: "waterloo" as const,
+      weeklyHours,
+      overrides: [],
+      busy,
+      now: at(0),
+      sessionMinutes: 90,
+    };
+    expect(isSlotAvailable(at(9, 15), params)).toBe(true);
+    expect(isSlotAvailable(at(9, 30), params)).toBe(false);
   });
 
   it("keeps the standard session's events exactly as before", () => {

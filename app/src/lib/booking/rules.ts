@@ -7,6 +7,8 @@
 // Whatever the length, every event below spans the booking's own session.
 //
 //   Waterloo (£80 · 60 min | £120 · 90 min):
+//     A 90-min session books the R5 room for two hours: 15 min either side of
+//     the session (see WATERLOO_ROOM_PAD_MINUTES).
 //     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
 //     1h  "R5 - Phoenix"          on the room calendar
 //
@@ -69,6 +71,16 @@ export const SESSION_TYPES: readonly SessionType[] = ["cst", "clean"];
 export const SESSION_TYPE_MINUTES: Record<SessionType, number> = {
   cst: SESSION_MINUTES,
   clean: 90,
+};
+
+/**
+ * Room time held either side of a Waterloo session, on the R5 room booking. The
+ * standard hour books the room for exactly the hour; a 90-minute Clean Language
+ * session books it for two hours — 15 minutes before and 15 after.
+ */
+export const WATERLOO_ROOM_PAD_MINUTES: Record<SessionType, number> = {
+  cst: 0,
+  clean: 15,
 };
 
 /** The longest any session can run — the look-behind window for overlap checks. */
@@ -190,8 +202,8 @@ export function planBookingEvents(
       {
         calendar: "room",
         summary: "R5 - Phoenix",
-        start: sessionStart,
-        end: sessionEnd,
+        start: addMinutes(sessionStart, -WATERLOO_ROOM_PAD_MINUTES[sessionType]),
+        end: addMinutes(sessionEnd, WATERLOO_ROOM_PAD_MINUTES[sessionType]),
         inviteClient: false,
         description: venueNote || undefined,
       },
