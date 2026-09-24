@@ -2,8 +2,8 @@
 //
 // Two kinds of session, bookable at either clinic (see SessionType below):
 //   "cst"   — craniosacral therapy, 60 min. The default everywhere.
-//   "clean" — Clean Language + craniosacral therapy, 90 min: about 25 min of
-//             Clean Language, then the hands-on work.
+//   "clean" — Clean Language + craniosacral therapy, 90 min: the first half
+//             hour for landing and Clean Language, then an hour on the table.
 // Whatever the length, every event below spans the booking's own session.
 //
 //   Waterloo (£80 · 60 min | £120 · 90 min):

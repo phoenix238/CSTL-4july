@@ -15,7 +15,7 @@ import {
 export const SESSION_TYPE_BLURB: Record<SessionType, string> = {
   cst: "Gentle, hands-on craniosacral work to help your nervous system settle and your body find its own balance.",
   clean:
-    "Around 25 minutes of Clean Language first, giving voice to what your body is holding, then the hands-on craniosacral work.",
+    "The first half hour for landing and Clean Language, then an hour of hands-on craniosacral work, with Clean Language coming in and out as we go.",
 };
 
 /**

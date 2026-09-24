@@ -285,7 +285,7 @@ export function composeBookingEmail(
   // what it is and how long to set aside — the templates are written for the
   // standard hour and don't know the difference.
   const sessionNote = clean
-    ? `This is a 90-minute Clean Language + craniosacral session (${price}). We'll begin with around 25 minutes of Clean Language, then move to the table for the hands-on work — please allow the full 90 minutes.`
+    ? `This is a 90-minute Clean Language + craniosacral session (${price}). The first half hour is for landing and Clean Language; the next hour is craniosacral therapy, with Clean Language coming in and out of the hands-on work. Please allow the full 90 minutes.`
     : "";
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
   const { intakeLink, portalLink, paymentRef } = links;
