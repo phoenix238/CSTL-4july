@@ -15,7 +15,7 @@ import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
-import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
+import { CLINIC_LABEL, SESSION_MINUTES, type Clinic } from "./rules";
 import { SlotTakenError } from "./slots";
 
 export interface BookingRequest {
@@ -193,13 +193,19 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     start,
     bookedVia: req.bookedVia ?? "admin",
   });
-  await createBookingEvents(booking.id);
-
-  const address = req.clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-  const plan = planBookingEvents(req.clinic, start, address);
+  // Reuses the exact plan createBookingEvents wrote to Google — recomputing it
+  // here would risk disagreeing about which room actually got booked, since
+  // that choice depends on live calendar state (see chooseWaterlooRoom).
+  const { plan } = await createBookingEvents(booking.id);
   for (const ev of plan) {
     const calName =
-      ev.calendar === "personal" ? "Personal calendar" : ev.calendar === "room" ? "Room calendar" : "Chalk Farm calendar";
+      ev.calendar === "personal"
+        ? "Personal calendar"
+        : ev.calendar === "room"
+          ? "Room calendar"
+          : ev.calendar === "roomFallback"
+            ? "Fallback room calendar"
+            : "Chalk Farm calendar";
     items.push(
       `"${ev.summary}" created (${calName}, ${fmtTime(ev.start)}–${fmtTime(ev.end)}, reminders on)`,
     );

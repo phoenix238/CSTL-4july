@@ -3,10 +3,12 @@ import {
   CLINIC_EVENT_COLOR,
   EVENT_REMINDERS,
   NO_REMINDERS,
+  PRIMARY_ROOM,
   SESSION_EVENT_TITLE,
   personalEventReminders,
   planBookingEvents,
   type Clinic,
+  type RoomChoice,
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
@@ -14,6 +16,56 @@ import { getOrCreatePortalToken, portalUrl } from "@/lib/portal";
 import { fmtTime, londonDateKey, londonMinutes } from "@/lib/time";
 
 const TZ = "Europe/London";
+
+/** Does this one calendar have anything on it in [start, end)? A query failure
+ *  (e.g. no access to the calendar) counts as busy — the safer read when the
+ *  answer decides whether to fall back to a second room. */
+async function calendarIsFree(
+  calendar: Awaited<ReturnType<typeof getCalendarApi>>,
+  calId: string,
+  start: Date,
+  end: Date,
+): Promise<boolean> {
+  try {
+    const res = await withRetry(() =>
+      calendar.freebusy.query({
+        requestBody: { timeMin: start.toISOString(), timeMax: end.toISOString(), items: [{ id: calId }] },
+      }),
+    );
+    return (res.data.calendars?.[calId]?.busy ?? []).length === 0;
+  } catch (err) {
+    console.error("Couldn't check room calendar availability — assuming busy", calId, err);
+    return false;
+  }
+}
+
+/**
+ * Which Waterloo room to put this session's venue event on: R5, unless it
+ * already has something on it for this exact hour and a fallback room is
+ * configured in Settings — then the fallback, if *it's* free. No fallback
+ * configured, or both taken, keeps using R5 as before.
+ *
+ * This is purely about where the venue-facing notice event lands — it never
+ * gates whether the slot was bookable. That's still decided entirely by
+ * Phoenix's personal calendar (see availability.ts), same as before this
+ * existed, so a Google hiccup here can only change which room gets the
+ * courtesy notice, never whether the booking goes through.
+ */
+async function chooseWaterlooRoom(
+  calendar: Awaited<ReturnType<typeof getCalendarApi>>,
+  start: Date,
+  end: Date,
+  settings: Awaited<ReturnType<typeof getSettings>>,
+): Promise<RoomChoice> {
+  if (!settings.roomFallbackCalendarId) return PRIMARY_ROOM;
+  const primaryId = await calendarId("room");
+  if (await calendarIsFree(calendar, primaryId, start, end)) return PRIMARY_ROOM;
+  const fallbackId = await calendarId("roomFallback");
+  if (await calendarIsFree(calendar, fallbackId, start, end)) {
+    return { calendar: "roomFallback", label: settings.roomFallbackLabel || "R6" };
+  }
+  return PRIMARY_ROOM;
+}
 
 /**
  * Create the calendar events for a booking (per Phoenix's clinic rules) and
@@ -38,7 +90,9 @@ export async function createBookingEvents(bookingId: string) {
   ]
     .filter(Boolean)
     .join("\n");
-  const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
+  const room = clinic === "waterloo" ? await chooseWaterlooRoom(calendar, booking.startsAt, sessionEnd, settings) : undefined;
+  const roomUsed = room?.calendar === "roomFallback" ? "fallback" : "";
+  const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote, room);
 
   // The personal (client-facing) event carries the client's own "manage this
   // session" link in its description, so the session that lands on their own
@@ -96,9 +150,11 @@ export async function createBookingEvents(bookingId: string) {
     else secondaryEventId = res.data.id!;
     // Persist each event id as soon as it's created — a later failure (e.g. the
     // Chalk Farm sync below) then can't orphan an already-created event.
+    // roomUsed travels with it so a cancel/reschedule later knows which
+    // calendar the secondary event actually landed on.
     await prisma.booking.update({
       where: { id: bookingId },
-      data: { personalEventId, secondaryEventId },
+      data: { personalEventId, secondaryEventId, roomUsed },
     });
   }
   if (clinic === "bethnal") {
@@ -111,7 +167,7 @@ export async function createBookingEvents(bookingId: string) {
       console.error("Chalk Farm day-block sync failed (booking still stands)", err);
     }
   }
-  return { personalEventId, secondaryEventId };
+  return { personalEventId, secondaryEventId, plan };
 }
 
 /**
@@ -208,13 +264,18 @@ export async function deleteBookingGoogleEvents(booking: {
   clinic: string;
   personalEventId: string;
   secondaryEventId: string;
+  /** Waterloo only — "fallback" if the secondary event was written to the
+   *  fallback room instead of R5 (see roomUsed on the Booking model) */
+  roomUsed?: string;
 }) {
   const calendar = await getCalendarApi();
   const clinic = booking.clinic as Clinic;
   const targets: Array<[string, string]> = [];
   if (booking.personalEventId) targets.push([await calendarId("personal"), booking.personalEventId]);
   if (booking.secondaryEventId) {
-    targets.push([await calendarId(clinic === "waterloo" ? "room" : "chalkFarm"), booking.secondaryEventId]);
+    const secondaryKey =
+      clinic === "waterloo" ? (booking.roomUsed === "fallback" ? "roomFallback" : "room") : "chalkFarm";
+    targets.push([await calendarId(secondaryKey), booking.secondaryEventId]);
   }
   for (const [calId, eventId] of targets) {
     try {
