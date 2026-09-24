@@ -220,6 +220,7 @@ export function BookingFlow({
             setSheetOpen(true);
           }}
           boxed={false}
+          layout="responsive"
         />
       </Card>
 
