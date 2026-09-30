@@ -8,13 +8,16 @@ import { fmtDayLong } from "@/lib/time";
 /**
  * Resolve a payment the matcher couldn't place: assign it to a client, or set it
  * aside. Body: { clientId } to assign, or { ignore: true } to file it away.
+ * { clientId, bookingId } settles that exact session — Home's "Mark paid", where
+ * the session is already chosen and the question is which payment paid it.
  *
- * Assigning settles the same session the automatic path would have chosen, so a
- * payment sorted out by hand lands exactly where it would have landed on its own.
+ * Without a bookingId, assigning settles the same session the automatic path
+ * would have chosen, so a payment sorted out by hand lands exactly where it
+ * would have landed on its own.
  */
 export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const { id } = await ctx.params;
-  const { clientId, ignore } = (await req.json()) as { clientId?: string; ignore?: boolean };
+  const { clientId, bookingId, ignore } = (await req.json()) as { clientId?: string; bookingId?: string; ignore?: boolean };
 
   const tx = await prisma.bankTransaction.findUniqueOrThrow({ where: { id } });
 
@@ -69,7 +72,13 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   // A hand-assignment: the person has already decided this payment is theirs, so
   // don't apply the ±window that guards the automatic path — place it on the best
   // session whatever its age, dated from the transfer.
-  const target = chooseBookingToSettle(bookings, tx.transactedAt, Infinity);
+  let target = chooseBookingToSettle(bookings, tx.transactedAt, Infinity);
+  if (bookingId) {
+    const chosen = bookings.find((b) => b.id === bookingId);
+    if (!chosen) throw new Error("That session isn't this client's.");
+    if (chosen.paid) throw new Error("That session is already marked paid.");
+    target = chosen;
+  }
   if (!target) {
     // Recorded against them even with nothing to settle — better a payment
     // attributed to the right person than one left looking anonymous.

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Card, Chip, clinicChip, SectionLabel, useToast } from "./ui";
+import { api, Card, Chip, clinicChip, inputClass, SectionLabel, useToast } from "./ui";
+import { formatPence } from "@/lib/account";
+import { fmtDate } from "@/lib/time";
 
 export interface TodayRow {
   id: string;
@@ -40,6 +42,45 @@ export interface AttentionItem {
   desc: string;
   /** unpaid only: a reminder has already been sent to the client */
   reminded?: boolean;
+  /** unpaid only — what "Mark paid" needs to link the right bank payment */
+  clientId?: string;
+  startsAt?: string;
+  amountPence?: number | null;
+}
+
+/** A bank payment the matcher couldn't place, offered when marking a session paid by transfer. */
+interface PendingPayment {
+  id: string;
+  transactedAt: string;
+  amountPence: number;
+  reference: string;
+  counterParty: string;
+  clientId: string | null;
+}
+
+/** How far around the session a payment is offered as the one that paid it. */
+const PICK_BEFORE_DAYS = 14;
+const PICK_AFTER_DAYS = 60;
+
+/**
+ * Unplaced payments that could have paid this session: not already put against
+ * someone else, and dated near it. The right amount first, then nearest in time.
+ */
+function paymentsFor(a: AttentionItem, pending: PendingPayment[]): PendingPayment[] {
+  const at = a.startsAt ? new Date(a.startsAt).getTime() : Date.now();
+  const day = 86_400_000;
+  return pending
+    .filter((p) => !p.clientId || p.clientId === a.clientId)
+    .filter((p) => {
+      const t = new Date(p.transactedAt).getTime();
+      return t >= at - PICK_BEFORE_DAYS * day && t <= at + PICK_AFTER_DAYS * day;
+    })
+    .sort((x, y) => {
+      const exact = Number(y.amountPence === a.amountPence) - Number(x.amountPence === a.amountPence);
+      if (exact) return exact;
+      return Math.abs(new Date(x.transactedAt).getTime() - at) - Math.abs(new Date(y.transactedAt).getTime() - at);
+    })
+    .slice(0, 6);
 }
 
 /**
@@ -103,6 +144,14 @@ export function HomeView({
   const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [scanning, setScanning] = useState(false);
+  // The "Mark paid" panel: one session at a time, asking how it was paid.
+  const [paying, setPaying] = useState<{
+    id: string;
+    mode: "choose" | "cash" | "bank";
+    cash: string;
+    pending: PendingPayment[] | null;
+    bankFeed: boolean;
+  } | null>(null);
   const [upcomingOpen, setUpcomingOpen] = useState(false);
 
   const hour = new Date().getHours();
@@ -231,21 +280,56 @@ export function HomeView({
     );
   }
 
-  async function markPaid(a: AttentionItem) {
+  // Save the payment, then drop the row. Every way of marking paid records HOW
+  // it was paid — that's what Honey reads to file the money: cash is added to
+  // the ledger as income, a linked transfer labels the bank line it already has.
+  async function settle(a: AttentionItem, url: string, body: Record<string, unknown>, done: string) {
     setBusyId(a.id);
     try {
-      await api(`/api/bookings/${a.id}/payment`, {
-        method: "PATCH",
-        body: JSON.stringify({ paid: true }),
-      });
+      await api(url, { method: "PATCH", body: JSON.stringify(body) });
       setPaidIds((s) => new Set(s).add(a.id));
-      toast(`Marked paid — ${a.name.split(" ")[0]} ✓`);
+      setPaying(null);
+      toast(done);
       router.refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save that");
     } finally {
       setBusyId(null);
     }
+  }
+
+  function markPaid(a: AttentionItem) {
+    setPaying({
+      id: a.id,
+      mode: "choose",
+      cash: a.amountPence != null ? String(a.amountPence / 100) : "",
+      pending: null,
+      bankFeed: true,
+    });
+  }
+
+  async function chooseBank(a: AttentionItem) {
+    setPaying((p) => (p ? { ...p, mode: "bank" } : p));
+    try {
+      const res = await api<{ configured: boolean; pending: PendingPayment[] }>("/api/payments/sync");
+      setPaying((p) => (p?.id === a.id ? { ...p, pending: res.pending, bankFeed: res.configured } : p));
+    } catch {
+      setPaying((p) => (p?.id === a.id ? { ...p, pending: [], bankFeed: false } : p));
+    }
+  }
+
+  function saveCash(a: AttentionItem) {
+    const pounds = parseFloat(paying?.cash ?? "");
+    if (!Number.isFinite(pounds) || pounds <= 0) {
+      toast("Enter how much they gave you first");
+      return;
+    }
+    settle(
+      a,
+      `/api/bookings/${a.id}/payment`,
+      { paid: true, amountPence: Math.round(pounds * 100), paymentNote: "Cash" },
+      `Recorded £${pounds % 1 === 0 ? pounds : pounds.toFixed(2)} cash — ${a.name.split(" ")[0]} ✓`,
+    );
   }
 
   async function remind(a: AttentionItem) {
@@ -555,7 +639,7 @@ export function HomeView({
                         <div className="flex flex-none flex-wrap gap-2">
                           <button
                             disabled={busy}
-                            onClick={() => markPaid(a)}
+                            onClick={() => (paying?.id === a.id ? setPaying(null) : markPaid(a))}
                             className="cursor-pointer rounded-full bg-clay px-4 py-2 text-[12.5px] font-semibold text-cream hover:bg-clay-deep disabled:cursor-default disabled:opacity-60"
                           >
                             {busy ? "Saving…" : "Mark paid"}
@@ -597,11 +681,153 @@ export function HomeView({
                       Resend
                     </button>
                   )}
+                  {a.kind === "unpaid" && paying?.id === a.id && (
+                    <PayPanel
+                      a={a}
+                      paying={paying}
+                      busy={busyId === a.id}
+                      onCash={() => setPaying({ ...paying, mode: "cash" })}
+                      onBank={() => chooseBank(a)}
+                      onBack={() => setPaying({ ...paying, mode: "choose" })}
+                      onCancel={() => setPaying(null)}
+                      onCashChange={(cash) => setPaying({ ...paying, cash })}
+                      onSaveCash={() => saveCash(a)}
+                      onPick={(p) =>
+                        settle(
+                          a,
+                          `/api/payments/${p.id}`,
+                          { clientId: a.clientId, bookingId: a.id },
+                          `Paid by transfer — ${a.name.split(" ")[0]} ✓ · ${p.counterParty || "that sender"} will match automatically next time`,
+                        )
+                      }
+                      onUnlinked={() =>
+                        settle(
+                          a,
+                          `/api/bookings/${a.id}/payment`,
+                          { paid: true, paymentNote: "Bank transfer (payment not picked)" },
+                          `Marked paid by transfer — ${a.name.split(" ")[0]} ✓`,
+                        )
+                      }
+                    />
+                  )}
                 </div>
               ))}
             </Card>
           </aside>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const pill =
+  "cursor-pointer rounded-full px-4 py-2 text-[12.5px] font-semibold disabled:cursor-default disabled:opacity-60";
+
+/**
+ * How a session was paid, asked at the moment it's marked. Cash takes the
+ * amount handed over; a transfer is linked to the bank payment it came in as,
+ * which is what lets Honey file that exact bank line as this session's income
+ * and teaches the bank matcher the sender's name for next time.
+ */
+function PayPanel({
+  a,
+  paying,
+  busy,
+  onCash,
+  onBank,
+  onBack,
+  onCancel,
+  onCashChange,
+  onSaveCash,
+  onPick,
+  onUnlinked,
+}: {
+  a: AttentionItem;
+  paying: { mode: "choose" | "cash" | "bank"; cash: string; pending: PendingPayment[] | null; bankFeed: boolean };
+  busy: boolean;
+  onCash: () => void;
+  onBank: () => void;
+  onBack: () => void;
+  onCancel: () => void;
+  onCashChange: (v: string) => void;
+  onSaveCash: () => void;
+  onPick: (p: PendingPayment) => void;
+  onUnlinked: () => void;
+}) {
+  if (paying.mode === "choose") {
+    return (
+      <div className="flex basis-full flex-wrap items-center gap-2 rounded-lg bg-clay-tint/50 px-3 py-2.5">
+        <span className="mr-1 text-[12.5px] text-muted">How did they pay?</span>
+        <button disabled={busy} onClick={onCash} className={`${pill} bg-clay text-cream hover:bg-clay-deep`}>
+          Cash
+        </button>
+        <button disabled={busy} onClick={onBank} className={`${pill} bg-clay text-cream hover:bg-clay-deep`}>
+          Bank transfer
+        </button>
+        <button disabled={busy} onClick={onCancel} className={`${pill} text-muted`}>
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (paying.mode === "cash") {
+    return (
+      <div className="flex basis-full flex-wrap items-center gap-2 rounded-lg bg-clay-tint/50 px-3 py-2.5">
+        <span className="text-[12.5px] text-muted">Cash received £</span>
+        <input
+          autoFocus
+          inputMode="decimal"
+          value={paying.cash}
+          onChange={(e) => onCashChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onSaveCash()}
+          className={`${inputClass} !w-24`}
+          aria-label="Cash amount in pounds"
+        />
+        <button disabled={busy} onClick={onSaveCash} className={`${pill} bg-clay text-cream hover:bg-clay-deep`}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <button disabled={busy} onClick={onBack} className={`${pill} text-muted`}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  const options = paying.pending ? paymentsFor(a, paying.pending) : null;
+  return (
+    <div className="flex basis-full flex-col gap-2 rounded-lg bg-clay-tint/50 px-3 py-2.5">
+      <div className="text-[12.5px] text-muted">
+        {options === null
+          ? "Looking for the payment…"
+          : options.length
+            ? "Which payment was it? It'll be remembered for next time."
+            : paying.bankFeed
+              ? "No unplaced payment near this session — scan the bank first if it's only just arrived."
+              : "The bank feed isn't connected, so there's nothing to pick from."}
+      </div>
+      {options?.map((p) => (
+        <button
+          key={p.id}
+          disabled={busy}
+          onClick={() => onPick(p)}
+          className="flex cursor-pointer flex-wrap items-baseline gap-x-2 rounded-lg border border-hairline bg-cream px-3 py-2 text-left hover:border-clay/50 disabled:cursor-default disabled:opacity-60"
+        >
+          <span className="text-[13px] font-semibold">{formatPence(p.amountPence)}</span>
+          <span className="text-[12px] text-muted">{fmtDate(new Date(p.transactedAt))}</span>
+          <span className="min-w-0 flex-1 truncate text-[12px]">
+            {p.counterParty || "No name"}
+            {p.reference ? ` · “${p.reference}”` : ""}
+          </span>
+        </button>
+      ))}
+      <div className="flex flex-wrap gap-2">
+        <button disabled={busy} onClick={onUnlinked} className={`${pill} bg-clay-tint text-clay-text`}>
+          {busy ? "Saving…" : options?.length ? "Not listed — mark paid anyway" : "Mark paid anyway"}
+        </button>
+        <button disabled={busy} onClick={onBack} className={`${pill} text-muted`}>
+          Back
+        </button>
       </div>
     </div>
   );

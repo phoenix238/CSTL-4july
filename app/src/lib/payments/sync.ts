@@ -4,7 +4,18 @@ import { formatPence } from "@/lib/account";
 import { fmtDayLong } from "@/lib/time";
 import { fetchIncomingPayments, type BankPayment } from "@/lib/starling";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
-import { chooseBookingToSettle, matchReference, matchKnownPayer, type RefCandidate, type PayerCandidate, type MatchResult } from "./match";
+import {
+  chooseBookingToSettle,
+  matchReference,
+  matchKnownPayer,
+  matchNameAndAmount,
+  suggestClientByName,
+  type RefCandidate,
+  type PayerCandidate,
+  type MatchResult,
+} from "./match";
+
+type MatchedVia = "reference" | "payer" | "name";
 
 /**
  * Pull settled payments from the bank, match them to clients by reference, and
@@ -67,12 +78,12 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
   const nameOf = new Map(allClients.map((c) => [c.id, c.name]));
 
   const summary: SyncSummary = { newCount: fresh.length, matchedCount: 0, unmatchedCount: 0, ambiguousCount: 0 };
-  const applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string; matchedVia: "reference" | "payer" }> = [];
+  const applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string; matchedVia: MatchedVia }> = [];
   const needsAttention: BankPayment[] = [];
 
   for (const payment of fresh) {
     let result: MatchResult = matchReference(payment.reference, candidates);
-    let matchedVia: "reference" | "payer" = "reference";
+    let matchedVia: MatchedVia = "reference";
     // No reference match — fall back to a payer a human has vouched for before.
     // An ambiguous *reference* is left as-is rather than retried here: that's a
     // real conflict between references, not something a remembered name should
@@ -82,6 +93,15 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
       if (payerResult.status !== "none") {
         result = payerResult;
         matchedVia = "payer";
+      }
+    }
+    // Still nothing — a first payment with no reference. Their full name on the
+    // transfer AND the exact price of the session it would settle, together.
+    if (result.status === "none") {
+      const nameResult = await matchOnNameAndAmount(payment, allClients);
+      if (nameResult.status !== "none") {
+        result = nameResult.status === "matched" ? { status: "matched", clientId: nameResult.clientId } : nameResult;
+        matchedVia = "name";
       }
     }
 
@@ -104,7 +124,10 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
     });
     // Relative to when the money actually moved, and only sessions within the
     // window around it — a transfer shouldn't settle a session weeks away.
-    const target = chooseBookingToSettle(bookings, payment.transactedAt);
+    const found = chooseBookingToSettle(bookings, payment.transactedAt);
+    // A name match only ever stands on the amount agreeing — re-checked against
+    // the fresh read, so an earlier payment in this same run can't shift it.
+    const target = matchedVia === "name" && found?.amountPence !== payment.amountPence ? null : found;
 
     if (!target) {
       // Their reference, but nothing outstanding within the window to put it
@@ -113,7 +136,9 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
       // lost, but no session is settled automatically.
       summary.unmatchedCount++;
       needsAttention.push(payment);
-      await recordTransaction(payment, { status: "unmatched", clientId: result.clientId });
+      // A name match that didn't hold up isn't attribution — it goes to the queue
+      // unclaimed, where the name still pre-selects them for a one-tap confirm.
+      await recordTransaction(payment, { status: "unmatched", clientId: matchedVia === "name" ? undefined : result.clientId });
       continue;
     }
 
@@ -131,7 +156,9 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
           paymentNote:
             matchedVia === "payer"
               ? `Bank transfer ${fmtDayLong(payment.transactedAt)} · from remembered payer ${payment.counterParty || "—"}`
-              : `Bank transfer ${fmtDayLong(payment.transactedAt)} · ref ${payment.reference || "—"}`,
+              : matchedVia === "name"
+                ? `Bank transfer ${fmtDayLong(payment.transactedAt)} · matched on name and amount (${payment.counterParty || "—"})`
+                : `Bank transfer ${fmtDayLong(payment.transactedAt)} · ref ${payment.reference || "—"}`,
         },
       });
       await sendPendingReceiptIfAny(result.clientId);
@@ -159,9 +186,31 @@ export async function syncBankPayments({ force = false }: { force?: boolean } = 
   return summary;
 }
 
+/**
+ * The name-and-amount fallback. Only clients whose name fits are looked at, and
+ * their sessions are read fresh, so a payment earlier in the same run that
+ * settled one of them is already reflected.
+ */
+async function matchOnNameAndAmount(payment: BankPayment, clients: Array<{ id: string; name: string }>) {
+  // Cheap pre-filter: the same whole-name rule, one client at a time, so only
+  // clients who could possibly fit have their sessions read.
+  const fits = clients.filter((c) => suggestClientByName(payment.counterParty, [{ clientId: c.id, name: c.name }]));
+  if (!fits.length) return { status: "none" as const };
+  const bookings = await prisma.booking.findMany({
+    where: { clientId: { in: fits.map((c) => c.id) } },
+    select: { id: true, clientId: true, startsAt: true, paid: true, amountPence: true, status: true },
+  });
+  return matchNameAndAmount(
+    payment.counterParty,
+    payment.amountPence,
+    payment.transactedAt,
+    fits.map((c) => ({ clientId: c.id, name: c.name, bookings: bookings.filter((b) => b.clientId === c.id) })),
+  );
+}
+
 async function recordTransaction(
   payment: BankPayment,
-  extra: { status: string; clientId?: string; bookingId?: string; matchedVia?: "reference" | "payer" },
+  extra: { status: string; clientId?: string; bookingId?: string; matchedVia?: MatchedVia },
 ) {
   await prisma.bankTransaction.upsert({
     where: { feedItemUid: payment.feedItemUid },
@@ -181,7 +230,7 @@ async function recordTransaction(
 
 /** Tell Phoenix what landed. Non-fatal — the payments are already recorded. */
 async function notify(
-  applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string; matchedVia: "reference" | "payer" }>,
+  applied: Array<{ payment: BankPayment; clientName: string; whenLabel: string; matchedVia: MatchedVia }>,
   needsAttention: BankPayment[],
   autoMarked: boolean,
 ) {
@@ -192,7 +241,12 @@ async function notify(
   if (applied.length) {
     lines.push(autoMarked ? "Payments received and marked paid:" : "Payments received (waiting for you to apply):", "");
     for (const a of applied) {
-      const via = a.matchedVia === "payer" ? " · matched by remembered payer, not reference" : "";
+      const via =
+        a.matchedVia === "payer"
+          ? " · matched by remembered payer, not reference"
+          : a.matchedVia === "name"
+            ? ` · matched on name and amount (${a.payment.counterParty || "—"}), no reference — worth a glance`
+            : "";
       lines.push(`  ${a.clientName} — ${formatPence(a.payment.amountPence)} · session ${a.whenLabel}${via}`);
     }
   }
