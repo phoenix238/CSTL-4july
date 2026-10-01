@@ -14,9 +14,9 @@ describe("isSessionPayment", () => {
   it("accepts an ordinary settled incoming payment", () => {
     expect(isSessionPayment(item())).toBe(true);
   });
-  it("accepts exactly £100 but not a penny more", () => {
-    expect(isSessionPayment(item({ amount: { minorUnits: 10000 } }))).toBe(true);
-    expect(isSessionPayment(item({ amount: { minorUnits: 10001 } }))).toBe(false);
+  it("accepts exactly £1,000 but not a penny more", () => {
+    expect(isSessionPayment(item({ amount: { minorUnits: 100000 } }))).toBe(true);
+    expect(isSessionPayment(item({ amount: { minorUnits: 100001 } }))).toBe(false);
   });
   it("ignores transfers between your own accounts", () => {
     expect(isSessionPayment(item({ source: "INTERNAL_TRANSFER" }))).toBe(false);

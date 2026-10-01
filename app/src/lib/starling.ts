@@ -83,10 +83,10 @@ interface FeedItem {
 }
 
 /**
- * A session payment is never anywhere near this much, so anything bigger is
+ * A session payment is never anywhere near this much (£1,000), so anything bigger is
  * something else (rent, a transfer, other income) and only clutters the queue.
  */
-export const MAX_SESSION_PAYMENT_PENCE = 10_000;
+export const MAX_SESSION_PAYMENT_PENCE = 100_000;
 
 /** Is this feed item plausibly a client paying for a session? */
 export function isSessionPayment(i: FeedItem): boolean {
