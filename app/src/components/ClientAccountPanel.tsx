@@ -46,6 +46,7 @@ export function ClientAccountPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [showAll, setShowAll] = useState(false);
   // What's typed into each unpaid session's cash box, keyed by booking id —
   // separate from the saved amountPence so a half-typed figure isn't lost on
@@ -103,6 +104,29 @@ export function ClientAccountPanel({
       router.refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't get the link");
+    }
+  }
+
+  // Same check as Settings › Payments › Check now: pull new bank payments and
+  // mark any that match a client's reference as paid. Forced, so it works even
+  // with the daily automatic check switched off.
+  async function scanBank() {
+    setScanning(true);
+    try {
+      const sum = await api<{ newCount: number; matchedCount: number; unmatchedCount: number; ambiguousCount: number }>(
+        "/api/payments/sync",
+        { method: "POST", body: JSON.stringify({ force: true }) },
+      );
+      toast(
+        sum.newCount === 0
+          ? "No new payments since last time"
+          : `${sum.newCount} new · ${sum.matchedCount} matched · ${sum.unmatchedCount + sum.ambiguousCount} need a look (Settings › Payments)`,
+      );
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't reach the bank");
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -208,6 +232,13 @@ export function ClientAccountPanel({
             className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
           >
             {sendingReceipt ? "Sending…" : "Email receipt"}
+          </button>
+          <button
+            onClick={scanBank}
+            disabled={scanning}
+            className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
+          >
+            {scanning ? "Scanning…" : "Scan bank"}
           </button>
         </div>
 
