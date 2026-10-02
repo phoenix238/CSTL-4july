@@ -466,8 +466,9 @@ model BankTransaction {
   // matched | unmatched | ambiguous | ignored
   status       String   @default("unmatched")
   // How a "matched" row got there — "" for anything not matched, or for rows
-  // predating this column. "reference" | "payer" | "manual" (hand-assigned with
-  // no automatic rule involved).
+  // predating this column. "reference" | "payer" | "name" (full name plus the
+  // session's exact price, no reference) | "manual" (hand-assigned with no
+  // automatic rule involved).
   matchedVia   String   @default("")
   clientId     String?
   bookingId    String? // the session this settled, when one was chosen

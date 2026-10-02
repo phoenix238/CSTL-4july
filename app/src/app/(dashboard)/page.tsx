@@ -178,6 +178,9 @@ export default async function HomePage() {
       name: s.clientName,
       desc: `Unpaid — session ${s.whenLabel}`,
       reminded: s.paymentReminderSentAt != null,
+      clientId: s.clientId,
+      startsAt: s.startsAt.toISOString(),
+      amountPence: s.amountPence,
     })),
     ...pendingIntake.map((c) => ({
       kind: "intake" as const,

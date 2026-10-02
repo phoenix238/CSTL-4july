@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   chooseBookingToSettle,
   matchKnownPayer,
+  matchNameAndAmount,
   matchReference,
   normaliseRef,
   suggestClientByKnownReference,
@@ -214,5 +215,62 @@ describe("chooseBookingToSettle", () => {
   it("returns null when there is nothing to settle", () => {
     expect(chooseBookingToSettle([], NOW)).toBeNull();
     expect(chooseBookingToSettle([bk({ paid: true })], NOW)).toBeNull();
+  });
+});
+
+describe("matchNameAndAmount", () => {
+  const jono = { clientId: "jono", name: "Jono Smith", bookings: [bk({ id: "j1", amountPence: 6000 })] };
+  const sarah = { clientId: "sarah", name: "Sarah Kimani", bookings: [bk({ id: "s1", amountPence: 6000 })] };
+
+  it("matches when the whole name is on the transfer and the amount is the session's price", () => {
+    expect(matchNameAndAmount("MR JONO SMITH", 6000, NOW, [jono, sarah])).toEqual({
+      status: "matched",
+      clientId: "jono",
+      bookingId: "j1",
+    });
+  });
+
+  it("does not match on the name when the amount differs — that goes to a human", () => {
+    expect(matchNameAndAmount("JONO SMITH", 5000, NOW, [jono])).toEqual({ status: "none" });
+  });
+
+  it("does not match on an initial and surname, or a first name alone", () => {
+    expect(matchNameAndAmount("J SMITH", 6000, NOW, [jono])).toEqual({ status: "none" });
+    expect(matchNameAndAmount("JONO", 6000, NOW, [jono])).toEqual({ status: "none" });
+  });
+
+  it("never matches a client saved under a single name", () => {
+    const mono = { clientId: "m", name: "Jono", bookings: [bk({ amountPence: 6000 })] };
+    expect(matchNameAndAmount("JONO SMITH", 6000, NOW, [mono])).toEqual({ status: "none" });
+  });
+
+  it("never matches a sliding-scale session with no price recorded", () => {
+    const open = { ...jono, bookings: [bk({ id: "j1", amountPence: null })] };
+    expect(matchNameAndAmount("JONO SMITH", 6000, NOW, [open])).toEqual({ status: "none" });
+  });
+
+  it("uses the amount to tell two clients with the same name apart", () => {
+    const other = { clientId: "jono2", name: "Jono Smith", bookings: [bk({ id: "k1", amountPence: 4500 })] };
+    expect(matchNameAndAmount("JONO SMITH", 4500, NOW, [jono, other])).toEqual({
+      status: "matched",
+      clientId: "jono2",
+      bookingId: "k1",
+    });
+  });
+
+  it("refuses to guess when two clients fit on name and amount", () => {
+    const twin = { clientId: "jono2", name: "Jono Smith", bookings: [bk({ id: "k1", amountPence: 6000 })] };
+    expect(matchNameAndAmount("JONO SMITH", 6000, NOW, [jono, twin])).toEqual({
+      status: "ambiguous",
+      clientIds: ["jono", "jono2"],
+    });
+  });
+
+  it("only checks the session the payment would settle, inside the same window", () => {
+    // Oldest owed is £80; a £60 transfer doesn't skip past it to a newer £60 one.
+    const two = { ...jono, bookings: [bk({ id: "old", startsAt: day(-6), amountPence: 8000 }), bk({ id: "new", amountPence: 6000 })] };
+    expect(matchNameAndAmount("JONO SMITH", 6000, NOW, [two])).toEqual({ status: "none" });
+    const stale = { ...jono, bookings: [bk({ id: "j1", startsAt: day(-30), amountPence: 6000 })] };
+    expect(matchNameAndAmount("JONO SMITH", 6000, NOW, [stale])).toEqual({ status: "none" });
   });
 });
