@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
+import {
+  CLINIC_LABEL,
+  SESSION_TYPE_MINUTES,
+  planBookingEvents,
+  sessionPrice,
+  type Clinic,
+  type SessionType,
+} from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import {
   api,
@@ -43,6 +50,7 @@ export function QuickBook({
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [client, setClient] = useState<ClientHit | null>(null);
   const [clinic, setClinic] = useState<Clinic>("bethnal");
+  const [sessionType, setSessionType] = useState<SessionType>("cst");
   const [sendEmail, setSendEmail] = useState(true);
   const [booking, setBooking] = useState(false);
 
@@ -59,7 +67,7 @@ export function QuickBook({
     return () => clearTimeout(t);
   }, [query, client]);
 
-  const plan = client ? planBookingEvents(clinic, slot) : [];
+  const plan = client ? planBookingEvents(clinic, slot, undefined, undefined, sessionType) : [];
 
   async function book() {
     if (!client) return;
@@ -70,6 +78,7 @@ export function QuickBook({
         body: JSON.stringify({
           clientId: client.id,
           clinic,
+          sessionType,
           startISO: slot.toISOString(),
           sendEmail,
           sendPayment: false,
@@ -104,7 +113,7 @@ export function QuickBook({
           <div>
             <div className="font-serif text-[19px] font-medium">Book this slot</div>
             <div className="mt-0.5 text-[13px] text-muted">
-              {fmtDayLong(slot)} · {fmtTime(slot)} — 60 min session
+              {fmtDayLong(slot)} · {fmtTime(slot)} — {SESSION_TYPE_MINUTES[sessionType]} min session
             </div>
           </div>
 
@@ -165,7 +174,20 @@ export function QuickBook({
                       clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
                     }`}
                   >
-                    {CLINIC_LABEL[c]} · {CLINIC_PRICE[c].split(" ")[0]}
+                    {CLINIC_LABEL[c]} · {sessionPrice(c, sessionType).split(" ")[0]}
+                  </button>
+                ))}
+              </div>
+              <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px] self-start">
+                {(["cst", "clean"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setSessionType(t)}
+                    className={`cursor-pointer rounded-full px-3.5 py-[6px] text-[12px] font-semibold select-none ${
+                      sessionType === t ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                    }`}
+                  >
+                    {t === "cst" ? "Craniosacral · 60 min" : "Clean Language · 90 min"}
                   </button>
                 ))}
               </div>

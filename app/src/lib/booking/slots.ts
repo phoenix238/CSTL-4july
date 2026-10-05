@@ -1,8 +1,8 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekStart } from "@/lib/time";
-import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
-import { SESSION_MINUTES, type Clinic } from "./rules";
+import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type CapSession, type DayTrace, type OverrideWindow } from "./availability";
+import { SESSION_MINUTES, sessionMinutes, WATERLOO_ROOM_PAD_MINUTES, type Clinic, type SessionType } from "./rules";
 
 /**
  * Bethnal Green's weekly Chalk Farm hours cap, as a `computeAvailableSlots`-
@@ -28,16 +28,20 @@ export async function loadBethnalWeeklyCap(
       startsAt: { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) },
       ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
     },
-    select: { startsAt: true },
+    select: { startsAt: true, sessionType: true },
   });
 
   // Group confirmed sessions by London day (start times as minute-of-day), then
   // sum each day's session hours into its week — so the cap tracks the actual
   // Chalk Farm session time held, gaps between sessions excluded.
-  const sessionMinsByDay: Record<string, number[]> = {};
+  // A 90-minute Clean Language session carries its own length; a standard one
+  // stays a bare start (counted as 60).
+  const sessionMinsByDay: Record<string, CapSession[]> = {};
   for (const b of weekBookings) {
     const dateKey = londonDateKey(b.startsAt);
-    (sessionMinsByDay[dateKey] ??= []).push(londonMinutes(b.startsAt));
+    const start = londonMinutes(b.startsAt);
+    const minutes = sessionMinutes(b.sessionType);
+    (sessionMinsByDay[dateKey] ??= []).push(minutes === SESSION_MINUTES ? start : { start, minutes });
   }
   const capMinutesByWeek: Record<string, number> = {};
   for (const [dateKey, mins] of Object.entries(sessionMinsByDay)) {
@@ -78,12 +82,19 @@ function spanBuffer(
   span: BusySpan,
   clinic: Clinic,
   settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
+  sessionType?: SessionType,
 ): number | undefined {
   // A confirmed session at the *other* clinic — Phoenix has to physically get
   // there. This is what makes a Waterloo morning and a Bethnal Green evening
   // safe on the same day: the two are allowed to coexist, just not back to back.
   if (span.clinic && span.clinic !== clinic) return settings.crossClinicGapMinutes;
   if (span.source === "chalkFarm") return settings.chalkFarmBufferMinutes;
+  // A 90-minute Waterloo session holds the R5 room 15 minutes either side, so
+  // anything already on the room calendar has to clear that wider booking.
+  if (span.source === "room" && clinic === "waterloo") {
+    const pad = WATERLOO_ROOM_PAD_MINUTES[sessionType ?? "cst"];
+    if (pad > 0) return pad;
+  }
   return undefined;
 }
 
@@ -99,12 +110,14 @@ export function filterBusyForClinic(
   clinic: Clinic,
   settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
   excludeBookingId?: string,
+  /** the session being looked for — a 90-minute Waterloo one needs more room clearance */
+  sessionType?: SessionType,
 ): Array<BusySpan & { bufferMinutes?: number }> {
   return busy
     .filter((b) => !b.roomBlock)
     .filter((b) => !excludeBookingId || b.ownBookingId !== excludeBookingId)
     .filter((b) => appliesToClinic(b, clinic))
-    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, clinic, settings) }));
+    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, clinic, settings, sessionType) }));
 }
 
 /**
@@ -123,6 +136,8 @@ export async function loadAvailableSlots(args: {
   /** Ignore this booking's own footprint — so a client rescheduling can see the
    * slot they currently hold, and adjacent ones, as available. */
   excludeBookingId?: string;
+  /** The kind of session being looked for — a 90-minute one needs a longer gap. Default: 60-minute. */
+  sessionType?: SessionType;
 }): Promise<Date[]> {
   return computeAvailableSlots(await availabilityParams(args));
 }
@@ -168,11 +183,13 @@ async function availabilityParams({
   windowStart,
   windowEnd,
   excludeBookingId,
+  sessionType,
 }: {
   clinic: Clinic;
   windowStart: Date;
   windowEnd: Date;
   excludeBookingId?: string;
+  sessionType?: SessionType;
 }): Promise<AvailabilityParams> {
   const settings = await getSettings();
   const [overrides, busy, weeklyCap] = await Promise.all([
@@ -187,8 +204,9 @@ async function availabilityParams({
     windowEnd,
     weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic],
     overrides,
-    busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId),
+    busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId, sessionType),
     slotMinutes: settings.bookingSlotMinutes,
+    sessionMinutes: sessionMinutes(sessionType),
     // Waterloo and Bethnal Green don't need the same spacing between Phoenix's
     // own back-to-back sessions — kept as separate settings per clinic.
     bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
@@ -209,6 +227,7 @@ export async function loadAvailabilityWithTrace(args: {
   clinic: Clinic;
   windowStart: Date;
   windowEnd: Date;
+  sessionType?: SessionType;
 }): Promise<{ slots: Date[]; days: DayTrace[] }> {
   return computeAvailability(await availabilityParams(args));
 }
@@ -230,10 +249,13 @@ export async function assertSlotAvailable({
   clinic,
   start,
   excludeBookingId,
+  sessionType,
 }: {
   clinic: Clinic;
   start: Date;
   excludeBookingId?: string;
+  /** checked at this session's own length — a 90-minute session needs 90 free minutes */
+  sessionType?: SessionType;
 }): Promise<void> {
   // A day either side of the requested time is plenty to place it correctly
   // (day-boundary and buffer effects are local) and far cheaper than the full horizon.
@@ -242,6 +264,7 @@ export async function assertSlotAvailable({
     windowStart: londonDayStart(-1, start),
     windowEnd: londonDayStart(2, start),
     excludeBookingId,
+    sessionType,
   });
   if (!slots.some((s) => s.getTime() === start.getTime())) {
     throw new SlotTakenError();

@@ -146,8 +146,9 @@ model Booking {
   createdAt        DateTime @default(now())
 
   // — Payment —
-  // What this session costs, in pence. Waterloo is a fixed £80; Bethnal Green is a
-  // £30–60 sliding scale, so it stays null until the actual amount is known (set
+  // What this session costs, in pence. Waterloo is a fixed £80 (£120 for a
+  // 90-min Clean Language session); Bethnal Green is a £30–60 sliding scale
+  // (£45–75 for 90 min), so it stays null until the actual amount is known (set
   // from the client profile after the session, or when they tell you what they paid).
   amountPence   Int?
   paid          Boolean   @default(false)

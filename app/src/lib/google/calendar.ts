@@ -5,7 +5,9 @@ import {
   NO_REMINDERS,
   SESSION_EVENT_TITLE,
   personalEventReminders,
+  parseSessionType,
   planBookingEvents,
+  sessionMinutes,
   type Clinic,
 } from "@/lib/booking/rules";
 import { calendarId, getCalendarApi, withRetry } from "./client";
@@ -31,14 +33,14 @@ export async function createBookingEvents(bookingId: string) {
   const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
   // Venue-facing note for the room event — what the clinic needs (the session time
   // and how to reach Phoenix), without the client's name on the shared calendar.
-  const sessionEnd = new Date(booking.startsAt.getTime() + 60 * 60_000);
+  const sessionEnd = new Date(booking.startsAt.getTime() + sessionMinutes(booking.sessionType) * 60_000);
   const venueNote = [
     `Craniosacral session ${fmtTime(booking.startsAt)}–${fmtTime(sessionEnd)}.`,
     settings.clinicContactLine.trim(),
   ]
     .filter(Boolean)
     .join("\n");
-  const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
+  const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote, parseSessionType(booking.sessionType));
 
   // The personal (client-facing) event carries the client's own "manage this
   // session" link in its description, so the session that lands on their own
@@ -402,16 +404,18 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     .filter((b) => !removedIds.has(b.id))
     .map((b) => (movedStarts.has(b.id) ? { ...b, startsAt: movedStarts.get(b.id)! } : b));
 
-  // The booking span is the 1-hour session itself. The paired room / Chalk Farm
+  // The booking span is the session itself, at its own length (60 or 90 min). The paired room / Chalk Farm
   // event stays visible (see below) so it renders side by side with the session.
   const known: BusySpan[] = bookings.map((b) => {
     const clinic = b.clinic as Clinic;
     const start = b.startsAt;
-    const end = new Date(start.getTime() + 60 * 60_000);
+    const end = new Date(start.getTime() + sessionMinutes(b.sessionType) * 60_000);
     return {
       start,
       end,
-      title: `${b.client.name} — ${clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}`,
+      title: `${b.client.name} — ${clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}${
+        parseSessionType(b.sessionType) === "clean" ? " · Clean Language 90 min" : ""
+      }`,
       known: true,
       source: "booking" as const,
       clientId: b.clientId,

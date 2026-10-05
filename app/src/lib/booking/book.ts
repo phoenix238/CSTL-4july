@@ -15,7 +15,15 @@ import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
-import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
+import {
+  CLINIC_LABEL,
+  MAX_SESSION_MINUTES,
+  parseSessionType,
+  planBookingEvents,
+  sessionMinutes,
+  type Clinic,
+  type SessionType,
+} from "./rules";
 import { SlotTakenError } from "./slots";
 
 export interface BookingRequest {
@@ -23,6 +31,8 @@ export interface BookingRequest {
   clientId?: string;
   newClient?: { name: string; email?: string; phone?: string };
   clinic: Clinic;
+  /** "cst" (60-min craniosacral) unless a Clean Language session was chosen */
+  sessionType?: SessionType;
   startISO: string;
   sendEmail: boolean;
   sendPayment: boolean;
@@ -110,37 +120,46 @@ async function withEmailRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T>
 async function createBookingRow({
   clientId,
   clinic,
+  sessionType,
   start,
   bookedVia,
 }: {
   clientId: string;
   clinic: Clinic;
+  sessionType: SessionType;
   start: Date;
   bookedVia: string;
 }) {
-  const end = new Date(start.getTime() + SESSION_MINUTES * 60_000);
+  const end = new Date(start.getTime() + sessionMinutes(sessionType) * 60_000);
   return prisma.$transaction(async (tx) => {
     // $executeRaw, not $queryRaw: pg_advisory_xact_lock() returns void, which
     // $queryRaw tries to deserialize as a result column and fails on — this is
     // called purely for its side effect (holding the lock for the transaction).
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${londonDateKey(start)}`}))`;
-    const clash = await tx.booking.findFirst({
+    // Sessions aren't all the same length, so look back as far as the longest
+    // one could reach, then check each candidate against its own real end.
+    const nearby = await tx.booking.findMany({
       where: {
         status: "confirmed",
-        startsAt: { gt: new Date(start.getTime() - SESSION_MINUTES * 60_000), lt: end },
+        startsAt: { gt: new Date(start.getTime() - MAX_SESSION_MINUTES * 60_000), lt: end },
       },
+      select: { startsAt: true, sessionType: true },
     });
+    const clash = nearby.some(
+      (b) => b.startsAt.getTime() + sessionMinutes(b.sessionType) * 60_000 > start.getTime(),
+    );
     if (clash) throw new SlotTakenError();
     return tx.booking.create({
       data: {
         clientId,
         clinic,
+        sessionType,
         startsAt: start,
         bookedVia,
         // Waterloo has a fixed price, so it's known the moment the session is booked.
         // Bethnal Green is a sliding scale the client chooses — left null rather than
         // guessed, and filled in from the profile once the real amount is known.
-        amountPence: defaultAmountPence(clinic),
+        amountPence: defaultAmountPence(clinic, sessionType),
       },
     });
   });
@@ -154,6 +173,7 @@ async function createBookingRow({
 export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const settings = await getSettings();
   const start = new Date(req.startISO);
+  const sessionType = parseSessionType(req.sessionType);
   const whenLabel = `${fmtDayLong(start)} · ${fmtTime(start)}`;
   const items: string[] = [];
 
@@ -190,13 +210,14 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const booking = await createBookingRow({
     clientId,
     clinic: req.clinic,
+    sessionType,
     start,
     bookedVia: req.bookedVia ?? "admin",
   });
   await createBookingEvents(booking.id);
 
   const address = req.clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-  const plan = planBookingEvents(req.clinic, start, address);
+  const plan = planBookingEvents(req.clinic, start, address, undefined, sessionType);
   for (const ev of plan) {
     const calName =
       ev.calendar === "personal" ? "Personal calendar" : ev.calendar === "room" ? "Room calendar" : "Chalk Farm calendar";
@@ -217,7 +238,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // as an invited attendee, so no Google link is offered.
   const calendarIcsUrl = icsUrl(settings, portalToken, booking.id);
   const links = { intakeLink, portalLink, paymentRef, calendarIcsUrl };
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links, sessionType);
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.
   const photo = parseDataUrl(resolveClinicPhoto(req.clinic, settings));

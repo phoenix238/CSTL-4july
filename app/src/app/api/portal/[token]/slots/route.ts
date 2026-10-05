@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import type { Clinic } from "@/lib/booking/rules";
+import { parseSessionType, type Clinic } from "@/lib/booking/rules";
 import { defaultSlotWindow, loadAvailableSlots } from "@/lib/booking/slots";
 import { portalRoute } from "@/lib/portalRoute";
 
@@ -19,14 +19,27 @@ export const GET = portalRoute(async (req, client) => {
   // excluded. When they're adding one, it's ordinary busy time and stays.
   // Derived here rather than accepted from the request: a booking id supplied by
   // the caller would be a way to punch a hole in *someone else's* slot.
-  const moving = new URL(req.url).searchParams.get("moving") === "1";
+  const params = new URL(req.url).searchParams;
+  const moving = params.get("moving") === "1";
+  // Which of their sessions is being moved, when they hold more than one. Still
+  // scoped to this client's own confirmed future rows, so it can't name anyone
+  // else's; falls back to the soonest, as before.
+  const movingId = params.get("b") ?? undefined;
   const own = moving
     ? await prisma.booking.findFirst({
-        where: { clientId: client.id, status: "confirmed", startsAt: { gt: new Date() } },
+        where: {
+          clientId: client.id,
+          status: "confirmed",
+          startsAt: { gt: new Date() },
+          ...(movingId ? { id: movingId } : {}),
+        },
         orderBy: { startsAt: "asc" },
-        select: { id: true, startsAt: true },
+        select: { id: true, startsAt: true, sessionType: true },
       })
     : null;
+  // A moved session keeps its own length; a new one is whatever they picked
+  // (60-minute craniosacral unless they chose the Clean Language session).
+  const sessionType = own ? parseSessionType(own.sessionType) : parseSessionType(params.get("type"));
 
   const { windowStart, windowEnd } = await defaultSlotWindow();
   const slots = await loadAvailableSlots({
@@ -34,6 +47,7 @@ export const GET = portalRoute(async (req, client) => {
     windowStart,
     windowEnd,
     excludeBookingId: own?.id,
+    sessionType,
   });
 
   // Excluding their own booking above frees its time again, so it would otherwise
