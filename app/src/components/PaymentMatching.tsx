@@ -133,7 +133,9 @@ export function PaymentMatching({
           Your bank feed is checked for money in, and each payment is matched to a client by the reference they used
           (<span className="font-mono">JS4</span> and so on). A match marks their oldest unpaid session as paid, and
           fills in the amount for sliding-scale sessions. If a payment has no reference but comes from a bank name
-          you&apos;ve assigned to someone before, it matches the same way. Anything else waits below for you — and
+          you&apos;ve assigned to someone before, it matches the same way. A first payment with no reference matches
+          when the client&apos;s full name is on it <em>and</em> it&apos;s exactly the price of the session it would
+          settle — and only if that fits one client, never two. Anything else waits below for you — and
           assigning one by hand teaches it that name for next time, and pre-selects the same client if they ever
           repeat whatever text they typed before, though that&apos;s only ever a one-tap suggestion, not a match.
         </p>

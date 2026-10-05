@@ -4,10 +4,11 @@
  * Pure and unit-tested, because getting this wrong means crediting one person's
  * money to another. The rule is deliberately strict: a reference matches only
  * when it equals a client's reference outright, or appears as a whole word
- * inside it. Nothing is *guessed* from the sender's name — two clients called
- * Jono are exactly the case references exist to solve — but matchKnownPayer
- * below is the one exception: an automatic match on a name a human has already
- * vouched for once, which is a different, safer thing than guessing.
+ * inside it. A name on its own is never enough — two clients called Jono are
+ * exactly the case references exist to solve. The two name-based automatic
+ * matches below are each pinned by something more: matchKnownPayer by a name a
+ * human has already vouched for once, and matchNameAndAmount by the full name
+ * *and* the exact amount of the session it would settle.
  */
 
 /** Upper-case, letters and digits only — how a reference is compared. */
@@ -221,4 +222,57 @@ export function chooseBookingToSettle(
     return s > t && s - t <= windowMs;
   });
   return upcoming ?? null;
+}
+
+export interface NameAmountCandidate {
+  clientId: string;
+  name: string;
+  /** Their sessions — only the one chooseBookingToSettle would pick is considered. */
+  bookings: PayableBooking[];
+}
+
+export type NameAmountResult =
+  | { status: "matched"; clientId: string; bookingId: string }
+  | { status: "none" }
+  /** More than one client fits on both name and amount — never guess between them. */
+  | { status: "ambiguous"; clientIds: string[] };
+
+/**
+ * Match a payment with no usable reference, from a sender nobody has vouched
+ * for yet, by name *and* amount together.
+ *
+ * Both have to hold for the same client:
+ *  - their whole name — first and last, at least two words — appears in the
+ *    sender's bank name ("MR JONO SMITH" fits Jono Smith; "J SMITH" or a bare
+ *    "JONO" fits nobody), and
+ *  - the session this payment would settle (chooseBookingToSettle, so the same
+ *    window as every other automatic match) has a recorded price equal to the
+ *    amount sent, to the penny. A sliding-scale session with no amount yet
+ *    can't be checked, so it never matches here.
+ *
+ * Two clients fitting both is ambiguous and left for a human. Name alone is
+ * what makes two Jono Smiths dangerous; the amount narrows it to the one who
+ * actually owes that exact sum, and anything short of one clear answer waits
+ * in the manual queue instead.
+ */
+export function matchNameAndAmount(
+  counterParty: string,
+  amountPence: number,
+  asOf: Date,
+  candidates: NameAmountCandidate[],
+): NameAmountResult {
+  const payer = new Set(nameTokens(counterParty));
+  if (!payer.size || amountPence <= 0) return { status: "none" };
+
+  const hits: Array<{ clientId: string; bookingId: string }> = [];
+  for (const c of candidates) {
+    const tokens = nameTokens(c.name).filter((t) => t.length > 1);
+    if (tokens.length < 2 || !tokens.every((t) => payer.has(t))) continue;
+    const target = chooseBookingToSettle(c.bookings, asOf);
+    if (target && target.amountPence === amountPence) hits.push({ clientId: c.clientId, bookingId: target.id });
+  }
+
+  if (hits.length === 1) return { status: "matched", ...hits[0] };
+  if (hits.length > 1) return { status: "ambiguous", clientIds: hits.map((h) => h.clientId) };
+  return { status: "none" };
 }

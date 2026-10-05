@@ -14,6 +14,9 @@ export interface UnpaidSession {
   clientName: string;
   clientEmail: string;
   whenLabel: string;
+  startsAt: Date;
+  /** null for a sliding-scale session with no amount recorded yet */
+  amountPence: number | null;
   clinic: Clinic;
   paymentReminderSentAt: Date | null;
 }
@@ -41,6 +44,8 @@ export async function findUnpaidSessions(asOf: Date = new Date()): Promise<Unpai
     clientName: b.client.name,
     clientEmail: b.client.email,
     whenLabel: `${fmtDayLong(b.startsAt)} · ${fmtTime(b.startsAt)}`,
+    startsAt: b.startsAt,
+    amountPence: b.amountPence,
     clinic: b.clinic as Clinic,
     paymentReminderSentAt: b.paymentReminderSentAt,
   }));
@@ -76,6 +81,8 @@ export async function sweepUnpaidSessions({
     clientName: b.client.name,
     clientEmail: b.client.email,
     whenLabel: `${fmtDayLong(b.startsAt)} · ${fmtTime(b.startsAt)}`,
+    startsAt: b.startsAt,
+    amountPence: b.amountPence,
     clinic: b.clinic as Clinic,
     paymentReminderSentAt: b.paymentReminderSentAt,
   }));
