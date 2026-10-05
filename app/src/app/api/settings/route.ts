@@ -101,7 +101,7 @@ const EDITABLE_SETTINGS = [
   "ownReminderMode", "ownReminderMinutesBefore", "ownReminderMorningHour", "venueReminders",
   "bankAccountName", "bankSortCode", "bankAccountNumber", "bankPaymentNote", "cstaMembershipId",
   "starlingEnabled", "starlingAutoMark", "starlingNotifyEmail", "starlingLookbackDays",
-  "personalCalendarId", "roomCalendarId", "chalkFarmCalendarId",
+  "personalCalendarId", "roomCalendarId", "roomFallbackCalendarId", "roomFallbackLabel", "chalkFarmCalendarId",
   "availabilityCalendarId", "availabilityDefaultClinic",
   "clientsFolderId", "reflectionsDocId", "marketingSheetId", "appUrl",
 ] as const;

@@ -91,6 +91,22 @@ describe("planBookingEvents", () => {
     const room = planBookingEvents("waterloo", at(9)).find((e) => e.calendar === "room")!;
     expect(room.colorId).toBeUndefined();
   });
+
+  it("books R5 by default when no room choice is given", () => {
+    const room = planBookingEvents("waterloo", at(9)).find((e) => e.calendar === "room")!;
+    expect(room.summary).toBe("R5 - Phoenix");
+  });
+
+  it("books the fallback room and labels it when the caller resolved availability that way", () => {
+    const plan = planBookingEvents("waterloo", at(9), undefined, undefined, {
+      calendar: "roomFallback",
+      label: "R6",
+    });
+    expect(plan.find((e) => e.calendar === "room")).toBeUndefined();
+    const fallback = plan.find((e) => e.calendar === "roomFallback")!;
+    expect(fallback.summary).toBe("R6 - Phoenix");
+    expect(fallback.inviteClient).toBe(false);
+  });
 });
 
 describe("personalEventReminders", () => {
