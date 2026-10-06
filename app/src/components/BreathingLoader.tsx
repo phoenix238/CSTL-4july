@@ -25,7 +25,7 @@ export function BreathingLoader({ delayMs = 350, label = "Loading times" }: { de
             <div className="animate-ct-breathe absolute inset-0 rounded-full bg-clay-tint" />
             <div className="animate-ct-breathe absolute inset-4 rounded-full bg-clay/40 [animation-delay:-0.4s]" />
           </div>
-          <p className="text-[13px] text-muted">A good moment for a slow breath while the times load.</p>
+          <p className="max-w-[260px] text-center text-[13px] leading-relaxed text-muted">A good moment for a slow breath while the times load.</p>
         </div>
       )}
     </div>

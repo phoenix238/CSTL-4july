@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BreathingLoader } from "./BreathingLoader";
 import { fmtDayLong, fmtTime, londonDateKey, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
 import { SESSION_MINUTES, type Clinic } from "@/lib/booking/rules";
@@ -28,9 +28,8 @@ export function BookSlotPicker({
   boxed = true,
   /**
    * "list" (default) is the day-by-day list everywhere. "responsive" shows a
-   * month calendar on laptop-width screens and the same list on phones — the
-   * public booking page, where a calendar reads well with room to spread out
-   * but a phone is better served by every time at once.
+   * month calendar on laptop-width screens and a swipeable strip of days with
+   * the chosen day's times underneath on phones — the public booking page.
    */
   layout = "list",
   /** how long each session runs — shown as "until 15:30" under a time in the calendar */
@@ -113,7 +112,9 @@ export function BookSlotPicker({
   // either opens the same details box. CSS picks which one the screen gets.
   return (
     <>
-      <div className="md:hidden">{list}</div>
+      <div className="md:hidden">
+        <DayStrip groups={groups} selected={selected} onSelect={onSelect} />
+      </div>
       <div className="hidden md:block">
         <SlotCalendar groups={groups} selected={selected} onSelect={onSelect} sessionMinutes={sessionMinutes} />
       </div>
@@ -298,6 +299,147 @@ function SlotCalendar({
                 <span className={`block text-[10.5px] font-normal ${on ? "text-cream/80" : "text-muted"}`}>
                   until {fmtTime(new Date(t.getTime() + sessionMinutes * 60_000))}
                 </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The phone view: a strip of days you swipe along the top, and the chosen
+ * day's times as a grid of large buttons underneath — the pattern people know
+ * from salon and clinic booking apps. Every day from today to the last bookable
+ * one is in the strip so the dates read as a real calendar; days with nothing
+ * free are shown but greyed out and can't be picked.
+ */
+function DayStrip({
+  groups,
+  selected,
+  onSelect,
+}: {
+  groups: Map<string, Date[]>;
+  selected: string | null;
+  onSelect: (iso: string) => void;
+}) {
+  const dayKeys = useMemo(() => [...groups.keys()], [groups]);
+  const firstKey = dayKeys[0];
+  const lastKey = dayKeys[dayKeys.length - 1];
+
+  // Today → last bookable day, as consecutive London date keys.
+  const days = useMemo(() => {
+    const t = londonYMD(new Date());
+    const out: Array<{ key: string; y: number; m: number; d: number }> = [];
+    for (let i = 0; i < 120; i++) {
+      const at = new Date(Date.UTC(t.y, t.m - 1, t.d + i, 12));
+      const y = at.getUTCFullYear();
+      const m = at.getUTCMonth() + 1;
+      const d = at.getUTCDate();
+      const key = `${y}-${pad2(m)}-${pad2(d)}`;
+      out.push({ key, y, m, d });
+      if (key >= lastKey) break;
+    }
+    return out;
+  }, [lastKey]);
+
+  const selectedKey = selected ? londonDateKey(new Date(selected)) : null;
+  const [activeDay, setActiveDay] = useState<string>(selectedKey ?? firstKey);
+  // Switching clinic swaps the slots — fall back to the first free day if the
+  // one in view no longer has anything.
+  useEffect(() => {
+    if (!groups.has(activeDay)) setActiveDay(firstKey);
+  }, [groups, activeDay, firstKey]);
+
+  const stripRef = useRef<HTMLDivElement>(null);
+  // Keep the active day in view. scrollLeft, not scrollIntoView: inside the
+  // website's iframe, scrollIntoView would also scroll the host page.
+  useEffect(() => {
+    const strip = stripRef.current;
+    const chip = strip?.querySelector<HTMLElement>(`[data-day="${activeDay}"]`);
+    if (!strip || !chip) return;
+    const target = chip.offsetLeft - (strip.clientWidth - chip.clientWidth) / 2;
+    strip.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+  }, [activeDay]);
+
+  const nudge = (dir: 1 | -1) => {
+    const strip = stripRef.current;
+    if (strip) strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: "smooth" });
+  };
+
+  const [ay, am] = activeDay.split("-").map(Number);
+  const times = groups.get(activeDay) ?? [];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="font-serif text-[18px]">{monthLabel(ay, am)}</div>
+        <div className="flex gap-1">
+          {([-1, 1] as const).map((dir) => (
+            <button
+              key={dir}
+              type="button"
+              onClick={() => nudge(dir)}
+              aria-label={dir < 0 ? "Earlier dates" : "Later dates"}
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line bg-card text-ink-soft select-none"
+            >
+              {dir < 0 ? "‹" : "›"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        ref={stripRef}
+        className="-mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {days.map(({ key, y, m, d }) => {
+          const free = groups.has(key);
+          const active = key === activeDay;
+          const weekday = WEEKDAYS[londonWeekdayIndex(londonTime(y, m, d, 12))];
+          return (
+            <button
+              key={key}
+              type="button"
+              data-day={key}
+              disabled={!free}
+              onClick={() => setActiveDay(key)}
+              aria-pressed={active}
+              aria-label={`${weekday} ${d}${free ? "" : ", nothing free"}`}
+              className={`flex w-[54px] shrink-0 snap-start flex-col items-center gap-0.5 rounded-2xl py-2.5 select-none ${
+                active
+                  ? "bg-clay text-cream"
+                  : free
+                    ? "cursor-pointer border border-line bg-card text-ink-soft"
+                    : "border border-transparent text-muted opacity-45"
+              }`}
+            >
+              <span className="text-[11px] tracking-wide uppercase">{weekday}</span>
+              <span className="text-[18px] leading-none font-semibold">{d}</span>
+              <span className={`mt-1 h-1 w-1 rounded-full ${free ? (active ? "bg-cream" : "bg-clay") : "bg-transparent"}`} />
+            </button>
+          );
+        })}
+      </div>
+
+      <div>
+        <div className="mb-2 text-[13px] font-semibold text-ink-soft">
+          {times[0] ? fmtDayLong(times[0]) : ""} · {times.length} time{times.length === 1 ? "" : "s"} free
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {times.map((t) => {
+            const iso = t.toISOString();
+            return (
+              <button
+                key={iso}
+                type="button"
+                onClick={() => onSelect(iso)}
+                className={`h-11 cursor-pointer rounded-xl text-[14px] font-medium select-none ${
+                  selected === iso ? "bg-clay text-cream" : "border border-line bg-card text-ink-soft"
+                }`}
+              >
+                {fmtTime(t)}
               </button>
             );
           })}
