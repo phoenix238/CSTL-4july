@@ -51,12 +51,15 @@ export function BookingFlow({
   waterlooNote,
   bethnalNote,
   copy,
+  embedded = false,
 }: {
   waterlooAddress: string;
   bethnalAddress: string;
   waterlooNote: string;
   bethnalNote: string;
   copy: ClientCopy;
+  /** shown inside the website's iframe — no page heading, minimal padding */
+  embedded?: boolean;
 }) {
   const toast = useToast();
   const [clinic, setClinic] = useState<Clinic>("bethnal");
@@ -176,11 +179,13 @@ export function BookingFlow({
   }
 
   return (
-    <div className="mx-auto max-w-[820px] px-5 py-10">
-      <header className="mb-6 text-center">
-        <h1 className="font-serif text-[28px] leading-[1.1]">{copy.bookPageTitle}</h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.bookPageIntro}</p>
-      </header>
+    <div className={embedded ? "px-1 py-1" : "mx-auto max-w-[820px] px-5 py-10"}>
+      {!embedded && (
+        <header className="mb-6 text-center">
+          <h1 className="font-serif text-[28px] leading-[1.1]">{copy.bookPageTitle}</h1>
+          <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">{copy.bookPageIntro}</p>
+        </header>
+      )}
 
       <Card className="flex flex-col gap-4 px-5 py-6">
         <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
@@ -220,6 +225,7 @@ export function BookingFlow({
             setSheetOpen(true);
           }}
           boxed={false}
+          layout="responsive"
         />
       </Card>
 
