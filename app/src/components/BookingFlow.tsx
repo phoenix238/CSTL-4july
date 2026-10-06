@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
+import { EmbedBridge, scrollEmbedToTop } from "./EmbedBridge";
 import { CLINIC_BOOKING_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -139,6 +140,7 @@ export function BookingFlow({
         return;
       }
       notifyParentOfBooking(clinic);
+      scrollEmbedToTop();
       setConfirmed({
         whenLabel: result.whenLabel,
         email,
@@ -223,6 +225,9 @@ export function BookingFlow({
             setSelected(iso);
             setRecognised(null);
             setSheetOpen(true);
+            // In the website's frame, bring the whole box on screen first so the
+            // form doesn't open squeezed into a sliver of it.
+            scrollEmbedToTop();
           }}
           boxed={false}
           layout="responsive"

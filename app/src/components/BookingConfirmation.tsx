@@ -43,7 +43,7 @@ export function BookingConfirmation({
   // the same reason their email is a confirmation rather than a whole welcome.
   const showIntake = !(returning && intakeDone);
   return (
-    <div className="mx-auto flex min-h-screen max-w-[560px] flex-col items-center justify-center gap-4 px-5 py-10 text-center">
+    <div className="mx-auto flex min-h-[var(--vp-h,100vh)] max-w-[560px] flex-col items-center justify-center gap-4 px-5 py-10 text-center">
       <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-sage-tint text-2xl text-sage-text">
         ✓
       </div>

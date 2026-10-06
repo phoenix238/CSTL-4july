@@ -100,7 +100,12 @@ export function Sheet({
   if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    // top/height follow the on-screen slice of the website's iframe when embedded
+    // (see EmbedBridge); unset, they fall back to the full viewport.
+    <div
+      className="fixed inset-x-0 z-50 flex items-center justify-center p-4"
+      style={{ top: "var(--vp-top, 0px)", height: "var(--vp-h, 100%)" }}
+    >
       <div
         onClick={onClose}
         className={`absolute inset-0 bg-[oklch(0.3_0.02_60_/_0.28)] ${leaving ? "ct-veil-leaving" : "ct-veil"}`}
@@ -111,7 +116,7 @@ export function Sheet({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className={`relative max-h-[88svh] w-full max-w-[440px] overflow-y-auto rounded-2xl border border-line bg-card shadow-pop outline-none ${
+        className={`relative max-h-[calc(var(--vp-h,100svh)*0.88)] w-full max-w-[440px] overflow-y-auto rounded-2xl border border-line bg-card shadow-pop outline-none ${
           leaving ? "ct-sheet-leaving" : "ct-sheet"
         }`}
       >
@@ -238,7 +243,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={show}>
       {children}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 w-[calc(100vw-2.5rem)] max-w-[420px] -translate-x-1/2 rounded-2xl bg-ink px-5 py-2.5 text-center text-[13px] font-medium leading-snug break-words text-[oklch(0.97_0.01_85)] shadow-[0_8px_24px_oklch(0.3_0.02_60_/_0.25)]">
+        <div
+          style={{ top: "calc(var(--vp-top, 0px) + var(--vp-h, 100vh) - 1.5rem)" }}
+          className="fixed left-1/2 z-50 -translate-y-full w-[calc(100vw-2.5rem)] max-w-[420px] -translate-x-1/2 rounded-2xl bg-ink px-5 py-2.5 text-center text-[13px] font-medium leading-snug break-words text-[oklch(0.97_0.01_85)] shadow-[0_8px_24px_oklch(0.3_0.02_60_/_0.25)]">
           {toast}
         </div>
       )}
