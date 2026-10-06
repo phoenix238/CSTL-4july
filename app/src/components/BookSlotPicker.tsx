@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { api } from "./ui";
+import { BreathingLoader } from "./BreathingLoader";
 import { fmtDayLong, fmtTime, londonDateKey, londonTime, londonWeekdayIndex, londonYMD } from "@/lib/time";
 import { SESSION_MINUTES, type Clinic } from "@/lib/booking/rules";
 
@@ -56,9 +56,16 @@ export function BookSlotPicker({
     let cancelled = false;
     setSlots(null);
     setError(null);
-    api<{ slots: string[] }>(url)
-      .then((res) => {
-        if (!cancelled) setSlots(res.slots);
+    // A bare fetch (no custom headers) so it matches the preload the /book page
+    // starts at HTML-parse time and can reuse that response.
+    fetch(url)
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as { slots?: string[]; error?: string };
+        if (!res.ok || !data.slots) throw new Error(data.error || "Couldn't load availability");
+        return data.slots;
+      })
+      .then((list) => {
+        if (!cancelled) setSlots(list);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load availability");
@@ -72,7 +79,7 @@ export function BookSlotPicker({
   const groups = useMemo(() => groupByDay(slots ?? []), [slots]);
 
   if (error) return <div className="text-[13px] text-muted">{error}</div>;
-  if (!slots) return <div className="text-[13px] text-muted">Loading availability…</div>;
+  if (!slots) return <BreathingLoader />;
   if (!slots.length) return <div className="text-[13px] text-muted">{emptyMessage}</div>;
 
   const list = (
