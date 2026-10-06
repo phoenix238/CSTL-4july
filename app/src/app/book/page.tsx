@@ -1,6 +1,7 @@
 import { preload } from "react-dom";
 import { getSettings } from "@/lib/db";
 import { BookingFlow } from "@/components/BookingFlow";
+import { EmbedBridge } from "@/components/EmbedBridge";
 import { ToastProvider } from "@/components/ui";
 import { resolveClientCopy } from "@/lib/clientCopy";
 
@@ -24,6 +25,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   // picked a time yet.
   return (
     <ToastProvider>
+      {embedded && <EmbedBridge />}
       <BookingFlow
         waterlooAddress={settings.waterlooAddress}
         bethnalAddress={settings.bethnalAddress}
