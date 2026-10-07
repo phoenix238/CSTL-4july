@@ -49,5 +49,5 @@ Still hard-wired to Phoenix (next pass, roughly in priority order):
 
 | | Before | After |
 |---|---|---|
-| Emily Yung (new, non-technical) | 3.5 | see PR |
-| Phoenix Tanner (owner, daily user) | 6.5 | see PR |
+| Emily Yung (new, non-technical) | 3.5 | 7 |
+| Phoenix Tanner (owner, daily user) | 6.5 | 7.5 |
