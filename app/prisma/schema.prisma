@@ -187,6 +187,8 @@ model Booking {
   // once and never repeats. Cleared on reschedule — a moved session earns its
   // reminders afresh against the new date.
   remindersSentLead Int[] @default([])
+  // Unwired here — from PR #42's preview builds (see AppSettings.practitionerName).
+  firstSessionEmailSentAt DateTime?
 
   @@index([startsAt])
   @@index([clientId])
@@ -240,6 +242,17 @@ model AppSettings {
   // more careful reader (worth it for case-history judgment calls); Haiku is
   // faster/cheaper. Anything else falls back to sonnet.
   aiModel               String @default("sonnet")
+  // Present in the shared production DB from the second-practitioner work on
+  // claude/emily-onboarding-backend-874zrd (PR #42, not merged) — its preview
+  // builds pushed them, since previews share this database. Not wired into any
+  // code here; declared so `prisma db push` on main never tries to drop them
+  // (which blocks every production deploy). Same situation as
+  // calendarInviteSharedAt below.
+  practitionerName      String @default("Phoenix")
+  practitionerFullName  String @default("Phoenix Tanner")
+  practiceName          String @default("Phoenix Tanner CSTL")
+  spaces                Json?
+  remindNewClientsByDefault Boolean @default(true)
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
   // The one welcome letter, shared by both clinics. What differs between them —
   // price, address, map pin, how to find the door — is filled in around it, so
