@@ -11,9 +11,25 @@ function withConnectTimeout(url: string): string {
   return url + (url.includes("?") ? "&" : "?") + "connect_timeout=15";
 }
 
+/**
+ * Which database to use. Production and local development use DATABASE_URL.
+ * A Vercel preview must use the separate staging database and never the live
+ * one — if STAGING_DATABASE_URL is missing it fails loudly rather than
+ * quietly reading and writing real client records. (The preview build script
+ * enforces the same; see scripts/vercel-build.sh.)
+ */
+function databaseUrl(): string {
+  const env = process.env.CSTL_BUILD_ENV;
+  if (env && env !== "production" && env !== "local") {
+    const staging = process.env.STAGING_DATABASE_URL;
+    if (!staging) throw new Error("Preview without STAGING_DATABASE_URL — refusing to use the live database.");
+    return staging;
+  }
+  return process.env.DATABASE_URL ?? "";
+}
+
 export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({ datasourceUrl: withConnectTimeout(process.env.DATABASE_URL ?? "") });
+  globalForPrisma.prisma ?? new PrismaClient({ datasourceUrl: withConnectTimeout(databaseUrl()) });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
