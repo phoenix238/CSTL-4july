@@ -1,5 +1,8 @@
 import { prisma, getSettings } from "@/lib/db";
+import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import {
+  cancellationPolicyText,
   canRescheduleSelf,
   suggestedGoodwillPence,
   summariseAccount,
@@ -62,6 +65,8 @@ export interface PortalView {
   hasBankDetails: boolean;
   noticeHours: number;
   lateCancelGoodwillPence: number;
+  /** the cancellation / missed-session policy as the client reads it — "" when none */
+  policy: string;
   selfBookEnabled: boolean;
   receiptsEnabled: boolean;
   hasEmail: boolean;
@@ -155,6 +160,11 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     hasBankDetails: Boolean(bank.accountName || bank.sortCode || bank.accountNumber),
     noticeHours: settings.portalNoticeHours,
     lateCancelGoodwillPence: settings.lateCancelGoodwillPence,
+    policy: cancellationPolicyText(
+      resolveClientCopy(settings.clientCopy, practitionerIdentity(settings)),
+      settings.portalNoticeHours,
+      settings.lateCancelGoodwillPence,
+    ),
     selfBookEnabled: settings.portalSelfBook,
     receiptsEnabled: settings.portalReceipts,
     hasEmail: Boolean(client.email),

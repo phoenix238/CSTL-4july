@@ -54,6 +54,7 @@ export default async function SettingsPage() {
         portalSelfBook: settings.portalSelfBook,
         portalNotifyEmail: settings.portalNotifyEmail,
         portalReceipts: settings.portalReceipts,
+        remindNewClientsByDefault: settings.remindNewClientsByDefault,
         portalNoticeHours: settings.portalNoticeHours,
         lateCancelGoodwillPence: settings.lateCancelGoodwillPence,
         ownReminderMode: settings.ownReminderMode,

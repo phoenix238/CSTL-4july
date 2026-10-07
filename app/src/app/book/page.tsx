@@ -6,6 +6,7 @@ import { EmbedBridge } from "@/components/EmbedBridge";
 import { ToastProvider } from "@/components/ui";
 import { resolveClientCopy } from "@/lib/clientCopy";
 import { practitionerIdentity } from "@/lib/practitioner";
+import { cancellationPolicyText } from "@/lib/noShow";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
       <BookingFlow
         spaces={spaces}
         copy={copy}
+        policy={cancellationPolicyText(copy, settings.portalNoticeHours, settings.lateCancelGoodwillPence)}
         embedded={embedded}
       />
     </ToastProvider>

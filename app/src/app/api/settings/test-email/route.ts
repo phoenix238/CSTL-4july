@@ -9,6 +9,8 @@ import { composePaymentReminder } from "@/lib/payments/unpaid";
 import { composeSessionReminder } from "@/lib/reminders/sessionReminders";
 import { resolveClientCopy } from "@/lib/clientCopy";
 import { composeBookingPageEmail } from "@/lib/bookingPageEmail";
+import { composeFirstSessionEmail } from "@/lib/reminders/firstSession";
+import { composeNoShowEmail } from "@/lib/noShow";
 import { practitionerIdentity } from "@/lib/practitioner";
 import { confirmToClient, sendReceipt } from "@/lib/portalNotify";
 import type { Clinic } from "@/lib/booking/rules";
@@ -27,7 +29,10 @@ export type TestEmailType =
   | "reminder"
   | "session-reminder"
   | "review"
-  | "booking-page";
+  | "booking-page"
+  | "first-session"
+  | "first-session-done"
+  | "no-show";
 
 /**
  * Send yourself the exact email a client would get, composed against your real
@@ -113,6 +118,43 @@ export const POST = guarded(async (req: Request) => {
     }
     case "booking-page": {
       const { subject, body } = composeBookingPageEmail(settings, { clientName, link: portalLink, paymentRef });
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
+    case "first-session":
+    case "first-session-done": {
+      const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+      const { subject, body } = composeFirstSessionEmail(
+        {
+          clientFirstName: "Maya",
+          whenLabel,
+          space,
+          intakeDone: type === "first-session-done",
+          intakeLink: links.intakeLink,
+          portalLink,
+          remindersLink: `${portalLink}#reminders`,
+          offerReminders: !settings.remindNewClientsByDefault,
+        },
+        copy,
+        resolveSignOff(settings),
+      );
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
+    case "no-show": {
+      const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+      const { subject, body } = composeNoShowEmail(
+        {
+          clientFirstName: "Maya",
+          whenLabel,
+          clinicName: space.name,
+          contributionPence: settings.lateCancelGoodwillPence,
+          paymentRef,
+          portalLink,
+        },
+        copy,
+        resolveSignOff(settings),
+      );
       await sendEmail(to, `[Test] ${subject}`, body);
       break;
     }

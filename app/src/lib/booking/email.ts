@@ -1,4 +1,5 @@
 import type { Clinic } from "./rules";
+import { cancellationPolicyText } from "../account";
 import { resolveSpaces, spaceById, spacePriceLabel, type LegacySpaceSettings, type Space } from "../spaces";
 import { applyCopy, resolveClientCopy } from "../clientCopy";
 import { fillIdentity, practitionerIdentity, type IdentitySettings } from "../practitioner";
@@ -30,6 +31,9 @@ export interface EmailSettings extends IdentitySettings, LegacySpaceSettings {
   bankSortCode?: string;
   bankAccountNumber?: string;
   bankPaymentNote?: string;
+  /** the cancellation policy: notice needed, and the contribution asked inside it (0 = none) */
+  portalNoticeHours?: number;
+  lateCancelGoodwillPence?: number;
   /** the one sign-off every email ends on — appended after any sign-off in the letter is stripped */
   emailSignOff?: string;
 }
@@ -364,6 +368,18 @@ export function composeBookingEmail(
   }
   includes.push("Intake form link");
   if (settings.accessNote.trim()) includes.push("Access note — stairs, no step-free access");
+
+  // The cancellation policy, in writing from the first email — so a
+  // short-notice or missed-session contribution is never a surprise later.
+  const policy = cancellationPolicyText(
+    copy,
+    settings.portalNoticeHours ?? 24,
+    settings.lateCancelGoodwillPence ?? 0,
+  );
+  if (policy) {
+    sections.push(policy);
+    includes.push("Cancellation policy");
+  }
 
   sections.push(resolveSignOff(settings));
   return finish(subject, sections, includes, settings);

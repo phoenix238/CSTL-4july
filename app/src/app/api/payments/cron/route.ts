@@ -5,6 +5,7 @@ import { sweepUnpaidSessions } from "@/lib/payments/unpaid";
 import { reconcileUpcomingEvents } from "@/lib/google/reconcile";
 import { runAvailabilitySync } from "@/lib/google/availabilitySync";
 import { sweepSessionReminders } from "@/lib/reminders/sessionReminders";
+import { sweepFirstSessionEmails } from "@/lib/reminders/firstSession";
 import { sweepCapacityAlerts } from "@/lib/booking/capacityAlerts";
 
 /**
@@ -54,6 +55,10 @@ export async function GET(req: Request) {
 
   try {
     if (dryRun) {
+      const firstSession = await sweepFirstSessionEmails({ asOf, dryRun: true }).catch((err) => {
+        console.error("Dry-run first-session sweep failed", err);
+        return { due: [], sent: 0 };
+      });
       const [unpaid, calendar, reminders, capacity] = await Promise.all([
         sweepUnpaidSessions({ asOf, dryRun: true }),
         reconcileUpcomingEvents({ asOf, dryRun: true }).catch((err) => {
@@ -75,6 +80,7 @@ export async function GET(req: Request) {
         unpaid: { overdue: unpaid.overdue, wouldNotify: unpaid.newlyFlagged },
         calendar: { issues: calendar.issues, wouldNotify: calendar.newIssues },
         reminders: { wouldSend: reminders.due },
+        firstSession: { wouldSend: firstSession.due },
         capacity: { issues: capacity.issues, wouldNotify: capacity.newIssues },
       });
     }
@@ -102,6 +108,13 @@ export async function GET(req: Request) {
       console.error("Availability sync failed", err);
       return { connected: false as const };
     });
+    // A new client's "looking forward to meeting you" email before their first
+    // session — first, so it can stand in for the same morning's day-before
+    // reminder rather than arriving beside it. Needs Gmail; never fatal.
+    const firstSession = await sweepFirstSessionEmails({ asOf }).catch((err) => {
+      console.error("First-session sweep failed", err);
+      return { due: [], sent: 0 };
+    });
     // The clients' own session reminders, at the lead times they picked. Needs
     // Google (Gmail); never fail the run over it.
     const reminders = await sweepSessionReminders({ asOf }).catch((err) => {
@@ -126,6 +139,7 @@ export async function GET(req: Request) {
       calendarIssues: calendar.newIssues.length,
       availabilitySync: availability,
       remindersSent: reminders.sent,
+      firstSessionEmailsSent: firstSession.sent,
       capacityIssues: capacity.newIssues.length,
     });
   } catch (err) {

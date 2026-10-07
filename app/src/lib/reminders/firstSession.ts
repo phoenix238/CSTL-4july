@@ -32,6 +32,8 @@ export interface FirstSessionEmailInput {
   intakeDone: boolean;
   intakeLink: string;
   portalLink: string;
+  /** their page, opened at the reminder ticks */
+  remindersLink?: string;
   /** offer reminders — set when the client hasn't switched any on */
   offerReminders: boolean;
 }
@@ -58,7 +60,7 @@ export function composeFirstSessionEmail(
     .join("\n");
   if (where) sections.push(where);
   sections.push(`Need to move or cancel it? You can do that any time on your own page:\n${input.portalLink}`);
-  if (input.offerReminders) sections.push(applyCopy(copy.remindersOfferLine, { link: input.portalLink }));
+  if (input.offerReminders) sections.push(applyCopy(copy.remindersOfferLine, { link: input.remindersLink || input.portalLink }));
   sections.push(signOff);
   return { subject, body: sections.filter(Boolean).join("\n\n") };
 }
@@ -132,6 +134,8 @@ export async function sweepFirstSessionEmails({
 
     try {
       const portalLink = portalUrl(settings, await getOrCreatePortalToken(b.clientId));
+      // Straight to the reminder ticks on their page, for the offer line.
+      const remindersLink = `${portalLink}#reminders`;
       const { subject, body } = composeFirstSessionEmail(
         {
           clientFirstName: b.client.name.split(" ")[0] || "there",
@@ -140,6 +144,7 @@ export async function sweepFirstSessionEmails({
           intakeDone: b.client.intakeDone,
           intakeLink: intakeUrl(settings, await getOrCreateIntakeToken(b.clientId)),
           portalLink,
+          remindersLink,
           offerReminders: !b.client.reminderLeadDays.length,
         },
         copy,

@@ -58,6 +58,7 @@ const PLACEHOLDER_HELP: Record<string, string> = {
   previousWhen: "the old time — the whole line is left out if there isn't one",
   amount: "the suggested contribution, e.g. £10",
   paymentRef: "their bank reference, e.g. MAYA-4K2 — line left out if none",
+  hours: "the notice needed to move or cancel, in hours (Settings › Client pages)",
   yourName: "your first name",
   yourFullName: "your full name",
   practiceName: "your practice's name",
@@ -81,7 +82,9 @@ type TestType =
   | "reminder"
   | "session-reminder"
   | "review"
-  | "booking-page";
+  | "booking-page"
+  | "first-session"
+  | "no-show";
 
 type CopyField = { key: keyof ClientCopy; label: string; multiline?: boolean; placeholders?: string[] };
 type SettingsField = { key: keyof SettingsMessages; label: string; multiline?: boolean; placeholders?: string[] };
@@ -185,7 +188,32 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "5 · Intake form — sent on its own",
+    title: "5 · First session — “looking forward to meeting you”",
+    when:
+      "The day before a new client's first session (or that morning, if they booked too late for the day before). Every new client gets it — no need to switch reminders on.",
+    who: "A new client",
+    trigger: "auto",
+    test: "first-session",
+    blurb:
+      "Two versions: one for someone who hasn't filled in the intake form yet (it includes their link and says you can do it together in the session), and one for someone who has. The address, how to find the door, their booking page and your sign-off are added after it. If they haven't switched reminders on, the reminder line is added too.",
+    fields: [
+      c("firstSessionSubject", "Subject", { placeholders: ["when", "clinic"] }),
+      c("firstSessionBodyIntakeMissing", "Message — intake form NOT done yet", {
+        multiline: true,
+        placeholders: ["name", "when", "clinic", "intakeLink"],
+      }),
+      c("firstSessionBodyIntakeDone", "Message — intake form done", {
+        multiline: true,
+        placeholders: ["name", "when", "clinic"],
+      }),
+      c("remindersOfferLine", "Line offering reminders ({link} = the reminder ticks on their page)", {
+        multiline: true,
+        placeholders: ["link"],
+      }),
+    ],
+  },
+  {
+    title: "6 · Intake form — sent on its own",
     when: "When you press “Send intake form” after booking someone, or on their profile.",
     who: "A client who hasn't filled it in",
     trigger: "button",
@@ -196,7 +224,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "6 · Session moved",
+    title: "7 · Session moved",
     when: "When a client moves their own session from their booking page. You're copied in.",
     who: "That client",
     trigger: "auto",
@@ -209,7 +237,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "7 · Session cancelled",
+    title: "8 · Session cancelled",
     when: "When a client cancels from their booking page. You're copied in.",
     who: "That client",
     trigger: "auto",
@@ -224,7 +252,21 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "8 · Payment reminder",
+    title: "9 · Missed session (no-show)",
+    when: "When you press “No-show” on a past session (Today, or the client's account) and choose to email them.",
+    who: "That client",
+    trigger: "button",
+    test: "no-show",
+    blurb:
+      "The contribution paragraph is added only when a contribution is set (Settings › Client pages) — the same amount your cancellation policy names. A line inviting them to rebook and your sign-off end it.",
+    fields: [
+      c("noShowEmailSubject", "Subject"),
+      c("noShowEmailBody", "Message", { multiline: true, placeholders: ["name", "when", "clinic"] }),
+      c("noShowGoodwillText", "Contribution paragraph", { multiline: true, placeholders: ["amount", "paymentRef"] }),
+    ],
+  },
+  {
+    title: "10 · Payment reminder",
     when: "When you press “Remind” on an unpaid session on Today. Each session is chased at most once.",
     who: "A client with an unpaid session",
     trigger: "button",
@@ -239,7 +281,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "9 · Receipt",
+    title: "11 · Receipt",
     when: "When you press “Email receipt” on a client’s profile, when a client asks for one from their page, or once a requested receipt's payment lands.",
     who: "That client",
     trigger: "auto-or-button",
@@ -252,7 +294,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "10 · Their booking page link",
+    title: "12 · Their booking page link",
     when: "When you press “Email page to …” on a client’s profile, or when a client asks for their link again.",
     who: "That client",
     trigger: "auto-or-button",
@@ -264,7 +306,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "11 · Review request — after a session",
+    title: "13 · Review request — after a session",
     when: "When you press “Send review request” on a client's profile.",
     who: "A client you've seen",
     trigger: "button",
@@ -280,6 +322,12 @@ const EMAIL_GROUPS: Group[] = [
 
 // Written once, dropped into the emails above — not messages in their own right.
 const BUILDING_BLOCK_GROUPS: Group[] = [
+  {
+    title: "Your cancellation policy",
+    blurb:
+      "Shown before they book (on your booking page and their own page) and in the first confirmation email — so a late-cancellation or missed-session contribution is never a surprise. Only shown when a contribution is set in Settings › Client pages.",
+    fields: [c("cancellationPolicyLine", "Policy", { multiline: true, placeholders: ["hours", "amount"] })],
+  },
   {
     title: "Your sign-off",
     blurb:
@@ -379,6 +427,7 @@ const SAMPLE: Record<string, string> = {
   previousWhen: "Wed 12 Aug · 10:00",
   amount: "£10",
   paymentRef: "MAYA-4K2",
+  hours: "24",
 };
 
 /** The sample values, with the space and price taken from one of your own spaces. */

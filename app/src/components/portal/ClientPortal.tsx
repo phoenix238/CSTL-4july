@@ -280,6 +280,13 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
               </p>
             )}
 
+            {/* The policy, read before they commit — same words as the booking page. */}
+            {view.policy && (
+              <p className="rounded-xl bg-[oklch(0.97_0.01_85)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-soft">
+                {view.policy}
+              </p>
+            )}
+
             <PrimaryButton
               disabled={busy}
               onClick={mode === "book" ? bookNext : reschedule}
@@ -423,11 +430,23 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       </Card>
 
       {/* ---------- reminders ---------- */}
-      <Card className="flex flex-col gap-3 px-5 py-5">
-        <SectionLabel>Email reminders</SectionLabel>
+      {/* id="reminders": emails link straight here ("switch one on here"). */}
+      <Card className="flex scroll-mt-4 flex-col gap-3 px-5 py-5" >
+        <div id="reminders" className="flex flex-col gap-1">
+          <SectionLabel>Reminder emails</SectionLabel>
+          <p className="text-[13px] font-semibold text-ink-soft">
+            {leadDays.length
+              ? `You'll get a reminder ${leadDays
+                  .slice()
+                  .sort((a, b) => b - a)
+                  .map((d) => (d === 1 ? "the day before" : d === 0 ? "on the morning" : `${d} days before`))
+                  .join(" and ")} each session.`
+              : "You're not getting reminder emails at the moment."}
+          </p>
+        </div>
         <p className="text-[12.5px] leading-relaxed text-muted">
-          Choose whether you&apos;d like an email reminder before each session, and how far ahead. Off by default —
-          turn one on if you&apos;d like it.
+          A short email before each session, so it doesn&apos;t slip your mind. Tick when you&apos;d like one — it
+          saves as soon as you tick, and you can change it any time.
         </p>
         {!view.hasEmail && (
           <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">
@@ -556,7 +575,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           )}
           {view.account.goodwillPence > 0 && (
             <p className="mt-1 text-[12px] leading-relaxed text-muted">
-              Plus an optional {formatPence(view.account.goodwillPence)} towards a short-notice cancellation — a
+              Plus an optional {formatPence(view.account.goodwillPence)} towards a late cancellation or missed session — a
               contribution, not a charge.
             </p>
           )}

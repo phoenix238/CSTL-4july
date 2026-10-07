@@ -51,6 +51,7 @@ export interface SettingsData {
   portalSelfBook: boolean;
   portalNotifyEmail: boolean;
   portalReceipts: boolean;
+  remindNewClientsByDefault: boolean;
   portalNoticeHours: number;
   lateCancelGoodwillPence: number;
   ownReminderMode: string;
@@ -281,6 +282,7 @@ export function SettingsView({
             portalSelfBook: settings.portalSelfBook,
             portalNotifyEmail: settings.portalNotifyEmail,
             portalReceipts: settings.portalReceipts,
+            remindNewClientsByDefault: settings.remindNewClientsByDefault,
             portalNoticeHours: settings.portalNoticeHours,
             lateCancelGoodwillPence: settings.lateCancelGoodwillPence,
             bankAccountName: settings.bankAccountName,

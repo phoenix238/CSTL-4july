@@ -50,11 +50,14 @@ function MapsLink({ address, mapUrl }: { address: string; mapUrl?: string }) {
 export function BookingFlow({
   spaces,
   copy,
+  policy = "",
   embedded = false,
 }: {
   /** the bookable spaces, in the practitioner's order — with their entrance photos */
   spaces: Space[];
   copy: ClientCopy;
+  /** the cancellation / missed-session policy, shown before they confirm — "" when none */
+  policy?: string;
   /** shown inside the website's iframe — no page heading, minimal padding */
   embedded?: boolean;
 }) {
@@ -280,6 +283,14 @@ export function BookingFlow({
                 ×
               </button>
             </div>
+
+            {/* The cancellation policy, read before they commit — so a short-notice
+                or missed-session contribution is never a surprise afterwards. */}
+            {policy && (
+              <p className="rounded-xl bg-[oklch(0.97_0.01_85)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-soft">
+                {policy}
+              </p>
+            )}
 
             {/* Recognised them: one tap to book into the record they already have,
                 one to back out if the address isn't theirs. Nothing is booked

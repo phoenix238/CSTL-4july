@@ -122,6 +122,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         startsAtISO: b.startsAt.toISOString(),
         clinic: b.clinic,
         status: b.status,
+        cancelledBy: b.cancelledBy,
         paid: b.paid,
         amountPence: b.amountPence,
         goodwillPence: b.goodwillPence,

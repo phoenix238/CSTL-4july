@@ -1,3 +1,4 @@
+import { applyCopy, type ClientCopy } from "@/lib/clientCopy";
 import { spaceDefaultAmountPence, spacePriceLabel, type Space } from "@/lib/spaces";
 
 /**
@@ -156,3 +157,17 @@ export function suggestedGoodwillPence(
 ): number {
   return hoursUntil(startsAt, now) < noticeHours ? goodwillPence : 0;
 }
+
+/** The policy sentence clients read before booking — "" when no contribution is asked for. */
+export function cancellationPolicyText(
+  copy: Pick<ClientCopy, "cancellationPolicyLine">,
+  noticeHours: number,
+  contributionPence: number,
+): string {
+  if (contributionPence <= 0) return "";
+  return applyCopy(copy.cancellationPolicyLine, {
+    hours: String(noticeHours),
+    amount: formatPence(contributionPence),
+  });
+}
+

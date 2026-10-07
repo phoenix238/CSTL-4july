@@ -348,6 +348,36 @@ export function HomeView({
     }
   }
 
+  // A missed session: stops being owed for, records the short-notice
+  // contribution instead, and (if you say so) emails them about it.
+  async function noShow(a: AttentionItem) {
+    const first = a.name.split(" ")[0];
+    if (!window.confirm(`Mark ${first}'s session as a no-show? It won't be owed as a session any more.`)) return;
+    const email = window.confirm(
+      `Email ${first} about it? They'll get your "Sorry we missed you" email (Settings › Messages), with the contribution if one is set.\n\nOK = email them · Cancel = just mark it`,
+    );
+    setBusyId(a.id);
+    try {
+      const r = await api<{ emailedTo: string | null; emailError?: string }>(`/api/bookings/${a.id}/no-show`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setPaidIds((s) => new Set(s).add(a.id)); // off the unpaid list
+      toast(
+        r.emailError
+          ? `Marked as a no-show, but the email didn't send — ${r.emailError}`
+          : r.emailedTo
+            ? `Marked as a no-show — emailed ${first} ✓`
+            : `Marked as a no-show ✓`,
+      );
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't mark that");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function scanForPayments() {
     setScanning(true);
     try {
@@ -653,6 +683,13 @@ export function HomeView({
                             className="cursor-pointer rounded-full bg-clay-tint px-4 py-2 text-[12.5px] font-semibold text-clay-text disabled:cursor-default disabled:opacity-60"
                           >
                             {reminded ? "Reminded" : "Remind"}
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => noShow(a)}
+                            className="cursor-pointer rounded-full border border-line px-4 py-2 text-[12.5px] font-semibold text-muted hover:text-ink disabled:cursor-default disabled:opacity-60"
+                          >
+                            No-show
                           </button>
                         </div>
                       );

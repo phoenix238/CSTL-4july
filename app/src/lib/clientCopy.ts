@@ -66,6 +66,17 @@ export interface ClientCopy {
   /** offers reminders, to a client who hasn't switched any on */
   remindersOfferLine: string; // {link}
 
+  // — The cancellation policy, shown before booking (booking page, their own
+  //   page) and in the first confirmation. Only shown when a short-notice
+  //   contribution is set (Settings › Client pages). —
+  cancellationPolicyLine: string; // {hours} {amount}
+
+  // — After a missed session (you press "No-show") —
+  noShowEmailSubject: string;
+  noShowEmailBody: string; // {name} {when} {clinic}
+  /** added when a contribution is set */
+  noShowGoodwillText: string; // {amount} {paymentRef}
+
   // — A client moves a session from their own booking page. —
   movedEmailSubject: string;
   movedEmailBody: string; // {name} {when} {clinic} {previousWhen}
@@ -153,6 +164,15 @@ export const CLIENT_COPY_DEFAULTS: ClientCopy = {
     "Hi {name},\n\nLooking forward to meeting you for our first session: {when} at {clinic}.\n\nI noticed you haven't filled in your intake form yet. If you have a few minutes beforehand, it's here:\n{intakeLink}\n\nIf not, no problem at all — we can go through it together at the start of the session.",
   remindersOfferLine:
     "Would a reminder before each session help? You can switch one on here — the day before, or the morning of:\n{link}",
+
+  cancellationPolicyLine:
+    "Plans change, and that's fine — you can move or cancel from your own booking page up to {hours} hours before. Inside {hours} hours, or if a session is missed without notice, the room is already paid for, so I ask for a {amount} contribution towards it.",
+
+  noShowEmailSubject: "Sorry we missed you",
+  noShowEmailBody:
+    "Hi {name},\n\nI was sorry not to see you for your session {when} at {clinic} — I hope everything's alright.",
+  noShowGoodwillText:
+    "As the room was already booked and paid for, I ask for a {amount} contribution towards it when you're able. If that's difficult right now, just let me know.\n\nIf you'd like to, the reference is {paymentRef}.",
 
   movedEmailSubject: "Your session has been moved",
   movedEmailBody:
