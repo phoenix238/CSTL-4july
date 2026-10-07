@@ -1,4 +1,6 @@
 import { prisma, getSettings } from "@/lib/db";
+import { applyCopy, resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveSignOff } from "@/lib/booking/email";
@@ -124,6 +126,11 @@ export interface ReminderSettings {
   bankSortCode?: string;
   bankAccountNumber?: string;
   emailSignOff?: string;
+  /** the editable wording (Settings › Messages) — defaults when absent */
+  clientCopy?: unknown;
+  practitionerName?: string;
+  practitionerFullName?: string;
+  practiceName?: string;
 }
 
 /**
@@ -135,11 +142,9 @@ export function composePaymentReminder(
   input: { clientName: string; whenLabel: string; clinic: Clinic; paymentRef?: string; portalLink?: string },
 ): { subject: string; body: string } {
   const first = input.clientName.split(" ")[0] || "there";
-  const lines = [
-    `Hi ${first},`,
-    "",
-    `Just a gentle note about your session on ${input.whenLabel} at ${CLINIC_LABEL[input.clinic]}. Whenever you're able, here's how to settle it.`,
-  ];
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+  const clinicLabel = CLINIC_LABEL[input.clinic];
+  const lines = [applyCopy(copy.paymentReminderBody, { name: first, when: input.whenLabel, clinic: clinicLabel })];
   const bank = [
     settings.bankAccountName?.trim() && `  Account name: ${settings.bankAccountName.trim()}`,
     settings.bankSortCode?.trim() && `  Sort code: ${settings.bankSortCode.trim()}`,
@@ -154,13 +159,14 @@ export function composePaymentReminder(
   const price = CLINIC_PRICE[input.clinic];
   lines.push(
     "",
-    input.clinic === "bethnal"
-      ? `This is a donation-based practice on a ${price}, so pay what feels fair. If you need more time to pay, just let me know when that'll be.`
-      : `The session is ${price}. If you need more time to pay, just let me know when that'll be.`,
+    applyCopy(
+      input.clinic === "bethnal" ? copy.paymentReminderClosingSliding : copy.paymentReminderClosingFixed,
+      { price },
+    ),
     "",
     ...resolveSignOff(settings).split("\n"),
   );
-  return { subject: "Your craniosacral session", body: lines.join("\n") };
+  return { subject: copy.paymentReminderSubject, body: lines.join("\n") };
 }
 
 /**

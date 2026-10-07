@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/google/gmail";
 import { composeOfferMessage } from "@/lib/booking/offer";
 import { getOrCreateOfferToken, offerUrl } from "@/lib/intake";
 import { resolveClientCopy, applyCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 
 /** Offer a client a group of times (nothing booked yet). Body: { clientName, clinic, times: ISO[], sendEmail, email?, emailBody? } */
@@ -29,7 +30,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   });
 
   const settings = await getSettings();
-  const copy = resolveClientCopy(settings.clientCopy);
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
   let body = (emailBody?.trim() as string) || composeOfferMessage(clientName || "", clinic as Clinic, dates, undefined, copy);
   if (send && email) {
     if (!clientId) {

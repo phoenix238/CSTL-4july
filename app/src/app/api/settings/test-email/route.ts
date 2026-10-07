@@ -7,6 +7,8 @@ import { composeReviewEmail } from "@/lib/booking/review";
 import { composePaymentReminder } from "@/lib/payments/unpaid";
 import { composeSessionReminder } from "@/lib/reminders/sessionReminders";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { composeBookingPageEmail } from "@/lib/bookingPageEmail";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { confirmToClient, sendReceipt } from "@/lib/portalNotify";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { intakeUrl } from "@/lib/intake";
@@ -19,10 +21,12 @@ export type TestEmailType =
   | "first"
   | "returning"
   | "cancellation"
+  | "moved"
   | "receipt"
   | "reminder"
   | "session-reminder"
-  | "review";
+  | "review"
+  | "booking-page";
 
 /**
  * Send yourself the exact email a client would get, composed against your real
@@ -90,6 +94,24 @@ export const POST = guarded(async (req: Request) => {
       });
       break;
     }
+    case "moved": {
+      // The real "your session has been moved" email, addressed to you.
+      await confirmToClient({
+        action: "rescheduled",
+        clientName,
+        clientEmail: to,
+        clinic,
+        whenLabel,
+        previousWhenLabel: `${fmtDayLong(londonAddDays(testStart, -2))} · ${fmtTime(testStart)}`,
+        portalLink: links.portalLink,
+      });
+      break;
+    }
+    case "booking-page": {
+      const { subject, body } = composeBookingPageEmail(settings, { clientName, link: portalLink, paymentRef });
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
     case "receipt": {
       await sendReceipt({
         clientName,
@@ -118,7 +140,7 @@ export const POST = guarded(async (req: Request) => {
       // The daily reminder sweep's own email — same composer, same sample links
       // as the "first"/"returning" cases above, so this reads exactly like a real
       // reminder for a session a client opted into.
-      const copy = resolveClientCopy(settings.clientCopy);
+      const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
       const signOff = resolveSignOff(settings);
       const { subject, body } = composeSessionReminder(
         { clientName, whenLabel, clinic, location, icsUrl: links.calendarIcsUrl, portalLink: links.portalLink },

@@ -79,6 +79,7 @@ export function ClientProfile({
   paymentRef = "",
   intakeQuestions,
   clientCopy,
+  practitionerName,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
@@ -92,6 +93,7 @@ export function ClientProfile({
   paymentRef?: string;
   intakeQuestions: IntakeQuestion[];
   clientCopy: ClientCopy;
+  practitionerName: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -801,6 +803,7 @@ export function ClientProfile({
               clientEmail={client.email}
               questions={intakeQuestions}
               copy={clientCopy}
+              practitionerName={practitionerName}
               onDone={() => {
                 toast(`${client.name.split(" ")[0]}'s intake form saved ✓`);
                 setInPersonOpen(false);

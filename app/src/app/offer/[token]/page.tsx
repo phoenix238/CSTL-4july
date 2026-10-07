@@ -2,6 +2,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { ToastProvider } from "@/components/ui";
 import { OfferPickFlow } from "@/components/OfferPickFlow";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import type { Clinic } from "@/lib/booking/rules";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,8 @@ export default async function OfferPage({ params }: { params: Promise<{ token: s
   }
 
   const client = await prisma.client.findUnique({ where: { id: enquiry.clientId } });
-  const copy = resolveClientCopy((await getSettings()).clientCopy);
+  const settings = await getSettings();
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
 
   return (
     <ToastProvider>

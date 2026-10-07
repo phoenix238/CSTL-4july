@@ -1,6 +1,7 @@
 import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { resolveClientCopy, applyCopy, type ClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { resolveSignOff } from "@/lib/booking/email";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { sessionLocation } from "@/lib/calendarLinks";
@@ -104,7 +105,7 @@ export async function sweepSessionReminders({
   dryRun = false,
 }: { asOf?: Date; dryRun?: boolean } = {}): Promise<ReminderSweepResult> {
   const settings = await getSettings();
-  const copy = resolveClientCopy(settings.clientCopy);
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
   const signOff = resolveSignOff(settings);
 
   // Only sessions still ahead of us, whose client has an email and at least one

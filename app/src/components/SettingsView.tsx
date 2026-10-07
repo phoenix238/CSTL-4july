@@ -17,6 +17,9 @@ import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
   aiModel: string;
+  practitionerName: string;
+  practitionerFullName: string;
+  practiceName: string;
   accessNote: string;
   emailTemplate: string;
   emailTemplateReturning: string;
@@ -568,17 +571,20 @@ export function SettingsView({
       <Stage
         n={3}
         title="The messages clients receive"
-        blurb="Every word a client reads, in one place — the welcome email, offer, intake, booking pages, confirmations and the review request. Walk through them, check each one sounds like you, and edit anything."
+        blurb="Every email your clients get, in the order they meet them — each one says when it goes out, who gets it, and whether it sends itself or waits for you to press a button. Write them in your own voice; nothing here is fixed."
       />
 
       <Dropdown
-        label="ALL CLIENT MESSAGES — REVIEW & EDIT EVERY WORD"
+        label="YOUR NAME & EVERY CLIENT EMAIL — READ AND EDIT"
         open={!!open.clientMessages}
         onToggle={() => toggle("clientMessages")}
       >
         <ClientMessagesEditor
           initial={settings.clientCopy}
           settingsInitial={{
+            practitionerName: settings.practitionerName,
+            practitionerFullName: settings.practitionerFullName,
+            practiceName: settings.practiceName,
             emailTemplate: settings.emailTemplate,
             emailTemplateReturning: settings.emailTemplateReturning,
             emailSignOff: settings.emailSignOff,

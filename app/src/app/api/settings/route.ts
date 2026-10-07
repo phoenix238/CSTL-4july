@@ -3,6 +3,7 @@ import { guarded } from "@/lib/api";
 import { prisma, getSettings } from "@/lib/db";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 /** The editable settings the UI needs (email preview etc.) — no Google secrets. */
@@ -61,7 +62,11 @@ export const GET = guarded(async () => {
     bankAccountNumber: s.bankAccountNumber,
     bankPaymentNote: s.bankPaymentNote,
     cstaMembershipId: s.cstaMembershipId,
-    clientCopy: resolveClientCopy(s.clientCopy),
+    // Filled with your name — the enquiry composer sends this text as it stands.
+    clientCopy: resolveClientCopy(s.clientCopy, practitionerIdentity(s)),
+    practitionerName: s.practitionerName,
+    practitionerFullName: s.practitionerFullName,
+    practiceName: s.practiceName,
     // Which calendars are wired up — for the calendar page's event composer.
     calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },
     // Availability ⇄ Google Calendar two-way sync state — for the Settings card.
@@ -82,6 +87,7 @@ export const GET = guarded(async () => {
  */
 const EDITABLE_SETTINGS = [
   "aiModel",
+  "practitionerName", "practitionerFullName", "practiceName",
   "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
   "emailTemplate", "emailTemplateReturning", "emailSignOff",
   "waterlooFindIt", "bethnalFindIt", "waterlooPhoto", "bethnalPhoto",

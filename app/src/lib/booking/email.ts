@@ -1,4 +1,6 @@
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "./rules";
+import { applyCopy, resolveClientCopy } from "../clientCopy";
+import { practitionerIdentity, type IdentitySettings } from "../practitioner";
 
 export interface ComposedEmail {
   subject: string;
@@ -8,7 +10,9 @@ export interface ComposedEmail {
 }
 
 /** The settings fields the email needs — plain shape so the browser can pass /api/settings JSON. */
-export interface EmailSettings {
+export interface EmailSettings extends IdentitySettings {
+  /** the editable wording (Settings › Messages) — subject and the fixed paragraphs */
+  clientCopy?: unknown;
   /** the one welcome letter, shared by both clinics */
   emailTemplate?: string;
   /** the short confirmation a returning client gets, shared by both clinics */
@@ -44,8 +48,8 @@ export interface EmailSettings {
 }
 
 /** The one sign-off, from settings, with a safe default if it was cleared. */
-export function resolveSignOff(s: { emailSignOff?: string }): string {
-  return s.emailSignOff?.trim() || "with gratitude\nPhoenix";
+export function resolveSignOff(s: { emailSignOff?: string } & IdentitySettings): string {
+  return s.emailSignOff?.trim() || `with gratitude\n${practitionerIdentity(s).yourName}`;
 }
 
 /**
@@ -186,10 +190,18 @@ function clinicDetails(clinic: Clinic, s: EmailSettings) {
  * the address and the payment details. Lifting the sign-off out lets the
  * factual block sit above it, where it belongs.
  */
-function splitSignOff(body: string): { main: string; signOff: string } {
+function splitSignOff(body: string, settings: IdentitySettings): { main: string; signOff: string } {
   const paragraphs = body.split(/\n\s*\n/);
   const last = paragraphs[paragraphs.length - 1] ?? "";
-  const isSignOff = paragraphs.length > 1 && last.trim().split("\n").length <= 3 && /phoenix\s*$/i.test(last.trim());
+  // A sign-off is a short last paragraph ending in the practitioner's own name
+  // (or the {yourName} placeholder) — whoever's practice this is, not one name
+  // fixed in code, or a second practitioner's letters would sign off twice.
+  const { yourName, yourFullName } = practitionerIdentity(settings);
+  const names = [yourName, yourFullName, "{yourName}", "{yourFullName}"].map((n) =>
+    n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  );
+  const endsInName = new RegExp(`(${names.join("|")})\\W{0,3}$`, "i");
+  const isSignOff = paragraphs.length > 1 && last.trim().split("\n").length <= 3 && endsInName.test(last.trim());
   if (!isSignOff) return { main: body.trimEnd(), signOff: "" };
   return { main: paragraphs.slice(0, -1).join("\n\n").trimEnd(), signOff: last.trim() };
 }
@@ -275,7 +287,8 @@ export function composeBookingEmail(
   links: ClientLinks = PREVIEW_PLACEHOLDERS,
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
-  const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+  const subject = applyCopy(copy.bookingEmailSubject, { when: whenLabel, clinic: CLINIC_LABEL[clinic] });
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
   const { intakeLink, portalLink, paymentRef } = links;
   const includes: string[] = [];
@@ -300,7 +313,7 @@ export function composeBookingEmail(
     // signed once at the end — so a sign-off left in the template can't produce
     // an email that ends twice.
     const returningTemplate = resolveReturningTemplate(settings);
-    const { main } = splitSignOff(fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }));
+    const { main } = splitSignOff(fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }), settings);
     const calendar = calendarBlock(links);
     if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
     const sections = [main, whereBlock, calendar];
@@ -331,7 +344,7 @@ export function composeBookingEmail(
   });
   // Any sign-off the letter carries is dropped here and replaced by the single
   // emailSignOff below, so every email ends the same way and can't end twice.
-  const { main } = splitSignOff(filled);
+  const { main } = splitSignOff(filled, settings);
 
   const calendar = calendarBlock(links);
   if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
@@ -355,22 +368,14 @@ export function composeBookingEmail(
   // the payment details and reference live on the same page — so it's described
   // by what it's for, not as "your account".
   if (portalLink && !template.includes("{portalLink}")) {
-    sections.push(
-      [
-        "This is your own page for everything after today:",
-        portalLink,
-        "Book your next session from there whenever you're ready, move or cancel this one, and find my payment details and your reference any time. No login — just keep the link, it's worth bookmarking.",
-      ].join("\n"),
-    );
+    sections.push(applyCopy(copy.bookingEmailPortalPara, { link: portalLink }));
   }
   if (portalLink) includes.push("Their own booking page — rebooking & payment details");
 
   // The one thing the client has to *do*, kept last so it's the final ask —
   // unless the template already positioned it with {intakeLink}.
   if (!template.includes("{intakeLink}")) {
-    sections.push(
-      `Before we meet, please fill in your short intake form — a couple of minutes, and it goes straight into your confidential record:\n${intakeLink}`,
-    );
+    sections.push(applyCopy(copy.bookingEmailIntakePara, { link: intakeLink }));
   }
   includes.push("Intake form link");
   if (settings.accessNote.trim()) includes.push("Access note — stairs, no step-free access");

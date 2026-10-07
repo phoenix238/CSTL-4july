@@ -240,6 +240,13 @@ model AppSettings {
   // more careful reader (worth it for case-history judgment calls); Haiku is
   // faster/cheaper. Anything else falls back to sonnet.
   aiModel               String @default("sonnet")
+  // Who the practice is. Every client message can say {yourName},
+  // {yourFullName} or {practiceName} instead of a name typed into each letter,
+  // so a practitioner changes their name in one place and every email, page
+  // and subject line follows. Defaults are the wording the app always used.
+  practitionerName      String @default("Phoenix")             // first name, as clients address you
+  practitionerFullName  String @default("Phoenix Tanner")      // full name, for receipts and introductions
+  practiceName          String @default("Phoenix Tanner CSTL") // the practice, for subject lines
   accessNote            String @default("My treatment space has no step-free access at both locations — there are stairs. Please let me know if mobility or accessibility is a concern and I will do my best to accommodate your needs.")
   // The one welcome letter, shared by both clinics. What differs between them —
   // price, address, map pin, how to find the door — is filled in around it, so

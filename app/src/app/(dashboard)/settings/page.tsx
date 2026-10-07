@@ -19,6 +19,9 @@ export default async function SettingsPage() {
       clients={clients}
       settings={{
         aiModel: settings.aiModel,
+        practitionerName: settings.practitionerName,
+        practitionerFullName: settings.practitionerFullName,
+        practiceName: settings.practiceName,
         accessNote: settings.accessNote,
         emailTemplate: settings.emailTemplate,
         emailTemplateReturning: settings.emailTemplateReturning,

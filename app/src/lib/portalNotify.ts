@@ -3,6 +3,8 @@ import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { resolveSignOff } from "@/lib/booking/email";
+import { applyCopy, applyCopyOptional, resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { buildReceiptPdf } from "@/lib/receiptPdf";
 import { fmtDate } from "@/lib/time";
 
@@ -111,44 +113,43 @@ export async function confirmToClient(input: NotifyInput, bcc?: string): Promise
   const clinic = CLINIC_LABEL[input.clinic];
   const first = input.clientName.split(" ")[0] || "there";
 
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+  const vars = {
+    name: first,
+    when: input.whenLabel,
+    clinic,
+    previousWhen: input.previousWhenLabel ?? "",
+    link: input.portalLink ?? "",
+  };
+
+  // The wording is the practitioner's (Settings › Messages); the order is fixed.
   let subject: string;
-  const lines: string[] = [`Hi ${first},`, ""];
-
+  const parts: string[] = [];
   if (input.action === "cancelled") {
-    subject = "Your session has been cancelled";
-    lines.push(`Your session on ${input.whenLabel} at ${clinic} has been cancelled.`);
+    subject = copy.cancelEmailSubject;
+    parts.push(applyCopyOptional(copy.cancelEmailBody, vars));
     if (input.goodwillPence) {
-      lines.push(
-        "",
-        `Because it was short notice the room was already paid for, so if you're able to, a ${formatPence(input.goodwillPence)} contribution helps cover it.`,
-        "This is a donation-based clinic though — if that's too much right now, please don't pay it. That's completely okay, and nothing is owed either way.",
+      parts.push(
+        applyCopyOptional(copy.cancelGoodwillText, {
+          amount: formatPence(input.goodwillPence),
+          paymentRef: input.paymentRef ?? "",
+        }),
       );
-      if (input.paymentRef) lines.push("", `If you'd like to, the reference is ${input.paymentRef}.`);
     }
-    if (input.portalLink) {
-      lines.push("", "Whenever you're ready to book again, your page is here:", input.portalLink);
-    }
+    if (input.portalLink) parts.push(applyCopyOptional(copy.cancelRebookLine, vars));
   } else if (input.action === "rescheduled") {
-    subject = "Your session has been moved";
-    lines.push(
-      `Your session has been moved to ${input.whenLabel} at ${clinic}.`,
-      "",
-      "Your calendar invite has been updated — the new time should appear automatically.",
-    );
-    if (input.previousWhenLabel) lines.push("", `(Previously ${input.previousWhenLabel}.)`);
+    subject = copy.movedEmailSubject;
+    parts.push(applyCopyOptional(copy.movedEmailBody, vars));
+    if (input.portalLink) parts.push(applyCopyOptional(copy.changeAnyTimeLine, vars));
   } else {
+    // Not reached by any route today — a portal booking sends the full booking
+    // confirmation instead (see api/portal/[token]/book). Kept so the type stays total.
     subject = "Your session is booked";
-    lines.push(
-      `You're booked in for ${input.whenLabel} at ${clinic}.`,
-      "",
-      "Your calendar invite is on its way separately.",
-    );
+    parts.push(`Hi ${first},\n\nYou're booked in for ${input.whenLabel} at ${clinic}.`);
+    if (input.portalLink) parts.push(applyCopyOptional(copy.changeAnyTimeLine, vars));
   }
-
-  if (input.portalLink && input.action !== "cancelled") {
-    lines.push("", "You can change or cancel this any time from your page:", input.portalLink);
-  }
-  lines.push("", ...resolveSignOff(settings).split("\n"));
+  parts.push(resolveSignOff(settings));
+  const lines = parts.filter(Boolean).join("\n\n").split("\n");
 
   const links = input.portalLink ? [{ url: input.portalLink, label: "Click here for your booking page" }] : undefined;
 
@@ -203,10 +204,9 @@ export async function sendReceipt({
   const settings = await getSettings();
   const signOff = resolveSignOff(settings);
   const first = clientName.split(" ")[0] || "there";
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
   const body: string[] = [
-    `Hi ${first},`,
-    "",
-    "Here's your receipt for craniosacral therapy with Phoenix Tanner — attached as a PDF you can download and keep.",
+    applyCopy(copy.receiptEmailIntro, { name: first }),
     "",
     ...sessions.map(
       (s) =>
@@ -221,7 +221,7 @@ export async function sendReceipt({
       `(${unpricedCount} sliding-scale ${unpricedCount === 1 ? "session is" : "sessions are"} listed without an amount — just reply and I'll add what you paid.)`,
     );
   }
-  body.push("", "Any questions, just reply to this email.", "", ...signOff.split("\n"));
+  body.push("", copy.receiptEmailClosing, "", ...signOff.split("\n"));
 
   try {
     const pdfBytes = await buildReceiptPdf({
@@ -236,7 +236,7 @@ export async function sendReceipt({
       addressByClinic: { waterloo: settings.waterlooAddress, bethnal: settings.bethnalAddress },
     });
     const filename = receiptNumber ? `Receipt ${receiptNumber}.pdf` : `Receipt - ${fmtDate(new Date())}.pdf`;
-    await sendEmail(clientEmail, "Your receipt — Phoenix Tanner CSTL", body.join("\n"), undefined, [
+    await sendEmail(clientEmail, copy.receiptEmailSubject, body.join("\n"), undefined, [
       { filename, mimeType: "application/pdf", base64: Buffer.from(pdfBytes).toString("base64") },
     ]);
   } catch (err) {

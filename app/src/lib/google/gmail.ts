@@ -2,6 +2,8 @@ import { getGmailApi, withRetry } from "./client";
 import { recordGoogleFailure, recordGoogleSuccess } from "./health";
 import { buildMessage, type Attachment } from "./mime";
 import { htmlFromPlainText, type EmailLink } from "./htmlEmail";
+import { getSettings } from "@/lib/db";
+import { fillIdentity, practitionerIdentity } from "@/lib/practitioner";
 
 export type { Attachment } from "./mime";
 export type { EmailLink } from "./htmlEmail";
@@ -62,6 +64,13 @@ export async function sendEmail(
   attachments?: Attachment[],
   options?: SendEmailExtras,
 ) {
+  // The last stop before a client reads it: any {yourName} {yourFullName}
+  // {practiceName} written into a letter — the welcome email, the review
+  // request, the sign-off — is filled here, so no message can ever go out
+  // with the bare placeholder in it, whichever composer built it.
+  const identity = practitionerIdentity(await getSettings());
+  subject = fillIdentity(subject, identity);
+  body = fillIdentity(body, identity);
   try {
     const gmail = await getGmailApi();
     const profile = await gmail.users.getProfile({ userId: "me" });
@@ -70,6 +79,8 @@ export async function sendEmail(
     const message = buildMessage({
       to,
       from: from ?? undefined,
+      // The name the client's inbox shows — the practitioner's own, from Settings.
+      fromName: identity.yourFullName,
       bcc: options?.bcc,
       replyTo: options?.replyTo,
       subject: replySubject,

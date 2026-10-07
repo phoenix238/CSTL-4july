@@ -4,6 +4,7 @@ import { BookingFlow } from "@/components/BookingFlow";
 import { EmbedBridge } from "@/components/EmbedBridge";
 import { ToastProvider } from "@/components/ui";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   // (same URL) picks this up.
   preload("/api/public/slots?clinic=bethnal", { as: "fetch", crossOrigin: "anonymous" });
   const settings = await getSettings();
-  const copy = resolveClientCopy(settings.clientCopy);
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
 
   // The notes are deliberately blank. How-to-find-it runs to a dozen lines of
   // pre-arrival detail, which pushed the times themselves below the fold on a

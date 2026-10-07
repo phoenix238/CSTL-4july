@@ -3,12 +3,23 @@
 import { useState } from "react";
 import { api, Card, OutlineButton, useToast } from "./ui";
 
-type TestType = "first" | "returning" | "cancellation" | "receipt" | "reminder" | "session-reminder" | "review";
+type TestType =
+  | "first"
+  | "returning"
+  | "cancellation"
+  | "moved"
+  | "receipt"
+  | "reminder"
+  | "session-reminder"
+  | "review"
+  | "booking-page";
 
 const TYPES: { key: TestType; label: string }[] = [
   { key: "first", label: "First booking" },
   { key: "returning", label: "Rebooking" },
   { key: "cancellation", label: "Cancellation" },
+  { key: "moved", label: "Session moved" },
+  { key: "booking-page", label: "Booking page link" },
   { key: "receipt", label: "Receipt" },
   { key: "reminder", label: "Payment reminder" },
   { key: "session-reminder", label: "Session reminder" },

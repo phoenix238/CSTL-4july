@@ -14,6 +14,7 @@ export function InPersonIntakePanel({
   clientEmail,
   questions,
   copy,
+  practitionerName,
   onDone,
 }: {
   clientId: string;
@@ -22,6 +23,7 @@ export function InPersonIntakePanel({
   clientEmail: string;
   questions: IntakeQuestion[];
   copy: ClientCopy;
+  practitionerName: string;
   onDone: () => void;
 }) {
   const [token, setToken] = useState<string | null>(null);
@@ -52,6 +54,7 @@ export function InPersonIntakePanel({
       alreadyDone={false}
       questions={questions}
       copy={copy}
+      practitionerName={practitionerName}
       onDone={onDone}
     />
   );

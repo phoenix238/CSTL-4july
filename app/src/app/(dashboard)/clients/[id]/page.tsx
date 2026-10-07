@@ -3,6 +3,7 @@ import { getSettings, prisma } from "@/lib/db";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { ClientProfile, type ProfileNote, type ProfileRecording } from "@/components/ClientProfile";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -73,12 +74,13 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   }));
 
   const intakeQuestions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
-  const clientCopy = resolveClientCopy(settings.clientCopy);
+  const clientCopy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
 
   return (
     <ClientProfile
       intakeQuestions={intakeQuestions}
       clientCopy={clientCopy}
+      practitionerName={practitionerIdentity(settings).yourName}
       client={{
         id: client.id,
         name: client.name,
