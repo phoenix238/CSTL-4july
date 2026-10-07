@@ -10,7 +10,19 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   const { raw, bullets: providedBullets, clinic } = await req.json();
   if (!raw?.trim()) return NextResponse.json({ error: "Note is empty" }, { status: 400 });
 
-  const bullets = providedBullets?.length ? providedBullets : await summariseNote(raw);
+  // The summary is a nice-to-have; the note is the record. If Claude can't be
+  // reached (an expired or missing API key, an outage), save the note without
+  // bullets rather than refusing to save it at all.
+  let bullets: string[] = providedBullets?.length ? providedBullets : [];
+  let summarySkipped = false;
+  if (!bullets.length) {
+    try {
+      bullets = await summariseNote(raw);
+    } catch (err) {
+      console.error("Note summary failed — saving the note without one", err);
+      summarySkipped = true;
+    }
+  }
   const date = new Date();
 
   const note = await prisma.sessionNote.create({
@@ -20,5 +32,5 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   const { docId } = await ensureClientFolderAndDoc(id);
   await appendNoteToDoc(docId, { date: fmtDate(date), clinic, bullets, raw });
 
-  return NextResponse.json(note);
+  return NextResponse.json({ ...note, summarySkipped });
 });

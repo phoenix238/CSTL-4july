@@ -67,10 +67,13 @@ export function NotesComposer({
     stop();
     setBusy("save");
     try {
-      await api(`/api/clients/${clientId}/notes`, {
+      const saved = await api<{ summarySkipped?: boolean }>(`/api/clients/${clientId}/notes`, {
         method: "POST",
         body: JSON.stringify({ raw: text, bullets: bullets ?? undefined, clinic }),
       });
+      if (saved.summarySkipped) {
+        toast("Saved to the Doc ✓ — without a summary (the AI isn't reachable; check the Anthropic key)");
+      }
       setText("");
       setBullets(null);
       onSaved();

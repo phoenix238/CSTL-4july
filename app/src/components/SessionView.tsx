@@ -214,7 +214,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     }
     setSaving(true);
     try {
-      await api(`/api/clients/${clientId}/session`, {
+      const saved = await api<{ summarySkipped?: boolean }>(`/api/clients/${clientId}/session`, {
         method: "POST",
         body: JSON.stringify({
           transcript,
@@ -223,7 +223,11 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
           clinic,
         }),
       });
-      toast(`Saved to ${client?.name ?? "the client"}'s Doc ✓`);
+      toast(
+        saved.summarySkipped
+          ? `Saved to ${client?.name ?? "the client"}'s Doc ✓ — without a summary (the AI isn't reachable; check the Anthropic key)`
+          : `Saved to ${client?.name ?? "the client"}'s Doc ✓`,
+      );
       discard();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save");
