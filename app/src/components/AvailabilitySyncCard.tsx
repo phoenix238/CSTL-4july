@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, Card, OutlineButton, PrimaryButton, useToast } from "./ui";
-
-type Clinic = "waterloo" | "bethnal";
+import { useActiveSpaces } from "./SpacesContext";
 
 interface SyncState {
   connected: boolean;
@@ -31,6 +30,7 @@ function relative(iso: string | null): string {
  */
 export function AvailabilitySyncCard() {
   const toast = useToast();
+  const spaces = useActiveSpaces();
   const [state, setState] = useState<SyncState | null>(null);
   const [busy, setBusy] = useState<null | "connect" | "sync">(null);
 
@@ -48,7 +48,7 @@ export function AvailabilitySyncCard() {
       });
       setState((prev) => ({
         connected: r.connected,
-        defaultClinic: prev?.defaultClinic ?? "waterloo",
+        defaultClinic: prev?.defaultClinic ?? spaces[0]?.id ?? "",
         lastSyncAt: r.lastSyncAt,
       }));
       toast("Availability calendar connected ✓");
@@ -72,12 +72,15 @@ export function AvailabilitySyncCard() {
     }
   }
 
-  async function setDefaultClinic(clinic: Clinic) {
+  // The saved default, or the first open space if it's been archived or never set.
+  const defaultSpace = spaces.some((sp) => sp.id === state?.defaultClinic) ? state?.defaultClinic : spaces[0]?.id;
+
+  async function setDefaultClinic(clinic: string) {
     setState((prev) => (prev ? { ...prev, defaultClinic: clinic } : prev));
     try {
       await api("/api/settings", { method: "PATCH", body: JSON.stringify({ availabilityDefaultClinic: clinic }) });
     } catch {
-      toast("Couldn't save the default clinic");
+      toast("Couldn't save the default space");
     }
   }
 
@@ -103,29 +106,36 @@ export function AvailabilitySyncCard() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <div className="text-[12px] font-medium text-ink-soft">
-              Clinic for a block you add in Google without naming one
+          {spaces.length > 1 ? (
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[12px] font-medium text-ink-soft">
+                Space for a block you add in Google without naming one
+              </div>
+              <div className="flex w-fit max-w-full flex-wrap rounded-[18px] border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+                {spaces.map((sp) => (
+                  <button
+                    key={sp.id}
+                    onClick={() => setDefaultClinic(sp.id)}
+                    className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+                      defaultSpace === sp.id ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                    }`}
+                  >
+                    {sp.name}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11.5px] leading-relaxed text-muted">
+                One calendar covers all your spaces, so name the space in a block&apos;s title (e.g. &quot;
+                {spaces[1].name} 6–7pm&quot;) and the app reads it; an untitled block uses the space above. All-day
+                blocks are ignored — give a start and end time.
+              </p>
             </div>
-            <div className="flex w-fit rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["bethnal", "waterloo"] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setDefaultClinic(c)}
-                  className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                    state.defaultClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-                  }`}
-                >
-                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
-                </button>
-              ))}
-            </div>
+          ) : (
             <p className="text-[11.5px] leading-relaxed text-muted">
-              One calendar covers both clinics, so name the clinic in a block&apos;s title (e.g. &quot;Bethnal
-              6–7pm&quot;) and the app reads it; an untitled block uses the clinic above. All-day blocks are ignored —
-              give a start and end time.
+              Every block you add counts as {spaces[0]?.name ?? "your space"}. All-day blocks are ignored — give a start
+              and end time.
             </p>
-          </div>
+          )}
           <div>
             <OutlineButton onClick={syncNow} disabled={busy === "sync"} className="px-3.5 py-1.5 text-[12.5px]">
               {busy === "sync" ? "Syncing…" : "Sync now"}

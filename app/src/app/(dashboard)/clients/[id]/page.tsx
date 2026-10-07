@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
-import { getSettings, prisma } from "@/lib/db";
+import { getSettings, getSpaces, prisma } from "@/lib/db";
+import { spaceById } from "@/lib/spaces";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { ClientProfile, type ProfileNote, type ProfileRecording } from "@/components/ClientProfile";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,11 +20,15 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
 
   const settings = await getSettings();
   const { reflectionsDocId } = settings;
-  const isWaterloo = client.clinic === "waterloo";
+  // "Where we are", for pasting to the client — from their usual space.
+  const space = spaceById(await getSpaces(), client.clinic);
+  const address = space.address.trim();
   const location = {
-    address: isWaterloo ? settings.waterlooAddress : settings.bethnalAddress,
-    url: isWaterloo ? settings.waterlooLocationUrl : settings.bethnalLocationUrl,
-    directions: isWaterloo ? settings.waterlooDirections : settings.bethnalDirections,
+    address,
+    url:
+      space.mapUrl.trim() ||
+      (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : ""),
+    directions: space.findIt.trim(),
   };
 
   // Every session still ahead of now, soonest first — a client can have several
@@ -73,12 +79,13 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   }));
 
   const intakeQuestions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
-  const clientCopy = resolveClientCopy(settings.clientCopy);
+  const clientCopy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
 
   return (
     <ClientProfile
       intakeQuestions={intakeQuestions}
       clientCopy={clientCopy}
+      practitionerName={practitionerIdentity(settings).yourName}
       client={{
         id: client.id,
         name: client.name,
@@ -115,6 +122,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         startsAtISO: b.startsAt.toISOString(),
         clinic: b.clinic,
         status: b.status,
+        cancelledBy: b.cancelledBy,
         paid: b.paid,
         amountPence: b.amountPence,
         goodwillPence: b.goodwillPence,

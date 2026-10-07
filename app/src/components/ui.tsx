@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import type { Space } from "@/lib/spaces";
+import { spaceChipStyle } from "./SpacesContext";
 
 /* ---------- shared hooks ---------- */
 
@@ -157,10 +159,10 @@ export function Chip({
   );
 }
 
-export function clinicChip(clinic: string) {
-  return clinic === "waterloo"
-    ? { label: "Waterloo · R5 Phoenix", color: "oklch(0.42 0.1 42)", bg: "oklch(0.94 0.03 48)" }
-    : { label: "Bethnal Green", color: "oklch(0.42 0.08 148)", bg: "oklch(0.94 0.03 148)" };
+/** A space's chip: its name (plus the venue's room title, if it books a room) in its calendar colour. */
+export function clinicChip(space: Space): { label: string; color: string; bg: string } {
+  const room = space.venueMode === "room" && space.venueEventTitle.trim() ? ` · ${space.venueEventTitle.trim()}` : "";
+  return { label: `${space.name}${room}`, ...spaceChipStyle(space) };
 }
 
 export function PrimaryButton({

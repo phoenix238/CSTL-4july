@@ -7,8 +7,11 @@
 // in Settings to say the same two sentences twice.
 
 import type { Clinic } from "./rules";
+import { resolveSpaces, spaceById, type LegacySpaceSettings } from "../spaces";
 
-export interface ReviewEmailSettings {
+export interface ReviewEmailSettings extends LegacySpaceSettings {
+  /** your spaces — each carries its own review link (Space.reviewUrl) */
+  spaces?: unknown;
   /** the shared wording — what both clinics send */
   reviewEmailSubject?: string;
   reviewEmailBody?: string;
@@ -17,9 +20,6 @@ export interface ReviewEmailSettings {
   reviewEmailSubjectBethnal?: string;
   reviewEmailBodyWaterloo?: string;
   reviewEmailBodyBethnal?: string;
-  /** the one thing that genuinely differs per clinic */
-  mapsReviewUrlWaterloo: string;
-  mapsReviewUrlBethnal: string;
 }
 
 /** The shared subject, or the old per-clinic one until it's saved. */
@@ -44,7 +44,8 @@ export function composeReviewEmail(
   optInLink: string,
 ): { subject: string; body: string } {
   const first = clientName?.trim() ? clientName.trim().split(/\s+/)[0] : "there";
-  const mapsUrl = clinic === "waterloo" ? settings.mapsReviewUrlWaterloo : settings.mapsReviewUrlBethnal;
+  // The one thing that differs per space: each is its own Google listing.
+  const mapsUrl = spaceById(resolveSpaces(settings), clinic).reviewUrl;
   const body = resolveReviewBody(clinic, settings)
     .split("{name}")
     .join(first)

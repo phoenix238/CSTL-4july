@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { api, inputClass } from "../ui";
+import { useSpaces } from "../SpacesContext";
+import { spaceName } from "@/lib/spaces";
 
 export interface ClientHit {
   id: string;
@@ -16,6 +18,7 @@ export interface ClientHit {
  * the full list (no typing needed), or type to filter it down.
  */
 export function ClientPicker({ onSelect }: { onSelect: (client: ClientHit) => void }) {
+  const spaces = useSpaces();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [all, setAll] = useState<ClientHit[] | null>(null);
@@ -74,7 +77,7 @@ export function ClientPicker({ onSelect }: { onSelect: (client: ClientHit) => vo
               className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-[12.5px] hover:bg-hoverbg"
             >
               <span className="truncate font-medium">{h.name}</span>
-              <span className="flex-none text-[10.5px] text-faint capitalize">{h.clinic}</span>
+              <span className="flex-none text-[10.5px] text-faint">{spaceName(spaces, h.clinic)}</span>
             </button>
           ))}
         </div>

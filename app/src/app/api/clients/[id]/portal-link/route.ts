@@ -3,6 +3,7 @@ import { guarded } from "@/lib/api";
 import { prisma, getSettings } from "@/lib/db";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { sendEmail } from "@/lib/google/gmail";
+import { composeBookingPageEmail } from "@/lib/bookingPageEmail";
 
 /** The client's private page link and payment reference (created on first request). */
 export const GET = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -28,30 +29,8 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
 
   const { token, paymentRef } = await getPortalIdentity(id);
   const url = portalUrl(settings, token);
-  const first = client.name.split(" ")[0] || "there";
-
-  const lines = [
-    `Hi ${first},`,
-    "",
-    "Here's your own page for booking sessions with me:",
-    url,
-    "",
-    "You can book your next session whenever you're ready, move it, or cancel it — no login needed, just keep the link. It's worth bookmarking or saving to your home screen.",
-  ];
-
-  if (settings.bankAccountName || settings.bankSortCode || settings.bankAccountNumber) {
-    lines.push("", "For bank transfers:");
-    if (settings.bankAccountName) lines.push(`  Account name: ${settings.bankAccountName}`);
-    if (settings.bankSortCode) lines.push(`  Sort code: ${settings.bankSortCode}`);
-    if (settings.bankAccountNumber) lines.push(`  Account number: ${settings.bankAccountNumber}`);
-    lines.push(`  Reference: ${paymentRef}`);
-    lines.push("", "Please use that reference every time — it's how I match your payment to you.");
-  }
-  if (settings.bankPaymentNote) lines.push("", settings.bankPaymentNote);
-
-  lines.push("", "Any questions, just reply.", "", "Warm wishes,", "Phoenix");
-
-  await sendEmail(client.email, "Your booking page", lines.join("\n"), undefined, undefined, {
+  const { subject, body } = composeBookingPageEmail(settings, { clientName: client.name, link: url, paymentRef });
+  await sendEmail(client.email, subject, body, undefined, undefined, {
     links: [{ url, label: "Click here for your booking page" }],
   });
   return NextResponse.json({ url, paymentRef, sentTo: client.email });

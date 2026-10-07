@@ -1,4 +1,5 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceById, spaceIdFrom } from "@/lib/spaces";
 import { createClientWithDrive } from "@/lib/clients";
 import {
   cancelBookingEvents,
@@ -15,7 +16,7 @@ import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
-import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
+import { planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
 import { SlotTakenError } from "./slots";
 
 export interface BookingRequest {
@@ -137,10 +138,10 @@ async function createBookingRow({
         clinic,
         startsAt: start,
         bookedVia,
-        // Waterloo has a fixed price, so it's known the moment the session is booked.
-        // Bethnal Green is a sliding scale the client chooses — left null rather than
-        // guessed, and filled in from the profile once the real amount is known.
-        amountPence: defaultAmountPence(clinic),
+        // A fixed price is known the moment the session is booked. A sliding
+        // scale is the client's choice — left null rather than guessed, and
+        // filled in from the profile once the real amount is known.
+        amountPence: defaultAmountPence(spaceById(await getSpaces(), clinic)),
       },
     });
   });
@@ -153,6 +154,10 @@ async function createBookingRow({
  */
 export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   const settings = await getSettings();
+  // Only a space that exists and is open for booking — an id from a stale tab
+  // or a hand-made request must not create a session nowhere.
+  const space = (await getSpaces()).find((sp) => sp.id === req.clinic && sp.active);
+  if (!space) throw new Error("That space isn't open for booking any more — pick another.");
   const start = new Date(req.startISO);
   const whenLabel = `${fmtDayLong(start)} · ${fmtTime(start)}`;
   const items: string[] = [];
@@ -195,11 +200,9 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   });
   await createBookingEvents(booking.id);
 
-  const address = req.clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-  const plan = planBookingEvents(req.clinic, start, address);
+  const plan = planBookingEvents(space, start);
   for (const ev of plan) {
-    const calName =
-      ev.calendar === "personal" ? "Personal calendar" : ev.calendar === "room" ? "Room calendar" : "Chalk Farm calendar";
+    const calName = ev.calendar === "personal" ? "Personal calendar" : `${space.name} venue calendar`;
     items.push(
       `"${ev.summary}" created (${calName}, ${fmtTime(ev.start)}–${fmtTime(ev.end)}, reminders on)`,
     );
@@ -222,7 +225,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // the door they're looking for without following a link.
   const photo = parseDataUrl(resolveClinicPhoto(req.clinic, settings));
   const attachments = photo
-    ? [{ filename: `${req.clinic === "waterloo" ? "waterloo" : "bethnal-green"}-entrance.jpg`, ...photo, inline: true }]
+    ? [{ filename: `${spaceIdFrom(space.name, [])}-entrance.jpg`, ...photo, inline: true }]
     : undefined;
   // A hand-edited body comes from the preview, which was composed before this
   // client had tokens — so its placeholder links are swapped for the real ones
@@ -320,7 +323,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     bookingId: booking.id,
     clientId,
     clientName: client.name,
-    whenLabel: `${whenLabel} · ${CLINIC_LABEL[req.clinic]}`,
+    whenLabel: `${whenLabel} · ${space.name}`,
     items,
     emailTextForClipboard,
     intakeUrl: intakeLink,
@@ -367,12 +370,13 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
   // Moved to a different day — the old day's shared block needs recomputing
   // too, now this session's no longer part of it.
   const newDateKey = londonDateKey(start);
-  if (booking.clinic === "bethnal" && newDateKey !== oldDateKey) {
+  const space = spaceById(await getSpaces(), booking.clinic);
+  if (space.venueMode === "dayBlock" && newDateKey !== oldDateKey) {
     await syncChalkFarmDayBlock(oldDateKey);
   }
 
   return {
-    whenLabel: `${fmtDayLong(start)} · ${fmtTime(start)} · ${CLINIC_LABEL[booking.clinic as Clinic]}`,
+    whenLabel: `${fmtDayLong(start)} · ${fmtTime(start)} · ${space.name}`,
     clientName: booking.client.name,
     previousWhenLabel: `${fmtDayLong(booking.startsAt)} · ${fmtTime(booking.startsAt)}`,
     clientId: booking.clientId,

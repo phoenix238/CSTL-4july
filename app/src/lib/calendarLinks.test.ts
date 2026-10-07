@@ -67,10 +67,10 @@ describe("buildSessionIcs", () => {
 
 describe("sessionLocation", () => {
   it("uses the address when present", () => {
-    expect(sessionLocation("waterloo", " 1 Test St ")).toBe("1 Test St");
+    expect(sessionLocation({ name: "Waterloo", address: " 1 Test St " })).toBe("1 Test St");
   });
-  it("falls back to the clinic name", () => {
-    expect(sessionLocation("bethnal", "")).toBe("Bethnal Green");
-    expect(sessionLocation("waterloo", null)).toBe("Waterloo");
+  it("falls back to the space's name", () => {
+    expect(sessionLocation({ name: "Bethnal Green", address: "" })).toBe("Bethnal Green");
+    expect(sessionLocation({ name: "Garden Room", address: "  " })).toBe("Garden Room");
   });
 });

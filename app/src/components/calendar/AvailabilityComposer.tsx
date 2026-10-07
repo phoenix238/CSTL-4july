@@ -3,12 +3,8 @@
 import { useState } from "react";
 import { fmtDayLong, londonDateKey } from "@/lib/time";
 import { api, Card, OutlineButton, PrimaryButton, SectionLabel, TintButton, inputClass, useEscapeKey, useToast } from "../ui";
+import { useSpace } from "../SpacesContext";
 import type { AvailClinic } from "./layout";
-
-const CLINIC_LABEL: Record<AvailClinic, string> = {
-  bethnal: "Bethnal Green",
-  waterloo: "Waterloo",
-};
 
 const minToTime = (min: number) =>
   `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
@@ -50,6 +46,7 @@ export function AvailabilityComposer({
   onSaved: () => void;
 }) {
   const toast = useToast();
+  const space = useSpace(clinic);
   useEscapeKey(onClose);
   const [kind, setKind] = useState<"open" | "block">(initialKind);
   const [startTime, setStartTime] = useState(minToTime(startMin));
@@ -125,7 +122,7 @@ export function AvailabilityComposer({
               {mode === "create" ? "Mark availability" : "Edit availability"}
             </div>
             <div className="mt-0.5 text-[13px] text-muted">
-              {fmtDayLong(day)} · {CLINIC_LABEL[clinic]}
+              {fmtDayLong(day)} · {space.name}
             </div>
           </div>
 

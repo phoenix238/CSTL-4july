@@ -16,11 +16,12 @@
 // its row (moved/resized) — so the app's own writes are always recognised and
 // skipped next time round, whatever the sync-token timing.
 
-import { prisma } from "@/lib/db";
+import { prisma, getSpaces } from "@/lib/db";
+import { activeSpaces, spaceById } from "@/lib/spaces";
 import { getCalendarApi, withRetry } from "./client";
 import { dayOpenIntervals, resolveWeeklyHours, type OverrideWindow } from "@/lib/booking/availability";
 import { loadOverridesForWindow } from "@/lib/booking/slots";
-import { CLINIC_EVENT_COLOR, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
 import { londonAddDays, londonDayStart, londonDateKey, londonTime } from "@/lib/time";
 import {
   AVAIL_HORIZON_DAYS,
@@ -107,11 +108,13 @@ export async function projectAvailabilityToCalendar(window?: {
   const windowEnd = window?.windowEnd ?? londonDayStart(AVAIL_HORIZON_DAYS);
 
   const weeklyHours = resolveWeeklyHours(settings.weeklyHours);
-  const [waterlooOv, bethnalOv] = await Promise.all([
-    loadOverridesForWindow("waterloo", windowStart, windowEnd),
-    loadOverridesForWindow("bethnal", windowStart, windowEnd),
-  ]);
-  const overridesByClinic = { waterloo: waterlooOv, bethnal: bethnalOv };
+  // Only bookable spaces are projected — an archived space's blocks are removed.
+  const spaces = await getSpaces();
+  const open = activeSpaces(spaces);
+  const overrideLists = await Promise.all(open.map((sp) => loadOverridesForWindow(sp.id, windowStart, windowEnd)));
+  const overridesByClinic: Record<Clinic, OverrideWindow[]> = Object.fromEntries(
+    open.map((sp, i) => [sp.id, overrideLists[i]]),
+  );
   const expected = expectedWindows({ weeklyHours, overridesByClinic, windowStart, windowEnd });
   const expectedByKey = new Map(expected.map((w) => [keyOf(w), w]));
 
@@ -133,8 +136,8 @@ export async function projectAvailabilityToCalendar(window?: {
       calendar.events.insert({
         calendarId: calId,
         requestBody: {
-          summary: canonicalSummary(w.clinic),
-          colorId: CLINIC_EVENT_COLOR[w.clinic],
+          summary: canonicalSummary(spaceById(spaces, w.clinic)),
+          colorId: spaceById(spaces, w.clinic).eventColor,
           // An overlay for planning — must never mark Phoenix busy, and stays out
           // of the bookable-slot engine (which only reads personal/room/chalkFarm).
           transparency: "transparent",
@@ -288,7 +291,7 @@ export async function pullAvailabilityFromCalendar(): Promise<{ imported: number
       if (unchanged) continue; // our own write, or nothing changed — the loop guard
       // Moved / resized: close the old window, open the new one (that date only).
       await closeWindowOnDate(row.clinic as Clinic, row.dateKey, row.startMin, row.endMin);
-      const clinic = clinicFromTitle(ev.summary, row.clinic as Clinic);
+      const clinic = clinicFromTitle(ev.summary, activeSpaces(await getSpaces()), row.clinic as Clinic);
       await openWindowOnDate(clinic, geom.dateKey, geom.startMin, geom.endMin);
       await prisma.availabilityEvent.delete({ where: { eventId: ev.id } }).catch(() => {});
       moved++;
@@ -298,7 +301,13 @@ export async function pullAvailabilityFromCalendar(): Promise<{ imported: number
     if (!managed) {
       // A brand-new event the user drew → import as a one-off open block, then
       // adopt the event (tag + canonical title/colour) so it isn't re-imported.
-      const clinic = clinicFromTitle(ev.summary, settings.availabilityDefaultClinic as Clinic);
+      const spaces = activeSpaces(await getSpaces());
+      // The default space for an untitled block — the configured one if it's
+      // still bookable, else the first space that is.
+      const fallback = spaces.some((sp) => sp.id === settings.availabilityDefaultClinic)
+        ? settings.availabilityDefaultClinic
+        : (spaces[0]?.id ?? settings.availabilityDefaultClinic);
+      const clinic = clinicFromTitle(ev.summary, spaces, fallback);
       const overrideId = await openWindowOnDate(clinic, geom.dateKey, geom.startMin, geom.endMin);
       await adoptEvent(calendar, calId, ev.id, clinic, geom, overrideId);
       imported++;
@@ -322,13 +331,14 @@ async function adoptEvent(
   geom: { dateKey: string; startMin: number; endMin: number },
   overrideId: string,
 ) {
+  const space = spaceById(await getSpaces(), clinic);
   await withRetry(() =>
     calendar.events.patch({
       calendarId: calId,
       eventId,
       requestBody: {
-        summary: canonicalSummary(clinic),
-        colorId: CLINIC_EVENT_COLOR[clinic],
+        summary: canonicalSummary(space),
+        colorId: space.eventColor,
         transparency: "transparent",
         extendedProperties: { private: { cstlAvailability: "1", cstlClinic: clinic } },
       },

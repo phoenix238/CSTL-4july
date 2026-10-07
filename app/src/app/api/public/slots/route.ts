@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOpenSpace } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
 import { defaultSlotWindow, loadAvailableSlots } from "@/lib/booking/slots";
 
@@ -8,7 +9,7 @@ export async function GET(req: Request) {
   try {
     const params = new URL(req.url).searchParams;
     const clinic = params.get("clinic");
-    if (clinic !== "waterloo" && clinic !== "bethnal") {
+    if (!(await isOpenSpace(clinic)) || typeof clinic !== "string") {
       return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
     }
 

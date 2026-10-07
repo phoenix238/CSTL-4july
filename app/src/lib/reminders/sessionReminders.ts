@@ -1,8 +1,10 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { resolveClientCopy, applyCopy, type ClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { resolveSignOff } from "@/lib/booking/email";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import { spaceById } from "@/lib/spaces";
 import { sessionLocation } from "@/lib/calendarLinks";
 import { portalUrl } from "@/lib/portal";
 import { appBaseUrl } from "@/lib/appUrl";
@@ -27,7 +29,8 @@ export function icsUrl(settings: { appUrl?: string | null }, token: string, book
 export interface ReminderEmailInput {
   clientName: string;
   whenLabel: string;
-  clinic: Clinic;
+  /** the space's name, as the client reads it */
+  clinicName: string;
   location: string;
   icsUrl: string;
   portalLink: string;
@@ -44,7 +47,7 @@ export function composeSessionReminder(
   copy: ClientCopy,
   signOff: string,
 ): { subject: string; body: string } {
-  const vars = { name: input.clientName, when: input.whenLabel, clinic: CLINIC_LABEL[input.clinic] };
+  const vars = { name: input.clientName, when: input.whenLabel, clinic: input.clinicName };
   const subject = applyCopy(copy.reminderEmailSubject, vars);
 
   const sections: string[] = [applyCopy(copy.reminderEmailBody, vars)];
@@ -104,7 +107,8 @@ export async function sweepSessionReminders({
   dryRun = false,
 }: { asOf?: Date; dryRun?: boolean } = {}): Promise<ReminderSweepResult> {
   const settings = await getSettings();
-  const copy = resolveClientCopy(settings.clientCopy);
+  const spaces = await getSpaces();
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
   const signOff = resolveSignOff(settings);
 
   // Only sessions still ahead of us, whose client has an email and at least one
@@ -133,12 +137,12 @@ export async function sweepSessionReminders({
 
     try {
       const token = b.client.portalToken;
-      const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-      const location = sessionLocation(clinic, address);
+      const space = spaceById(spaces, clinic);
+      const location = sessionLocation(space);
       const portalLink = token ? portalUrl(settings, token) : "";
       const ics = token ? icsUrl(settings, token, b.id) : "";
       const { subject, body } = composeSessionReminder(
-        { clientName: b.client.name, whenLabel, clinic, location, icsUrl: ics, portalLink },
+        { clientName: b.client.name, whenLabel, clinicName: space.name, location, icsUrl: ics, portalLink },
         copy,
         signOff,
       );

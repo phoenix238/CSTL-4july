@@ -1,5 +1,4 @@
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import { CLINIC_LABEL, type Clinic } from "./rules";
 import { CLIENT_COPY_DEFAULTS, applyCopy, type ClientCopy } from "@/lib/clientCopy";
 
 type OfferCopy = Pick<ClientCopy, "offerEmailBody" | "offerPickLinkLine">;
@@ -13,7 +12,8 @@ type OfferCopy = Pick<ClientCopy, "offerEmailBody" | "offerPickLinkLine">;
  */
 export function composeOfferMessage(
   clientName: string,
-  clinic: Clinic,
+  /** the space's name, as the client reads it */
+  clinicName: string,
   times: Date[],
   pickUrl?: string,
   copy: OfferCopy = CLIENT_COPY_DEFAULTS,
@@ -24,7 +24,7 @@ export function composeOfferMessage(
   const pickLink = pickUrl ? applyCopy(copy.offerPickLinkLine, { link: pickUrl }) : "";
   return applyCopy(copy.offerEmailBody, {
     name: first,
-    clinic: CLINIC_LABEL[clinic],
+    clinic: clinicName,
     times: timesBlock,
     pickLink,
   });

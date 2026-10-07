@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import type { Space } from "@/lib/spaces";
 import { getSettings } from "@/lib/db";
 import type { CalendarKey } from "@/lib/booking/rules";
 
@@ -64,16 +65,16 @@ export async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<
 export async function calendarId(key: CalendarKey): Promise<string> {
   const s = await getSettings();
   if (key === "personal") return s.personalCalendarId || "primary";
-  if (key === "room") {
-    if (!s.roomCalendarId) throw new Error("The R5 room calendar isn't set yet — add it in Settings.");
-    return s.roomCalendarId;
+  if (!s.availabilityCalendarId) {
+    throw new Error("The availability calendar isn't connected yet — connect it in Settings › Availability.");
   }
-  if (key === "availability") {
-    if (!s.availabilityCalendarId) {
-      throw new Error("The availability calendar isn't connected yet — connect it in Settings › Availability.");
-    }
-    return s.availabilityCalendarId;
+  return s.availabilityCalendarId;
+}
+
+/** A space's shared venue calendar id — or a plain-words error if it isn't set yet. */
+export function venueCalendarIdFor(space: Space): string {
+  if (!space.venueCalendarId) {
+    throw new Error(`The venue calendar for ${space.name} isn't set yet — add it in Settings › Your spaces.`);
   }
-  if (!s.chalkFarmCalendarId) throw new Error("The Chalk Farm calendar isn't set yet — add it in Settings.");
-  return s.chalkFarmCalendarId;
+  return space.venueCalendarId;
 }

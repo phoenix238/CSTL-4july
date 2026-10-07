@@ -2,7 +2,7 @@
 
 import { SPAN_COLORS, type SpanSource } from "./layout";
 
-const DISPLAY_ORDER: SpanSource[] = ["booking", "room", "chalkFarm", "personal"];
+const DISPLAY_ORDER: SpanSource[] = ["booking", "venue", "personal"];
 
 /** Colour key under the calendar; `variant="picker"` shows Free/Busy/Chosen instead. */
 export function Legend({ variant = "display" }: { variant?: "display" | "picker" }) {

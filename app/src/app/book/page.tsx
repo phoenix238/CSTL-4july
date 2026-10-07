@@ -1,9 +1,12 @@
 import { preload } from "react-dom";
-import { getSettings } from "@/lib/db";
+import { getSettings, getSpaces } from "@/lib/db";
+import { activeSpaces } from "@/lib/spaces";
 import { BookingFlow } from "@/components/BookingFlow";
 import { EmbedBridge } from "@/components/EmbedBridge";
 import { ToastProvider } from "@/components/ui";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
+import { cancellationPolicyText } from "@/lib/noShow";
 
 export const dynamic = "force-dynamic";
 
@@ -14,24 +17,22 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   // Start fetching the default clinic's times as the HTML arrives, rather than
   // after the page's JavaScript has loaded and run — the picker's own request
   // (same URL) picks this up.
-  preload("/api/public/slots?clinic=bethnal", { as: "fetch", crossOrigin: "anonymous" });
+  // The booking page is the one screen that shows each space's entrance photo,
+  // so it gets the full spaces (photos included) — only the bookable ones.
+  const spaces = activeSpaces(await getSpaces());
+  if (spaces[0]) {
+    preload(`/api/public/slots?clinic=${encodeURIComponent(spaces[0].id)}`, { as: "fetch", crossOrigin: "anonymous" });
+  }
   const settings = await getSettings();
-  const copy = resolveClientCopy(settings.clientCopy);
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
 
-  // The notes are deliberately blank. How-to-find-it runs to a dozen lines of
-  // pre-arrival detail, which pushed the times themselves below the fold on a
-  // phone. It belongs in the confirmation email — which still reads the same
-  // settings field through resolveFindIt — not in front of someone who hasn't
-  // picked a time yet.
   return (
     <ToastProvider>
       {embedded && <EmbedBridge />}
       <BookingFlow
-        waterlooAddress={settings.waterlooAddress}
-        bethnalAddress={settings.bethnalAddress}
-        waterlooNote=""
-        bethnalNote=""
+        spaces={spaces}
         copy={copy}
+        policy={cancellationPolicyText(copy, settings.portalNoticeHours, settings.lateCancelGoodwillPence)}
         embedded={embedded}
       />
     </ToastProvider>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, Chip, clinicChip, inputClass, SectionLabel, useToast } from "./ui";
+import { useSpaces } from "./SpacesContext";
+import { spaceById } from "@/lib/spaces";
 import { formatPence } from "@/lib/account";
 import { fmtDate } from "@/lib/time";
 
@@ -137,6 +139,7 @@ export function HomeView({
   attention: AttentionItem[];
   allSynced: boolean;
 }) {
+  const spaces = useSpaces();
   const router = useRouter();
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -243,7 +246,7 @@ export function HomeView({
         </div>
         <Card className="px-4 py-0.5 lg:px-[18px]">
           {day.rows.map((r, i) => {
-            const clinic = clinicChip(r.clinic);
+            const clinic = clinicChip(spaceById(spaces, r.clinic));
             return (
               <div
                 key={r.id}
@@ -345,6 +348,36 @@ export function HomeView({
     }
   }
 
+  // A missed session: stops being owed for, records the short-notice
+  // contribution instead, and (if you say so) emails them about it.
+  async function noShow(a: AttentionItem) {
+    const first = a.name.split(" ")[0];
+    if (!window.confirm(`Mark ${first}'s session as a no-show? It won't be owed as a session any more.`)) return;
+    const email = window.confirm(
+      `Email ${first} about it? They'll get your "Sorry we missed you" email (Settings › Messages), with the contribution if one is set.\n\nOK = email them · Cancel = just mark it`,
+    );
+    setBusyId(a.id);
+    try {
+      const r = await api<{ emailedTo: string | null; emailError?: string }>(`/api/bookings/${a.id}/no-show`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setPaidIds((s) => new Set(s).add(a.id)); // off the unpaid list
+      toast(
+        r.emailError
+          ? `Marked as a no-show, but the email didn't send — ${r.emailError}`
+          : r.emailedTo
+            ? `Marked as a no-show — emailed ${first} ✓`
+            : `Marked as a no-show ✓`,
+      );
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't mark that");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function scanForPayments() {
     setScanning(true);
     try {
@@ -401,7 +434,7 @@ export function HomeView({
               </div>
             )}
             {rows.map((r) => {
-              const clinic = clinicChip(r.clinic);
+              const clinic = clinicChip(spaceById(spaces, r.clinic));
               return (
                 <Card
                   key={r.id}
@@ -650,6 +683,13 @@ export function HomeView({
                             className="cursor-pointer rounded-full bg-clay-tint px-4 py-2 text-[12.5px] font-semibold text-clay-text disabled:cursor-default disabled:opacity-60"
                           >
                             {reminded ? "Reminded" : "Remind"}
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => noShow(a)}
+                            className="cursor-pointer rounded-full border border-line px-4 py-2 text-[12.5px] font-semibold text-muted hover:text-ink disabled:cursor-default disabled:opacity-60"
+                          >
+                            No-show
                           </button>
                         </div>
                       );

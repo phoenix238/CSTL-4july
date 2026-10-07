@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/google/gmail";
 import { googleErrorMessage, googleFixFor } from "@/lib/google/health";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { resolveClientCopy, applyCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 
 
 export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -13,7 +14,7 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
   if (!client.email) return NextResponse.json({ error: "No email address on record" }, { status: 400 });
 
   const settings = await getSettings();
-  const copy = resolveClientCopy(settings.clientCopy);
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
   const link = intakeUrl(settings, await getOrCreateIntakeToken(client.id));
   try {
     await sendEmail(

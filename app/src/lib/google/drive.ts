@@ -1,5 +1,6 @@
 import type { docs_v1 } from "googleapis";
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceName } from "@/lib/spaces";
 import { getDriveApi, getDocsApi } from "./client";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -311,7 +312,7 @@ export async function appendNoteToDoc(
   docId: string,
   note: { date: string; clinic: string; bullets: string[]; raw: string },
 ) {
-  const clinicLabel = note.clinic === "waterloo" ? "Waterloo" : "Bethnal Green";
+  const clinicLabel = spaceName(await getSpaces(), note.clinic);
   await appendFormattedSections(docId, null, [
     {
       heading: `Session — ${note.date} · ${clinicLabel}`,

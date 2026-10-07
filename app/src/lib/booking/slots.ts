@@ -1,12 +1,13 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceById, type Space } from "@/lib/spaces";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekStart } from "@/lib/time";
-import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
+import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, weeklyHoursFor, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
 
 /**
- * Bethnal Green's weekly Chalk Farm hours cap, as a `computeAvailableSlots`-
- * ready `weeklyCap` — Phoenix's own session hours each London week (Mon-Sun),
+ * A space's weekly hours cap, as a `computeAvailableSlots`-ready `weeklyCap` —
+ * your own session hours there each London week (Mon-Sun),
  * counted one session length per confirmed session (gaps between them don't
  * count). Shared by `loadAvailableSlots` and the offer-pick flow
  * (`api/public/offer/[token]`), which re-verifies a hand-picked time without
@@ -14,16 +15,16 @@ import { SESSION_MINUTES, type Clinic } from "./rules";
  * `windowStart`/`windowEnd` so every week touched by that window is fully
  * counted, not just the sessions that happen to fall inside it.
  */
-export async function loadBethnalWeeklyCap(
+export async function loadWeeklyCap(
+  space: Space,
   windowStart: Date,
   windowEnd: Date,
   excludeBookingId?: string,
 ): Promise<AvailabilityParams["weeklyCap"]> {
-  const settings = await getSettings();
-  if (settings.chalkFarmWeeklyCapHours <= 0) return undefined;
+  if (space.weeklyCapHours <= 0) return undefined;
   const weekBookings = await prisma.booking.findMany({
     where: {
-      clinic: "bethnal",
+      clinic: space.id,
       status: "confirmed",
       startsAt: { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) },
       ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
@@ -46,23 +47,22 @@ export async function loadBethnalWeeklyCap(
     capMinutesByWeek[weekKey] = (capMinutesByWeek[weekKey] ?? 0) + chalkFarmCapMinutes(mins);
   }
   return {
-    capMinutes: settings.chalkFarmWeeklyCapHours * 60,
+    capMinutes: space.weeklyCapHours * 60,
     capMinutesByWeek,
     sessionMinsByDay,
   };
 }
 
 /**
- * Does this busy span actually stop Phoenix working at `clinic`?
+ * Does this busy span actually stop you working at `clinic`?
  *
- * The room calendars are shared with other practitioners, so their events mean
- * "this *room* is taken", not "Phoenix is taken" — and a room at one site says
- * nothing about the other. Phoenix's own time (his personal calendar, his own
+ * Venue calendars are shared with other practitioners, so their events mean
+ * "this *room* is taken", not "you are taken" — and a room at one space says
+ * nothing about another. Your own time (your personal calendar, your own
  * bookings) always counts, wherever it is.
  */
 function appliesToClinic(span: BusySpan, clinic: Clinic): boolean {
-  if (span.source === "chalkFarm") return clinic === "bethnal";
-  if (span.source === "room") return clinic === "waterloo";
+  if (span.source === "venue") return span.clinic === clinic;
   return true;
 }
 
@@ -76,14 +76,16 @@ function appliesToClinic(span: BusySpan, clinic: Clinic): boolean {
  */
 function spanBuffer(
   span: BusySpan,
-  clinic: Clinic,
-  settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
+  space: Space,
+  settings: { crossClinicGapMinutes: number },
 ): number | undefined {
+  const clinic = space.id;
   // A confirmed session at the *other* clinic — Phoenix has to physically get
   // there. This is what makes a Waterloo morning and a Bethnal Green evening
   // safe on the same day: the two are allowed to coexist, just not back to back.
-  if (span.clinic && span.clinic !== clinic) return settings.crossClinicGapMinutes;
-  if (span.source === "chalkFarm") return settings.chalkFarmBufferMinutes;
+  if (span.source === "booking" && span.clinic && span.clinic !== clinic) return settings.crossClinicGapMinutes;
+  // Someone else's booking on a shared day-block venue calendar.
+  if (span.source === "venue" && space.venueMode === "dayBlock") return space.venueBufferMinutes;
   return undefined;
 }
 
@@ -96,15 +98,15 @@ function spanBuffer(
  */
 export function filterBusyForClinic(
   busy: BusySpan[],
-  clinic: Clinic,
-  settings: { chalkFarmBufferMinutes: number; crossClinicGapMinutes: number },
+  space: Space,
+  settings: { crossClinicGapMinutes: number },
   excludeBookingId?: string,
 ): Array<BusySpan & { bufferMinutes?: number }> {
   return busy
     .filter((b) => !b.roomBlock)
     .filter((b) => !excludeBookingId || b.ownBookingId !== excludeBookingId)
-    .filter((b) => appliesToClinic(b, clinic))
-    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, clinic, settings) }));
+    .filter((b) => appliesToClinic(b, space.id))
+    .map((b) => ({ ...b, bufferMinutes: spanBuffer(b, space, settings) }));
 }
 
 /**
@@ -175,23 +177,24 @@ async function availabilityParams({
   excludeBookingId?: string;
 }): Promise<AvailabilityParams> {
   const settings = await getSettings();
+  const space = spaceById(await getSpaces(), clinic);
   const [overrides, busy, weeklyCap] = await Promise.all([
     loadOverridesForWindow(clinic, windowStart, windowEnd),
     getBusySpans(windowStart, windowEnd),
-    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
+    loadWeeklyCap(space, windowStart, windowEnd, excludeBookingId),
   ]);
 
   return {
     clinic,
     windowStart,
     windowEnd,
-    weeklyHours: resolveWeeklyHours(settings.weeklyHours)[clinic],
-    overrides,
-    busy: filterBusyForClinic(busy, clinic, settings, excludeBookingId),
+    // An archived space offers nothing, whatever hours it still has saved.
+    weeklyHours: space.active ? weeklyHoursFor(resolveWeeklyHours(settings.weeklyHours), clinic) : [],
+    overrides: space.active ? overrides : [],
+    busy: filterBusyForClinic(busy, space, settings, excludeBookingId),
     slotMinutes: settings.bookingSlotMinutes,
-    // Waterloo and Bethnal Green don't need the same spacing between Phoenix's
-    // own back-to-back sessions — kept as separate settings per clinic.
-    bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
+    // Each space keeps its own spacing between your own back-to-back sessions.
+    bufferMinutes: space.bufferMinutes,
     minNoticeMinutes: settings.bookingMinNoticeMins,
     weeklyCap,
   };

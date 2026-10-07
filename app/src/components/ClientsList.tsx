@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, useToast } from "./ui";
+import { useActiveSpaces, useSpaces } from "./SpacesContext";
+import { spaceById } from "@/lib/spaces";
 
 export interface ClientRow {
   id: string;
@@ -20,11 +22,14 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
   const toast = useToast();
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<{ name: string; email: string; phone: string; clinic: "waterloo" | "bethnal" }>({
+  const spaces = useSpaces();
+  const bookable = useActiveSpaces();
+  const firstSpaceId = bookable[0]?.id ?? "";
+  const [draft, setDraft] = useState<{ name: string; email: string; phone: string; clinic: string }>({
     name: "",
     email: "",
     phone: "",
-    clinic: "bethnal",
+    clinic: firstSpaceId,
   });
   const [saving, setSaving] = useState(false);
   const q = search.toLowerCase();
@@ -57,7 +62,7 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
           <div className="hidden text-[12.5px] text-muted sm:block">One record each · synced to Drive</div>
           <PrimaryButton
             onClick={() => {
-              setDraft({ name: "", email: "", phone: "", clinic: "bethnal" });
+              setDraft({ name: "", email: "", phone: "", clinic: firstSpaceId });
               setAdding(!adding);
             }}
             className="px-4 py-2 text-[13px]"
@@ -100,8 +105,8 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
           </div>
           <div className="flex items-center gap-2.5">
             <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">CLINIC</span>
-            <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-              {(["bethnal", "waterloo"] as const).map((c) => (
+            <div className="flex flex-wrap rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+              {bookable.map(({ id: c, name }) => (
                 <button
                   key={c}
                   onClick={() => setDraft({ ...draft, clinic: c })}
@@ -109,7 +114,7 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
                     draft.clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
                   }`}
                 >
-                  {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                  {name}
                 </button>
               ))}
             </div>
@@ -128,7 +133,8 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
       />
       <Card className="px-4 py-0.5 lg:px-5">
         {filtered.map((c, i) => {
-          const chip = clinicChip(c.clinic);
+          const space = spaceById(spaces, c.clinic);
+          const chip = clinicChip(space);
           return (
             <Link
               key={c.id}
@@ -150,7 +156,7 @@ export function ClientsList({ rows }: { rows: ClientRow[] }) {
               </div>
               <span className="hidden flex-none sm:inline-flex">
                 <Chip color={chip.color} bg={chip.bg}>
-                  {c.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                  {space.name}
                 </Chip>
               </span>
               <div className="flex-1" />

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, SectionLabel, useToast } from "./ui";
 import { formatPence, sessionPriceLabel, summariseAccount, type AccountBooking } from "@/lib/account";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { spaceName } from "@/lib/spaces";
+import { useSpaces } from "./SpacesContext";
 import { fmtDate } from "@/lib/time";
 
 export interface AccountRow {
@@ -12,6 +13,8 @@ export interface AccountRow {
   startsAtISO: string;
   clinic: string;
   status: string;
+  /** "no_show" when the session was marked as missed */
+  cancelledBy: string;
   paid: boolean;
   amountPence: number | null;
   goodwillPence: number;
@@ -43,6 +46,7 @@ export function ClientAccountPanel({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const spaces = useSpaces();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
@@ -68,6 +72,47 @@ export function ClientAccountPanel({
       router.refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save that");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // A missed session — stops being owed for and records the short-notice
+  // contribution instead; optionally emails them. Undo puts it back.
+  async function noShow(bookingId: string) {
+    if (!window.confirm("Mark this session as a no-show? It won't be owed as a session any more.")) return;
+    const email = window.confirm(
+      'Email them about it? They\'ll get your "Sorry we missed you" email, with the contribution if one is set.\n\nOK = email them · Cancel = just mark it',
+    );
+    setBusyId(bookingId);
+    try {
+      const r = await api<{ emailedTo: string | null; emailError?: string }>(`/api/bookings/${bookingId}/no-show`, {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      toast(
+        r.emailError
+          ? `Marked as a no-show, but the email didn't send — ${r.emailError}`
+          : r.emailedTo
+            ? `Marked as a no-show — emailed ${r.emailedTo} ✓`
+            : "Marked as a no-show ✓",
+      );
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't mark that");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function undoNoShow(bookingId: string) {
+    setBusyId(bookingId);
+    try {
+      await api(`/api/bookings/${bookingId}/no-show`, { method: "DELETE" });
+      toast("No-show undone");
+      router.refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't undo that");
     } finally {
       setBusyId(null);
     }
@@ -252,8 +297,18 @@ export function ClientAccountPanel({
                   <div className="flex items-baseline justify-between gap-2 text-[12px]">
                     <span className={cancelled ? "text-muted line-through" : ""}>
                       {fmtDate(new Date(b.startsAtISO))}
-                      <span className="ml-1.5 text-[11px] text-muted">{CLINIC_LABEL[b.clinic as Clinic]}</span>
+                      <span className="ml-1.5 text-[11px] text-muted">{spaceName(spaces, b.clinic)}</span>
                     </span>
+                    {b.cancelledBy === "no_show" && (
+                      <button
+                        onClick={() => undoNoShow(b.id)}
+                        disabled={busyId === b.id}
+                        title="Marked by mistake? Put it back as an ordinary session"
+                        className="cursor-pointer text-[11px] font-semibold text-muted underline hover:text-ink disabled:cursor-default"
+                      >
+                        No-show · undo
+                      </button>
+                    )}
                     {!cancelled && b.paid && (
                       <button
                         onClick={() => patch(b.id, { paid: false }, "Marked unpaid")}
@@ -298,6 +353,15 @@ export function ClientAccountPanel({
                         >
                           {busyId === b.id ? "…" : "Paid"}
                         </button>
+                        {new Date(b.startsAtISO).getTime() <= Date.now() && (
+                          <button
+                            onClick={() => noShow(b.id)}
+                            disabled={busyId === b.id}
+                            className="cursor-pointer rounded-full border border-line px-2.5 py-0.5 text-[11px] font-semibold text-muted hover:text-ink disabled:cursor-default disabled:opacity-50"
+                          >
+                            No-show
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

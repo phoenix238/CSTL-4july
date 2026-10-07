@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/db";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { prisma, getSpaces } from "@/lib/db";
+import type { Clinic } from "@/lib/booking/rules";
+import { spaceName } from "@/lib/spaces";
 import { fmtDayLong } from "@/lib/time";
 import { sendReceipt } from "@/lib/portalNotify";
 import { getOrCreatePaymentRef } from "@/lib/portal";
@@ -51,6 +52,7 @@ export async function sendClientReceipt(clientId: string): Promise<{ sentTo: str
     throw new NoEmailError("There's no email address on this record to send a receipt to.");
   }
 
+  const spaces = await getSpaces();
   const paid = await prisma.booking.findMany({
     where: { clientId, paid: true, status: { not: "cancelled" } },
     orderBy: { startsAt: "asc" },
@@ -67,7 +69,7 @@ export async function sendClientReceipt(clientId: string): Promise<{ sentTo: str
     lines: paid.map((b) => ({
       whenLabel: fmtDayLong(b.startsAt),
       clinic: b.clinic as Clinic,
-      clinicLabel: CLINIC_LABEL[b.clinic as Clinic],
+      clinicLabel: spaceName(spaces, b.clinic),
       amountPence: b.amountPence,
       paymentNote: b.paymentNote,
     })),

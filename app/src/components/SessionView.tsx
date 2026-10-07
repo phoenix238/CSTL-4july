@@ -13,6 +13,8 @@ import {
   TintButton,
   useToast,
 } from "./ui";
+import { useActiveSpaces, useSpaces } from "./SpacesContext";
+import { spaceById } from "@/lib/spaces";
 import { dictationSupported, useLiveTranscript } from "./useLiveTranscript";
 
 export interface SessionClient {
@@ -87,7 +89,9 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   const [saving, setSaving] = useState(false);
 
   const client = clients.find((c) => c.id === clientId);
-  const clinic = client?.clinic ?? "waterloo";
+  const spaces = useSpaces();
+  const firstOpenSpaceId = useActiveSpaces()[0]?.id ?? "";
+  const clinic = client?.clinic || firstOpenSpaceId;
   const supported = useMemo(() => dictationSupported(), []);
 
   const transcriptRef = useRef<HTMLDivElement | null>(null);
@@ -232,7 +236,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
     }
   };
 
-  const chip = clinicChip(clinic);
+  const chip = clinicChip(spaceById(spaces, clinic));
 
   return (
     <div className="flex max-w-[1240px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">

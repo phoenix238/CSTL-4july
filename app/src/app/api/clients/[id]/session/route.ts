@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
-import { prisma } from "@/lib/db";
+import { prisma, getSpaces } from "@/lib/db";
+import { spaceName } from "@/lib/spaces";
 import { summariseSession } from "@/lib/claude";
 import { appendFormattedSections, ensureClientFolderAndDoc } from "@/lib/google/drive";
 import { fmtDate } from "@/lib/time";
@@ -17,7 +18,12 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   const transcript: string = (body.transcript ?? "").trim();
   const pinned: string[] = asStrings(body.pinned);
   const myNotes: string = (body.myNotes ?? "").trim();
-  const clinic: string = body.clinic ?? "waterloo";
+  const spaces = await getSpaces();
+  // The space it happened at — as sent, else the client's usual one.
+  const clinic: string =
+    typeof body.clinic === "string" && body.clinic
+      ? body.clinic
+      : ((await prisma.client.findUnique({ where: { id }, select: { clinic: true } }))?.clinic ?? "");
 
   if (!transcript && !pinned.length && !myNotes) {
     return NextResponse.json({ error: "Nothing recorded yet" }, { status: 400 });
@@ -39,7 +45,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     data: { clientId: id, date, clinic, transcript, pinned, myNotes, bullets },
   });
 
-  const clinicLabel = clinic === "waterloo" ? "Waterloo" : "Bethnal Green";
+  const clinicLabel = spaceName(spaces, clinic);
   const { docId } = await ensureClientFolderAndDoc(id);
   await appendFormattedSections(docId, null, [
     {

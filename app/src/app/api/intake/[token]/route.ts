@@ -10,7 +10,8 @@ import { isValidEmail } from "@/lib/validate";
 import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import type { Clinic } from "@/lib/booking/rules";
-import { COLUMN_KEYS, CONSENT_PARAGRAPHS, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
+import { practitionerIdentity } from "@/lib/practitioner";
+import { COLUMN_KEYS, consentParagraphs, resolveIntakeQuestions, type IntakeQuestion } from "@/lib/intakeQuestions";
 
 // Standard keys that read as short client-detail fields (vs. clinical paragraphs).
 const DETAIL_KEYS = new Set(["dob", "phone", "occupation", "doctor", "emergency", "referred"]);
@@ -142,7 +143,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       heading: "5. Consent",
       lines: [
         { kind: "field", label: "Consent given", value: consent === true ? "Yes" : consent === false ? "No" : "Not answered" },
-        { kind: "paragraph", value: CONSENT_PARAGRAPHS.join("\n\n") },
+        { kind: "paragraph", value: consentParagraphs(practitionerIdentity(settings).yourName).join("\n\n") },
       ],
     });
 

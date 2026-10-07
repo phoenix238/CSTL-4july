@@ -1,16 +1,18 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceById } from "@/lib/spaces";
 import { getBusySpans } from "@/lib/google/calendar";
 import { londonDayStart, londonDateKey } from "@/lib/time";
-import { isSlotAvailable, resolveWeeklyHours } from "@/lib/booking/availability";
+import { isSlotAvailable, resolveWeeklyHours, weeklyHoursFor } from "@/lib/booking/availability";
 import type { Clinic } from "@/lib/booking/rules";
 import { bookSession } from "@/lib/booking/book";
-import { filterBusyForClinic, loadBethnalWeeklyCap, loadOverridesForWindow } from "@/lib/booking/slots";
+import { filterBusyForClinic, loadWeeklyCap, loadOverridesForWindow } from "@/lib/booking/slots";
 import { sendEmail } from "@/lib/google/gmail";
 
-function isClinic(v: string): v is Clinic {
-  return v === "waterloo" || v === "bethnal";
+/** A space that's still bookable — an offer for one since archived has lapsed. */
+async function isClinic(v: string): Promise<boolean> {
+  return (await getSpaces()).some((s) => s.id === v && s.active);
 }
 
 /**
@@ -23,6 +25,7 @@ function isClinic(v: string): v is Clinic {
 async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Promise<Date[]> {
   if (!offeredTimes.length) return [];
   const settings = await getSettings();
+  const space = spaceById(await getSpaces(), clinic);
   const earliest = offeredTimes.reduce((a, b) => (a < b ? a : b));
   const latest = offeredTimes.reduce((a, b) => (a > b ? a : b));
   const windowStart = londonDayStart(-1, earliest);
@@ -31,17 +34,17 @@ async function stillFreeOfferedTimes(clinic: Clinic, offeredTimes: Date[]): Prom
     // Shared loader — picks up repeating windows too, exactly as the /book path does.
     loadOverridesForWindow(clinic, windowStart, windowEnd),
     getBusySpans(windowStart, windowEnd),
-    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd) : Promise.resolve(undefined),
+    loadWeeklyCap(space, windowStart, windowEnd),
   ]);
-  const weeklyHours = resolveWeeklyHours(settings.weeklyHours)[clinic];
-  const busySpans = filterBusyForClinic(busy, clinic, settings);
+  const weeklyHours = weeklyHoursFor(resolveWeeklyHours(settings.weeklyHours), clinic);
+  const busySpans = filterBusyForClinic(busy, space, settings);
   return offeredTimes.filter((t) =>
     isSlotAvailable(t, {
       clinic,
       weeklyHours,
       overrides,
       busy: busySpans,
-      bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
+      bufferMinutes: space.bufferMinutes,
       minNoticeMinutes: settings.bookingMinNoticeMins,
       weeklyCap,
     }),
@@ -60,7 +63,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       enquiry.status !== "offered" ||
       !enquiry.offeredTimes.length ||
       !enquiry.clientId ||
-      !isClinic(enquiry.clinic)
+      !(await isClinic(enquiry.clinic))
     ) {
       return NextResponse.json({ error: "expired" }, { status: 404 });
     }
@@ -94,7 +97,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     if (!enquiry || enquiry.status === "booked") {
       return NextResponse.json({ error: "expired" }, { status: 404 });
     }
-    if (enquiry.status !== "offered" || !enquiry.clientId || !isClinic(enquiry.clinic)) {
+    if (enquiry.status !== "offered" || !enquiry.clientId || !(await isClinic(enquiry.clinic))) {
       return NextResponse.json({ error: "expired" }, { status: 404 });
     }
 

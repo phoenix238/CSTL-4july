@@ -177,8 +177,8 @@ describe("chalkFarmCapMinutes", () => {
 
 describe("resolveWeeklyHours", () => {
   it("returns empty (nothing bookable) for null/malformed input", () => {
-    expect(resolveWeeklyHours(null)).toEqual({ waterloo: [], bethnal: [] });
-    expect(resolveWeeklyHours({ waterloo: "nonsense" })).toEqual({ waterloo: [], bethnal: [] });
+    expect(resolveWeeklyHours(null)).toEqual({});
+    expect(resolveWeeklyHours({ waterloo: "nonsense" })).toEqual({ waterloo: [] });
   });
   it("drops malformed windows but keeps valid ones", () => {
     const raw = { waterloo: [{ weekday: 1, startMin: 540, endMin: 1020 }, { weekday: 9, startMin: 0, endMin: 60 }] };

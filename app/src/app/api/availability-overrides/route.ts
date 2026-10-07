@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
-import { prisma } from "@/lib/db";
+import { prisma, isOpenSpace } from "@/lib/db";
 import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 export const GET = guarded(async () => {
@@ -10,7 +10,7 @@ export const GET = guarded(async () => {
 
 export const POST = guarded(async (req: Request) => {
   const { clinic, date, kind, startMin, endMin, note, repeatWeekly, exactStart } = await req.json();
-  if (clinic !== "waterloo" && clinic !== "bethnal") {
+  if (!(await isOpenSpace(clinic)) || typeof clinic !== "string") {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }
   if (kind !== "open" && kind !== "block") {
