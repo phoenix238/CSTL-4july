@@ -23,7 +23,16 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     return NextResponse.json({ error: "Nothing recorded yet" }, { status: 400 });
   }
 
-  const bullets = await summariseSession({ transcript, pinned, myNotes });
+  // Same rule as session notes: never lose a session because the summary
+  // couldn't be written — save it without one and say so.
+  let bullets: string[] = [];
+  let summarySkipped = false;
+  try {
+    bullets = await summariseSession({ transcript, pinned, myNotes });
+  } catch (err) {
+    console.error("Session summary failed — saving the session without one", err);
+    summarySkipped = true;
+  }
   const date = new Date();
 
   const recording = await prisma.sessionRecording.create({
@@ -36,7 +45,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     {
       heading: `Session (Clean Language) — ${fmtDate(date)} · ${clinicLabel}`,
       lines: [
-        { kind: "bullets", label: "Summary", items: bullets },
+        ...(bullets.length ? [{ kind: "bullets" as const, label: "Summary", items: bullets }] : []),
         ...(pinned.length ? [{ kind: "bullets" as const, label: "Highlights — their words", items: pinned }] : []),
         ...(myNotes ? [{ kind: "paragraph" as const, label: "My notes", value: myNotes }] : []),
         ...(transcript ? [{ kind: "paragraph" as const, label: "Full conversation", value: transcript }] : []),
@@ -44,5 +53,5 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     },
   ]);
 
-  return NextResponse.json(recording);
+  return NextResponse.json({ ...recording, summarySkipped });
 });

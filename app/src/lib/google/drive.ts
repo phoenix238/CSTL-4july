@@ -316,7 +316,8 @@ export async function appendNoteToDoc(
     {
       heading: `Session — ${note.date} · ${clinicLabel}`,
       lines: [
-        { kind: "bullets", label: "Summary", items: note.bullets },
+        // No summary (Claude unavailable when it was saved) → just the note itself.
+        ...(note.bullets.length ? [{ kind: "bullets" as const, label: "Summary", items: note.bullets }] : []),
         { kind: "paragraph", label: "Raw note", value: note.raw },
       ],
     },
