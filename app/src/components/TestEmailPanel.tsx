@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api, Card, OutlineButton, useToast } from "./ui";
+import { useActiveSpaces } from "./SpacesContext";
 
 type TestType =
   | "first"
@@ -32,7 +33,10 @@ const TYPES: { key: TestType; label: string }[] = [
  */
 export function TestEmailPanel() {
   const toast = useToast();
-  const [clinic, setClinic] = useState<"bethnal" | "waterloo">("bethnal");
+  const spaces = useActiveSpaces();
+  const [picked, setPicked] = useState(spaces[0]?.id ?? "");
+  // The space picked, or the first open one if it's since been archived.
+  const clinic = spaces.some((sp) => sp.id === picked) ? picked : (spaces[0]?.id ?? "");
   const [busy, setBusy] = useState<TestType | null>(null);
 
   async function send(type: TestType) {
@@ -56,22 +60,24 @@ export function TestEmailPanel() {
         Send yourself any of these, built from your current settings with a sample client, so you can read exactly what
         a client gets. They always go to your own inbox.
       </p>
-      <div className="flex items-center gap-2 text-[12px]">
-        <span className="text-muted">Clinic:</span>
-        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-          {(["bethnal", "waterloo"] as const).map((c) => (
-            <button
-              key={c}
-              onClick={() => setClinic(c)}
-              className={`cursor-pointer rounded-full px-3 py-1 text-[12px] font-semibold ${
-                clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-              }`}
-            >
-              {c === "bethnal" ? "Bethnal Green" : "Waterloo"}
-            </button>
-          ))}
+      {spaces.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="text-muted">Space:</span>
+          <div className="flex max-w-full flex-wrap rounded-[18px] border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+            {spaces.map((sp) => (
+              <button
+                key={sp.id}
+                onClick={() => setPicked(sp.id)}
+                className={`cursor-pointer rounded-full px-3 py-1 text-[12px] font-semibold ${
+                  clinic === sp.id ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                }`}
+              >
+                {sp.name}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {TYPES.map((t) => (
           <OutlineButton key={t.key} disabled={busy !== null} onClick={() => send(t.key)}>

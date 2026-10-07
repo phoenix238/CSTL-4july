@@ -1,4 +1,5 @@
-import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "./rules";
+import type { Clinic } from "./rules";
+import { resolveSpaces, spaceById, spacePriceLabel, type LegacySpaceSettings, type Space } from "../spaces";
 import { applyCopy, resolveClientCopy } from "../clientCopy";
 import { fillIdentity, practitionerIdentity, type IdentitySettings } from "../practitioner";
 
@@ -10,34 +11,20 @@ export interface ComposedEmail {
 }
 
 /** The settings fields the email needs — plain shape so the browser can pass /api/settings JSON. */
-export interface EmailSettings extends IdentitySettings {
+export interface EmailSettings extends IdentitySettings, LegacySpaceSettings {
   /** the editable wording (Settings › Messages) — subject and the fixed paragraphs */
   clientCopy?: unknown;
-  /** the one welcome letter, shared by both clinics */
+  /** your spaces (lib/spaces.ts) — or, unsaved, the legacy per-clinic fields below */
+  spaces?: unknown;
+  /** the one welcome letter, shared by every space */
   emailTemplate?: string;
-  /** the short confirmation a returning client gets, shared by both clinics */
+  /** the short confirmation a returning client gets, shared by every space */
   emailTemplateReturning?: string;
   /** legacy per-clinic letters — the fallback until `emailTemplate` is saved */
   emailTemplateWaterloo?: string;
   emailTemplateBethnal?: string;
   accessNote: string;
   paymentDetails: string;
-  waterlooAddress: string;
-  bethnalAddress: string;
-  /** the map pin you actually chose, per clinic — preferred over a generated search link */
-  waterlooLocationUrl?: string;
-  bethnalLocationUrl?: string;
-  /** how to find the door: buzzer, floor, parking */
-  waterlooFindIt?: string;
-  bethnalFindIt?: string;
-  /** photo of the entrance, as a data: URL */
-  waterlooPhoto?: string;
-  bethnalPhoto?: string;
-  /** legacy pair, folded into `*FindIt` above */
-  waterlooDirections?: string;
-  bethnalDirections?: string;
-  waterlooArrivalNote?: string;
-  bethnalArrivalNote?: string;
   /** bank details, so the first email answers "how do I pay you" in full */
   bankAccountName?: string;
   bankSortCode?: string;
@@ -123,28 +110,25 @@ function calendarBlock(links: ClientLinks): string {
   ].join("\n");
 }
 
-/**
- * How to find and get into one clinic.
- *
- * Exported because the public booking page shows the same thing under the
- * address — it used to read a separate "arrival note" field while the email
- * read "directions", so the two surfaces could tell a client different things
- * about the same front door.
- */
-export function resolveFindIt(clinic: Clinic, s: EmailSettings): string {
-  const w = clinic === "waterloo";
-  const current = (w ? s.waterlooFindIt : s.bethnalFindIt)?.trim();
-  if (current) return current;
-  // Nothing saved in the merged field yet — fall back to whatever the old pair
-  // holds, so existing wording keeps working untouched.
-  return [(w ? s.waterlooDirections : s.bethnalDirections)?.trim(), (w ? s.waterlooArrivalNote : s.bethnalArrivalNote)?.trim()]
-    .filter(Boolean)
-    .join("\n");
+/** The space a session is at, from whichever form the settings carry. */
+export function emailSpace(clinic: Clinic, s: EmailSettings): Space {
+  return spaceById(resolveSpaces(s), clinic);
 }
 
-/** The entrance photo for one clinic, as a data: URL — empty string if none set. */
+/**
+ * How to find and get into one space — buzzer, floor, which door.
+ *
+ * Exported because the public booking page shows the same thing under the
+ * address, so the two surfaces can't tell a client different things about the
+ * same front door.
+ */
+export function resolveFindIt(clinic: Clinic, s: EmailSettings): string {
+  return emailSpace(clinic, s).findIt.trim();
+}
+
+/** The entrance photo for one space, as a data: URL — empty string if none set. */
 export function resolveClinicPhoto(clinic: Clinic, s: EmailSettings): string {
-  return ((clinic === "waterloo" ? s.waterlooPhoto : s.bethnalPhoto) ?? "").trim();
+  return emailSpace(clinic, s).photo.trim();
 }
 
 /** Fill {placeholders} from a template. Unknown ones are left alone, not blanked. */
@@ -168,16 +152,16 @@ export function resolveReturningTemplate(s: EmailSettings): string {
   return s.emailTemplateReturning?.trim() || RETURNING_TEMPLATE_FALLBACK;
 }
 
-/** Everything that varies by clinic, resolved once. */
+/** Everything that varies by space, resolved once. */
 function clinicDetails(clinic: Clinic, s: EmailSettings) {
-  const w = clinic === "waterloo";
+  const space = emailSpace(clinic, s);
   return {
-    address: (w ? s.waterlooAddress : s.bethnalAddress) ?? "",
+    address: space.address,
     // The pin Phoenix curated in Settings, if he set one. A generated
     // "search Google Maps for this address" link is the fallback, not the
     // default — it was landing people on a search page rather than the door.
-    locationUrl: firstUrl((w ? s.waterlooLocationUrl : s.bethnalLocationUrl) ?? ""),
-    directions: resolveFindIt(clinic, s),
+    locationUrl: firstUrl(space.mapUrl),
+    directions: space.findIt.trim(),
   };
 }
 
@@ -288,7 +272,8 @@ export function composeBookingEmail(
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
-  const subject = applyCopy(copy.bookingEmailSubject, { when: whenLabel, clinic: CLINIC_LABEL[clinic] });
+  const space = emailSpace(clinic, settings);
+  const subject = applyCopy(copy.bookingEmailSubject, { when: whenLabel, clinic: space.name });
   const { address, locationUrl, directions } = clinicDetails(clinic, settings);
   const { intakeLink, portalLink, paymentRef } = links;
   const includes: string[] = [];
@@ -304,8 +289,8 @@ export function composeBookingEmail(
   const common: Record<string, string> = {
     name: client.name,
     when: whenLabel,
-    clinic: CLINIC_LABEL[clinic],
-    price: CLINIC_PRICE[clinic],
+    clinic: space.name,
+    price: spacePriceLabel(space),
   };
 
   if (!isFirstEmail) {
@@ -358,7 +343,7 @@ export function composeBookingEmail(
     if (payment) {
       sections.push(payment);
       includes.push(
-        paymentRef ? `Payment details & their reference ${paymentRef}` : `Payment details — ${CLINIC_PRICE[clinic]}`,
+        paymentRef ? `Payment details & their reference ${paymentRef}` : `Payment details — ${spacePriceLabel(space)}`,
       );
     }
   }

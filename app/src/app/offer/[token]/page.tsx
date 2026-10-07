@@ -1,9 +1,9 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceName } from "@/lib/spaces";
 import { ToastProvider } from "@/components/ui";
 import { OfferPickFlow } from "@/components/OfferPickFlow";
 import { resolveClientCopy } from "@/lib/clientCopy";
 import { practitionerIdentity } from "@/lib/practitioner";
-import type { Clinic } from "@/lib/booking/rules";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export default async function OfferPage({ params }: { params: Promise<{ token: s
         token={token}
         clientName={client?.name ?? ""}
         clientEmail={client?.email ?? ""}
-        clinic={enquiry.clinic as Clinic}
+        clinicName={spaceName(await getSpaces(), enquiry.clinic)}
         offeredTimes={enquiry.offeredTimes.map((t) => t.toISOString())}
         copy={copy}
       />

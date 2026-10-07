@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { guarded } from "@/lib/api";
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { composeOfferMessage } from "@/lib/booking/offer";
 import { getOrCreateOfferToken, offerUrl } from "@/lib/intake";
 import { resolveClientCopy, applyCopy } from "@/lib/clientCopy";
 import { practitionerIdentity } from "@/lib/practitioner";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { spaceName } from "@/lib/spaces";
 
 /** Offer a client a group of times (nothing booked yet). Body: { clientName, clinic, times: ISO[], sendEmail, email?, emailBody? } */
 export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
@@ -30,8 +30,9 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
   });
 
   const settings = await getSettings();
+  const clinicName = spaceName(await getSpaces(), clinic);
   const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
-  let body = (emailBody?.trim() as string) || composeOfferMessage(clientName || "", clinic as Clinic, dates, undefined, copy);
+  let body = (emailBody?.trim() as string) || composeOfferMessage(clientName || "", clinicName, dates, undefined, copy);
   if (send && email) {
     if (!clientId) {
       return NextResponse.json({ error: "Link this enquiry to a client before sending an offer email." }, { status: 400 });
@@ -39,7 +40,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     const link = offerUrl(settings, await getOrCreateOfferToken(id));
     body = emailBody?.trim()
       ? `${emailBody.trim()}\n\n${link}`
-      : composeOfferMessage(clientName || "", clinic as Clinic, dates, link, copy);
+      : composeOfferMessage(clientName || "", clinicName, dates, link, copy);
     // If this enquiry came in via the Gmail add-on, keep the offer reply in that thread.
     const enquiry = await prisma.enquiry.findUnique({
       where: { id },
@@ -47,7 +48,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     });
     await sendEmail(
       email,
-      applyCopy(copy.offerEmailSubject, { clinic: CLINIC_LABEL[clinic as Clinic] }),
+      applyCopy(copy.offerEmailSubject, { clinic: clinicName }),
       body,
       enquiry?.gmailThreadId ? { threadId: enquiry.gmailThreadId, inReplyTo: enquiry.gmailMessageId } : undefined,
       undefined,

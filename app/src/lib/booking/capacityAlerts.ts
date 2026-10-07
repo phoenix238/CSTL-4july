@@ -1,11 +1,10 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { activeSpaces, spaceName } from "@/lib/spaces";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, londonDateKey, londonTime, londonWeekdayIndex } from "@/lib/time";
 import { loadAvailabilityWithTrace, defaultSlotWindow } from "./slots";
 import { explainEmptyDay, resolveWeeklyHours, type DayTrace, type WeeklyWindow } from "./availability";
-import { CLINIC_LABEL, type Clinic } from "./rules";
-
-const CLINICS: Clinic[] = ["waterloo", "bethnal"];
+import type { Clinic } from "./rules";
 
 export interface CapacityIssue {
   /** dedupe key stored in AppSettings.emptyDayAlerts */
@@ -111,9 +110,10 @@ export async function sweepCapacityAlerts({
   });
   for (const b of confirmed) booked.add(`${b.clinic}:${londonDateKey(b.startsAt)}`);
 
+  const spaces = await getSpaces();
   const issues: CapacityIssue[] = [];
-  for (const clinic of CLINICS) {
-    const windows: WeeklyWindow[] = weeklyHours[clinic];
+  for (const clinic of activeSpaces(spaces).map((sp) => sp.id)) {
+    const windows: WeeklyWindow[] = weeklyHours[clinic] ?? [];
     const { days } = await loadAvailabilityWithTrace({ clinic, windowStart, windowEnd });
     for (const day of days as DayTrace[]) {
       const key = `${clinic}:${day.dateKey}`;
@@ -141,7 +141,7 @@ export async function sweepCapacityAlerts({
           newIssues.length === 1 ? "it" : "they"
         } probably should:`,
         "",
-        ...newIssues.map((i) => `  ${fmtDayLong(dateKeyToDate(i.dateKey))} · ${CLINIC_LABEL[i.clinic]}: ${i.reason}`),
+        ...newIssues.map((i) => `  ${fmtDayLong(dateKeyToDate(i.dateKey))} · ${spaceName(spaces, i.clinic)}: ${i.reason}`),
         "",
         "Open the calendar on those days to see the same reason in place.",
         "This won't repeat once each day is bookable again.",

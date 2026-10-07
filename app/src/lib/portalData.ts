@@ -147,7 +147,7 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     clientName: client.name,
     firstName: client.name.split(" ")[0] || "there",
     paymentRef,
-    preferredClinic: (client.clinic as Clinic) ?? "waterloo",
+    preferredClinic: client.clinic as Clinic,
     upcoming,
     history,
     account,

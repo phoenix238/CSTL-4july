@@ -1,4 +1,4 @@
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { legacySpaces, spaceName, type Space } from "@/lib/spaces";
 
 /**
  * The money facts of paid sessions, for Phoenix's finance app (Honey).
@@ -58,6 +58,8 @@ export function toFinanceEvent(
     client: { paymentRef: string };
   },
   feedItemUid: string | null,
+  /** your spaces, to name where the session was; omitted → the two original clinics */
+  spaces: Space[] = legacySpaces({}),
 ): FinanceEvent {
   const method = paymentMethod(booking.paymentNote, Boolean(feedItemUid));
   return {
@@ -69,7 +71,7 @@ export function toFinanceEvent(
     feedItemUid,
     paymentRef: booking.client.paymentRef,
     receiptNumber: "",
-    clinic: CLINIC_LABEL[booking.clinic as Clinic] ?? booking.clinic,
+    clinic: spaceName(spaces, booking.clinic),
     note: methodLabel(method, booking.paymentNote),
   };
 }

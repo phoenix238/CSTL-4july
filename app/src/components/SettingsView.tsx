@@ -14,6 +14,8 @@ import { TestEmailPanel } from "./TestEmailPanel";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
+import { EVENT_COLORS, type Space } from "@/lib/spaces";
+import { SpacesEditor } from "./SpacesEditor";
 
 export interface SettingsData {
   aiModel: string;
@@ -25,48 +27,23 @@ export interface SettingsData {
   emailTemplateReturning: string;
   emailSignOff: string;
   paymentDetails: string;
-  waterlooAddress: string;
-  bethnalAddress: string;
+  /** a line put on venue calendar events so the venue can reach you */
   clinicContactLine: string;
-  waterlooLocationUrl: string;
-  bethnalLocationUrl: string;
-  waterlooFindIt: string;
-  bethnalFindIt: string;
-  // Superseded by waterlooFindIt/bethnalFindIt — shown read-only when the new
-  // field is still empty, so there's something to copy from rather than a blank box.
-  waterlooDirections: string;
-  bethnalDirections: string;
-  waterlooArrivalNote: string;
-  bethnalArrivalNote: string;
-  waterlooPhoto: string;
-  bethnalPhoto: string;
   appUrl: string;
   personalCalendarId: string;
-  roomCalendarId: string;
-  chalkFarmCalendarId: string;
   googleConnected: boolean;
   /** the last error Google gave a real send — "" when the last one worked */
   googleLastError: string;
   intakeQuestions: IntakeQuestion[];
-  mapsReviewUrlWaterloo: string;
-  mapsReviewUrlBethnal: string;
   reviewEmailSubject: string;
   reviewEmailBody: string;
-  // Legacy per-clinic wording — the fallback until the shared pair above is saved.
+  // Legacy wording (from when each clinic had its own) — the fallback until the shared pair above is saved.
   reviewEmailSubjectWaterloo: string;
-  reviewEmailSubjectBethnal: string;
   reviewEmailBodyWaterloo: string;
-  reviewEmailBodyBethnal: string;
   weeklyHours: WeeklyHours;
   bookingSlotMinutes: number;
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
-  bookingBufferMinutes: number;
-  bethnalBufferMinutes: number;
-  chalkFarmBufferMinutes: number;
-  chalkFarmEdgeBufferMinutes: number;
-  chalkFarmClusterGapMinutes: number;
-  chalkFarmWeeklyCapHours: number;
   crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
   clientCopy: ClientCopy;
@@ -93,7 +70,7 @@ export interface SettingsData {
 
 /**
  * A stage of the client's journey — groups the sections below it so Settings reads
- * as a story (clinics → booking page → the emails they get → the wiring behind it).
+ * as a story (spaces → booking page → the emails they get → the wiring behind it).
  */
 function Stage({ n, title, blurb }: { n: number; title: string; blurb: string }) {
   return (
@@ -139,8 +116,11 @@ export function SettingsView({
   settings,
   overrides,
   clients = [],
+  spaces,
 }: {
   settings: SettingsData;
+  /** every space, with entrance photos — for the spaces editor */
+  spaces: Space[];
   overrides: AvailabilityOverrideDTO[];
   clients?: Array<{ id: string; name: string; paymentRef: string }>;
 }) {
@@ -152,37 +132,9 @@ export function SettingsView({
 
   const [editingContact, setEditingContact] = useState(false);
   const [contactDraft, setContactDraft] = useState("");
-  const [editingLocations, setEditingLocations] = useState(false);
-  // The wording still saved in the old direction/arrival-note fields the "How to
-  // find it" box replaced — joined the same way the email composer joins them, so
-  // what's shown here is exactly what's still going out until it's copied over.
-  const legacyFindIt = (clinic: "waterloo" | "bethnal") =>
-    [
-      clinic === "waterloo" ? settings.waterlooDirections : settings.bethnalDirections,
-      clinic === "waterloo" ? settings.waterlooArrivalNote : settings.bethnalArrivalNote,
-    ]
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .join("\n");
-  // Everything about where a clinic is, in one draft — address, map pin, how to
-  // find the door, entrance photo. These used to be two dropdowns under two
-  // different headings, which is how a map link ended up pasted into the access
-  // note instead: the box that said "arrival notes" on the label didn't contain one.
-  const [locationsDraft, setLocationsDraft] = useState({
-    waterlooAddress: settings.waterlooAddress,
-    bethnalAddress: settings.bethnalAddress,
-    waterlooLocationUrl: settings.waterlooLocationUrl,
-    bethnalLocationUrl: settings.bethnalLocationUrl,
-    waterlooFindIt: settings.waterlooFindIt,
-    bethnalFindIt: settings.bethnalFindIt,
-    waterlooPhoto: settings.waterlooPhoto,
-    bethnalPhoto: settings.bethnalPhoto,
-  });
   const [editingGoogle, setEditingGoogle] = useState(false);
   const [googleDraft, setGoogleDraft] = useState({
     personalCalendarId: settings.personalCalendarId,
-    roomCalendarId: settings.roomCalendarId,
-    chalkFarmCalendarId: settings.chalkFarmCalendarId,
     appUrl: settings.appUrl,
   });
 
@@ -227,25 +179,9 @@ export function SettingsView({
     }
   };
 
-  const copyLocation = async (clinic: "waterloo" | "bethnal") => {
-    const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-    const url = clinic === "waterloo" ? settings.waterlooLocationUrl : settings.bethnalLocationUrl;
-    const directions = clinic === "waterloo" ? settings.waterlooFindIt : settings.bethnalFindIt;
-    // Address, map link, then the directions (their own line breaks kept), each
-    // separated by a blank line — reads cleanly pasted into WhatsApp or an email,
-    // and matches the order the confirmation email puts them in.
-    const text = [address, url, directions].map((p) => p?.trim()).filter(Boolean).join("\n\n");
-    if (!text) {
-      toast("Nothing to copy yet — add an address, map pin or directions first");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      toast(`${clinic === "waterloo" ? "Waterloo" : "Bethnal Green"} location & directions copied ✓`);
-    } catch {
-      toast("Couldn't copy — try again");
-    }
-  };
+  // Spaces whose bookings also go on a venue's own calendar — for the contact
+  // line and the Google summary below.
+  const venueSpaces = spaces.filter((sp) => sp.active && sp.venueMode !== "none");
 
   return (
     <div className="flex max-w-[760px] flex-col gap-4 p-5 pb-10 lg:px-[30px] lg:pt-[26px]">
@@ -256,42 +192,19 @@ export function SettingsView({
         picture their whole journey. Everything is tucked into sections — tap one to open it.
       </p>
 
-      {/* ───────────────── 1 · Your two clinics ───────────────── */}
+      {/* ───────────────── 1 · Your spaces ───────────────── */}
       <Stage
         n={1}
-        title="Your two clinics"
-        blurb="The basics of each space — where it is, and what a booking there puts on your calendar."
+        title="Your spaces"
+        blurb="Everywhere you see clients — where each one is, what it costs, how to find the door, and what a booking there puts on your calendar. Add a new space any time."
       />
 
-      <SectionLabel>WHAT EACH BOOKING CREATES</SectionLabel>
-      <Card className="px-5 py-1.5">
-        <div className="border-b border-hairline py-[15px]">
-          <div className="flex items-baseline gap-2.5">
-            <span className="font-serif text-base font-medium">Bethnal Green</span>
-            <span className="text-xs font-semibold text-sage-text">£30–60 sliding · 60 min</span>
-          </div>
-          <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
-            Creates the 1-hour &quot;(Client) — Bethnal Green&quot; personal event, and keeps one shared
-            &quot;Phoenix&quot; block on the Chalk Farm calendar in sync — it grows and shrinks to span that
-            day&apos;s sessions, so clients can be booked close together. The block&apos;s note tells the venue
-            how many sessions and when, without any client names.
-          </div>
-        </div>
-        <div className="py-[15px]">
-          <div className="flex items-baseline gap-2.5">
-            <span className="font-serif text-base font-medium">Waterloo</span>
-            <span className="text-xs font-semibold text-clay-text">£80 · 60 min</span>
-          </div>
-          <div className="mt-1 text-[12.5px] leading-[1.6] text-[oklch(0.5_0.02_58)]">
-            Creates two 1-hour events: &quot;(Client) — Waterloo&quot; on your personal calendar + &quot;R5 -
-            Phoenix&quot; on the room calendar. The room event&apos;s note carries the session time and your
-            contact line — the client&apos;s name stays off the shared room calendar.
-          </div>
-        </div>
-      </Card>
+      <Dropdown label="YOUR SPACES" open={open.spaces ?? true} onToggle={() => setOpen((p) => ({ ...p, spaces: !(p.spaces ?? true) }))}>
+        <SpacesEditor initial={spaces} />
+      </Dropdown>
 
       <Dropdown
-        label="· CONTACT LINE FOR THE CLINICS — ON THE ROOM / CHALK FARM EVENTS"
+        label="· CONTACT LINE FOR THE VENUES — ON THEIR CALENDAR EVENTS"
         open={!!open.contact}
         onToggle={() => toggle("contact")}
       >
@@ -315,7 +228,7 @@ export function SettingsView({
             <input
               value={contactDraft}
               onChange={(e) => setContactDraft(e.target.value)}
-              placeholder="e.g. Contact Phoenix: 07000 000000"
+              placeholder="e.g. Contact me: 07000 000000"
               className="w-full rounded-[10px] border border-line bg-inputbg px-3 py-2.5 text-[13px] leading-[1.6] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
             />
             <PrimaryButton
@@ -327,175 +240,9 @@ export function SettingsView({
           </Card>
         )}
         <div className="text-[11.5px] text-muted">
-          Added under the session times on the &quot;R5 - Phoenix&quot; and shared &quot;Phoenix&quot; venue
-          events, so a clinic can reach you if something changes. Leave blank to show just the times.
-        </div>
-      </Dropdown>
-
-      <Dropdown label="WHERE EACH CLINIC IS" open={!!open.locations} onToggle={() => toggle("locations")}>
-        <div className="flex items-center justify-end px-0.5">
-          <button
-            onClick={() => {
-              if (!editingLocations) {
-                setLocationsDraft({
-                  waterlooAddress: settings.waterlooAddress,
-                  bethnalAddress: settings.bethnalAddress,
-                  waterlooLocationUrl: settings.waterlooLocationUrl,
-                  bethnalLocationUrl: settings.bethnalLocationUrl,
-                  waterlooFindIt: settings.waterlooFindIt,
-                  bethnalFindIt: settings.bethnalFindIt,
-                  waterlooPhoto: settings.waterlooPhoto,
-                  bethnalPhoto: settings.bethnalPhoto,
-                });
-              }
-              setEditingLocations(!editingLocations);
-            }}
-            className="cursor-pointer text-[11.5px] font-semibold text-clay-text hover:text-clay"
-          >
-            {editingLocations ? "Cancel" : "Edit"}
-          </button>
-        </div>
-        {!editingLocations ? (
-          <Card className="flex flex-col gap-3.5 px-5 py-4">
-            {(
-              [
-                [
-                  "waterloo",
-                  "Waterloo",
-                  settings.waterlooAddress,
-                  settings.waterlooLocationUrl,
-                  settings.waterlooFindIt,
-                  settings.waterlooPhoto,
-                ],
-                [
-                  "bethnal",
-                  "Bethnal Green",
-                  settings.bethnalAddress,
-                  settings.bethnalLocationUrl,
-                  settings.bethnalFindIt,
-                  settings.bethnalPhoto,
-                ],
-              ] as const
-            ).map(([clinic, label, address, url, directions, photo], i) => (
-              <div key={clinic} className={`flex flex-col gap-2 ${i === 0 ? "border-b border-hairline pb-3.5" : ""}`}>
-                <div className="flex items-center justify-between gap-2.5">
-                  <span className="font-serif text-[15px] font-medium">{label}</span>
-                  <button
-                    onClick={() => copyLocation(clinic)}
-                    className="cursor-pointer rounded-full bg-clay-tint px-3.5 py-1.5 text-[12px] font-semibold text-clay-text hover:opacity-90"
-                  >
-                    Copy address &amp; directions
-                  </button>
-                </div>
-                <div className="text-[12.5px] leading-[1.55] text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">Address: </span>
-                  {address || <span className="text-faint">not set yet</span>}
-                </div>
-                <div className="text-[12.5px] leading-[1.55] text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">Map pin: </span>
-                  {url ? <span className="break-all">{url}</span> : <span className="text-faint">not set yet</span>}
-                </div>
-                <div className="text-[12.5px] leading-[1.55] whitespace-pre-line text-[oklch(0.45_0.02_58)]">
-                  <span className="font-semibold">How to find it: </span>
-                  {directions || (
-                    <span className="text-faint">
-                      not set yet
-                      {legacyFindIt(clinic) && " — open Edit below to see the old wording still going out"}
-                    </span>
-                  )}
-                </div>
-                {photo && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photo}
-                    alt={`The entrance at ${label}`}
-                    className="max-h-[150px] w-fit rounded-lg border border-line object-cover"
-                  />
-                )}
-              </div>
-            ))}
-          </Card>
-        ) : (
-          <Card className="flex flex-col gap-[18px] border-[1.5px] border-clay/35 px-4 py-3.5">
-            {(
-              [
-                ["Waterloo", "waterlooAddress", "waterlooLocationUrl", "waterlooFindIt", "waterlooPhoto", "waterloo"],
-                ["Bethnal Green", "bethnalAddress", "bethnalLocationUrl", "bethnalFindIt", "bethnalPhoto", "bethnal"],
-              ] as const
-            ).map(([clinicLabel, addrKey, urlKey, dirKey, photoKey, clinic], i) => (
-              <div
-                key={clinic}
-                className={`flex flex-col gap-[11px] ${i === 0 ? "border-b border-hairline pb-[18px]" : ""}`}
-              >
-                <div className="font-serif text-[15px] font-medium">{clinicLabel}</div>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    ADDRESS
-                  </span>
-                  <input
-                    value={locationsDraft[addrKey]}
-                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [addrKey]: e.target.value })}
-                    placeholder="The full street address, as you'd write it on an envelope."
-                    className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    MAP PIN
-                  </span>
-                  <input
-                    value={locationsDraft[urlKey]}
-                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [urlKey]: e.target.value })}
-                    placeholder="A Google Maps pin / share link, what3words, etc."
-                    className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
-                    HOW TO FIND IT
-                  </span>
-                  <textarea
-                    value={locationsDraft[dirKey]}
-                    onChange={(e) => setLocationsDraft({ ...locationsDraft, [dirKey]: e.target.value })}
-                    placeholder="Buzzer code, which door, the nearest station, where to wait — whatever helps a client find you."
-                    className="min-h-[70px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-relaxed text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
-                  />
-                </label>
-                {!locationsDraft[dirKey].trim() && legacyFindIt(clinic) && (
-                  <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5 text-[12px] leading-[1.55] text-[oklch(0.45_0.02_60)]">
-                    <div className="mb-1 font-semibold text-ink-soft">
-                      Still going out — from the old fields this box replaces:
-                    </div>
-                    <div className="whitespace-pre-line">{legacyFindIt(clinic)}</div>
-                    <button
-                      onClick={() => setLocationsDraft({ ...locationsDraft, [dirKey]: legacyFindIt(clinic) })}
-                      className="mt-1.5 cursor-pointer text-[11.5px] font-semibold text-clay-text underline hover:text-clay"
-                    >
-                      Use this wording — then edit or trim it above
-                    </button>
-                  </div>
-                )}
-                <PhotoField
-                  label="PHOTO OF THE ENTRANCE"
-                  clinicLabel={clinicLabel}
-                  value={locationsDraft[photoKey]}
-                  onChange={(v) => setLocationsDraft({ ...locationsDraft, [photoKey]: v })}
-                  onError={toast}
-                />
-              </div>
-            ))}
-            <PrimaryButton
-              onClick={() => save({ ...locationsDraft }, () => setEditingLocations(false), "Clinic locations updated ✓")}
-              className="self-start px-[18px] py-[9px] text-[13px]"
-            >
-              Save
-            </PrimaryButton>
-          </Card>
-        )}
-        <div className="text-[11.5px] leading-[1.6] text-muted">
-          These four go out together, in this order, in every confirmation email and on the public booking page. The
-          address is also the location on the calendar invite. You don&apos;t need to paste a map link into any of your
-          messages — it&apos;s added from here, for whichever clinic they booked.
+          Added under the session times on the events put on a venue&apos;s own calendar (for spaces set to book the
+          venue&apos;s calendar), so the venue can reach you if something changes. Leave blank to show just the times.
+          {venueSpaces.length === 0 && " None of your spaces book a venue calendar at the moment, so this isn't used yet."}
         </div>
       </Dropdown>
 
@@ -517,12 +264,6 @@ export function SettingsView({
           bookingSlotMinutes={settings.bookingSlotMinutes}
           bookingMinNoticeMins={settings.bookingMinNoticeMins}
           bookingHorizonDays={settings.bookingHorizonDays}
-          bookingBufferMinutes={settings.bookingBufferMinutes}
-          bethnalBufferMinutes={settings.bethnalBufferMinutes}
-          chalkFarmBufferMinutes={settings.chalkFarmBufferMinutes}
-          chalkFarmEdgeBufferMinutes={settings.chalkFarmEdgeBufferMinutes}
-          chalkFarmClusterGapMinutes={settings.chalkFarmClusterGapMinutes}
-          chalkFarmWeeklyCapHours={settings.chalkFarmWeeklyCapHours}
           crossClinicGapMinutes={settings.crossClinicGapMinutes}
           bookingNotifyEmail={settings.bookingNotifyEmail}
           baseUrl={baseUrl}
@@ -590,21 +331,13 @@ export function SettingsView({
             emailSignOff: settings.emailSignOff,
             accessNote: settings.accessNote,
             paymentDetails: settings.paymentDetails,
-            // The review wording, shared by both clinics — seeded from the old
-            // Waterloo copy if this pair has never been saved, so wording that
-            // was only in the per-clinic boxes isn't silently left behind.
+            // The review wording, shared by every space — seeded from the old
+            // per-clinic copy if this pair has never been saved, so wording that
+            // was only in those boxes isn't silently left behind.
             reviewEmailSubject: settings.reviewEmailSubject || settings.reviewEmailSubjectWaterloo,
             reviewEmailBody: settings.reviewEmailBody || settings.reviewEmailBodyWaterloo,
-            mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
-            mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
           }}
           previewContext={{
-            waterlooAddress: settings.waterlooAddress,
-            bethnalAddress: settings.bethnalAddress,
-            waterlooLocationUrl: settings.waterlooLocationUrl,
-            bethnalLocationUrl: settings.bethnalLocationUrl,
-            waterlooFindIt: settings.waterlooFindIt,
-            bethnalFindIt: settings.bethnalFindIt,
             bankAccountName: settings.bankAccountName,
             bankSortCode: settings.bankSortCode,
             bankAccountNumber: settings.bankAccountNumber,
@@ -679,11 +412,17 @@ export function SettingsView({
             <Row label="Marketing spreadsheet">Drive › CSTL › Clients › Docs</Row>
             <Row label="Intake form">In-app form — {baseUrl}/intake/…</Row>
             <Row label="Personal calendar">{settings.personalCalendarId || "primary"}</Row>
-            <Row label="R5 room calendar">{settings.roomCalendarId || "not set — needed for Waterloo bookings"}</Row>
-            <Row label="Chalk Farm calendar">
-              {settings.chalkFarmCalendarId || "not set — needed for Bethnal Green bookings"}
+            {venueSpaces.map((sp) => (
+              <Row key={sp.id} label={`${sp.name} venue calendar`}>
+                {sp.venueCalendarId || `not set — add it in Your spaces › ${sp.name}`}
+              </Row>
+            ))}
+            <Row label="Session colours">
+              {spaces
+                .filter((sp) => sp.active)
+                .map((sp) => `${sp.name} ${EVENT_COLORS[sp.eventColor]?.name.toLowerCase() ?? ""}`)
+                .join(" · ")}
             </Row>
-            <Row label="Session colours">Bethnal Green pink · Waterloo orange</Row>
             <Row label="Your session reminders" last>
               {settings.ownReminderMode === "morning"
                 ? `Popup on the morning of (from ${settings.ownReminderMorningHour}:00)`
@@ -700,8 +439,6 @@ export function SettingsView({
             {(
               [
                 ["personalCalendarId", "PERSONAL CALENDAR ID", '"primary" or a calendar\'s ID from Google Calendar settings'],
-                ["roomCalendarId", "R5 ROOM CALENDAR ID", "the room calendar's ID (Waterloo bookings)"],
-                ["chalkFarmCalendarId", "CHALK FARM CALENDAR ID", "the Chalk Farm calendar's ID (Bethnal Green blocks)"],
                 ["appUrl", "APP WEB ADDRESS", "your app's URL (used to build intake links) — e.g. https://cstl-4july.vercel.app"],
               ] as const
             ).map(([key, label, hint]) => (
@@ -715,6 +452,9 @@ export function SettingsView({
                 <span className="text-[10.5px] text-faint">{hint}</span>
               </label>
             ))}
+            <span className="text-[11px] text-muted">
+              Each space&apos;s venue calendar and colour are set in Your spaces, at the top of Settings.
+            </span>
             <PrimaryButton
               onClick={() => save({ ...googleDraft }, () => setEditingGoogle(false), "Google settings updated ✓")}
               className="self-start px-[18px] py-[9px] text-[13px]"
@@ -791,7 +531,7 @@ export function SettingsView({
             <span className="text-[12.5px] font-medium text-ink">Also remind me from the venue events</span>
             <span className="text-[11.5px] leading-[1.5] text-muted">
               Off is best — leaving it off is what stops you getting the same reminder twice (once from your session,
-              once from the &quot;R5 - Phoenix&quot; room event or the shared Chalk Farm block).
+              once from the event or shared block put on a venue&apos;s own calendar).
             </span>
           </span>
         </label>
@@ -828,118 +568,6 @@ function Row({ label, children, last = false }: { label: string; children: React
     >
       <span className="text-muted">{label}</span>
       <span className="min-w-0 text-right font-semibold break-all">{children}</span>
-    </div>
-  );
-}
-
-/** Longest edge a stored entrance photo is scaled down to, in pixels. */
-const PHOTO_MAX_EDGE = 1400;
-/** Refuse anything above this before we even try to read it. */
-const PHOTO_MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
-
-/**
- * Downscale a chosen image in the browser and hand back a data: URL.
- *
- * A photo straight off a phone is 3-5 MB, which is too big to sit in a settings
- * row and too big to attach to every confirmation email. Scaling to a long edge
- * of 1400px lands around 200-400 KB — plenty to recognise a front door by, and
- * small enough that the client's inbox doesn't mind.
- */
-function shrinkImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, PHOTO_MAX_EDGE / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Couldn't process that image"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("That file doesn't look like an image"));
-    };
-    img.src = url;
-  });
-}
-
-/** Pick, preview and remove one clinic's entrance photo. */
-function PhotoField({
-  label,
-  clinicLabel,
-  value,
-  onChange,
-  onError,
-}: {
-  label: string;
-  clinicLabel: string;
-  value: string;
-  onChange: (dataUrl: string) => void;
-  onError: (message: string) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  async function pick(file: File | undefined) {
-    if (!file) return;
-    if (file.size > PHOTO_MAX_UPLOAD_BYTES) {
-      onError("That photo is very large — please pick one under 15 MB");
-      return;
-    }
-    setBusy(true);
-    try {
-      onChange(await shrinkImage(file));
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Couldn't read that photo");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[10px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">{label}</span>
-      {value && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={value}
-          alt={`The entrance at ${clinicLabel}`}
-          className="max-h-[170px] w-fit rounded-lg border border-line object-cover"
-        />
-      )}
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg">
-          {busy ? "Reading…" : value ? "Replace photo" : "Choose a photo"}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              pick(e.target.files?.[0]);
-              // Let the same file be picked again after a remove.
-              e.target.value = "";
-            }}
-          />
-        </label>
-        {value && (
-          <button
-            onClick={() => onChange("")}
-            className="cursor-pointer text-[12px] font-semibold text-muted hover:text-[oklch(0.55_0.15_25)]"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-      <span className="text-[11.5px] text-muted">
-        Shown on the booking page and sent with the confirmation email, so they can see the door before they arrive.
-      </span>
     </div>
   );
 }

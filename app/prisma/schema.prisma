@@ -187,6 +187,11 @@ model Booking {
   // once and never repeats. Cleared on reschedule — a moved session earns its
   // reminders afresh against the new date.
   remindersSentLead Int[] @default([])
+  // Set when the "looking forward to meeting you" email for a new client's
+  // FIRST session has gone out (see sweepFirstSessionEmails) — sent once,
+  // whether or not they ever switched reminders on, since a first booking is
+  // where the no-shows are.
+  firstSessionEmailSentAt DateTime?
 
   @@index([startsAt])
   @@index([clientId])
@@ -355,6 +360,11 @@ model AppSettings {
   marketingSheetId      String @default("") // spreadsheet at Drive › CSTL › Clients › Docs
   appUrl                String @default("") // base URL for building intake / share links
   intakeQuestions       Json? // configurable intake questions; null = built-in defaults
+  // The places you work from — name, price, address, venue calendar, gaps —
+  // as a list (shape: Space in src/lib/spaces.ts). Null until first saved from
+  // Settings › Your spaces; until then the two original clinics are read from
+  // the per-clinic columns on this row (legacySpaces), so nothing changes.
+  spaces                Json?
   clientCopy            Json? // editable client-facing message overrides; null/missing keys = built-in defaults (see lib/clientCopy.ts)
   // The review email, written once. Only the review LINK differs per clinic
   // (below) — each clinic is its own Google Business listing — so the wording
@@ -430,6 +440,10 @@ model AppSettings {
   // Can clients book their next session themselves from the portal? Separate from
   // the fully-public /book page, which stays unlisted while the practice is private.
   portalSelfBook     Boolean @default(true)
+  // New clients start with the day-before reminder switched on (they can turn
+  // it off from their page). Existing clients are never switched on by this —
+  // it only applies as a client record is created.
+  remindNewClientsByDefault Boolean @default(true)
 
   // — Bank transfer details, shown on the portal with the client's own reference —
   bankAccountName   String @default("")

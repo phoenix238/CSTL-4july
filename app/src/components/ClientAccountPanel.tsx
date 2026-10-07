@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, SectionLabel, useToast } from "./ui";
 import { formatPence, sessionPriceLabel, summariseAccount, type AccountBooking } from "@/lib/account";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { spaceName } from "@/lib/spaces";
+import { useSpaces } from "./SpacesContext";
 import { fmtDate } from "@/lib/time";
 
 export interface AccountRow {
@@ -43,6 +44,7 @@ export function ClientAccountPanel({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const spaces = useSpaces();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
@@ -252,7 +254,7 @@ export function ClientAccountPanel({
                   <div className="flex items-baseline justify-between gap-2 text-[12px]">
                     <span className={cancelled ? "text-muted line-through" : ""}>
                       {fmtDate(new Date(b.startsAtISO))}
-                      <span className="ml-1.5 text-[11px] text-muted">{CLINIC_LABEL[b.clinic as Clinic]}</span>
+                      <span className="ml-1.5 text-[11px] text-muted">{spaceName(spaces, b.clinic)}</span>
                     </span>
                     {!cancelled && b.paid && (
                       <button

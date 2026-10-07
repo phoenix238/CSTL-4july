@@ -7,7 +7,7 @@ describe("composeOfferMessage", () => {
   const t2 = new Date("2026-07-08T09:30:00Z");
 
   it("greets by first name and lists every offered time", () => {
-    const msg = composeOfferMessage("Maya Okonkwo", "waterloo", [t2, t1]);
+    const msg = composeOfferMessage("Maya Okonkwo", "Waterloo", [t2, t1]);
     expect(msg).toContain("Hi Maya,");
     expect(msg).toContain("Waterloo");
     expect(msg).toContain(fmtTime(t1));
@@ -15,21 +15,21 @@ describe("composeOfferMessage", () => {
   });
 
   it("sorts times chronologically", () => {
-    const msg = composeOfferMessage("Sam", "bethnal", [t2, t1]);
+    const msg = composeOfferMessage("Sam", "Bethnal Green", [t2, t1]);
     expect(msg.indexOf(fmtTime(t1))).toBeLessThan(msg.indexOf(fmtTime(t2)));
   });
 
   it("falls back to 'there' with no name", () => {
-    expect(composeOfferMessage("", "waterloo", [t1])).toContain("Hi there,");
+    expect(composeOfferMessage("", "Waterloo", [t1])).toContain("Hi there,");
   });
 
   it("appends the pick link when given one", () => {
-    const msg = composeOfferMessage("Maya", "waterloo", [t1], "https://cstl.example/offer/abc123");
+    const msg = composeOfferMessage("Maya", "Waterloo", [t1], "https://cstl.example/offer/abc123");
     expect(msg).toContain("https://cstl.example/offer/abc123");
   });
 
   it("omits any link when none is given", () => {
-    expect(composeOfferMessage("Maya", "waterloo", [t1])).not.toContain("http");
+    expect(composeOfferMessage("Maya", "Waterloo", [t1])).not.toContain("http");
   });
 });
 

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { api, Card, PrimaryButton, useToast } from "./ui";
 import { BookingConfirmation } from "./BookingConfirmation";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { applyCopy, type ClientCopy } from "@/lib/clientCopy";
 
@@ -18,14 +17,15 @@ export function OfferPickFlow({
   token,
   clientName,
   clientEmail,
-  clinic,
+  clinicName,
   offeredTimes,
   copy,
 }: {
   token: string;
   clientName: string;
   clientEmail: string;
-  clinic: Clinic;
+  /** the offered space's name, as the client reads it */
+  clinicName: string;
   offeredTimes: string[];
   copy: ClientCopy;
 }) {
@@ -90,7 +90,7 @@ export function OfferPickFlow({
       <header className="mb-6 text-center">
         <h1 className="font-serif text-[28px] leading-[1.1]">{applyCopy(copy.offerPickTitle, { name: first })}</h1>
         <p className="mt-2 text-[13.5px] leading-relaxed whitespace-pre-line text-muted">
-          {applyCopy(copy.offerPickIntro, { clinic: CLINIC_LABEL[clinic] })}
+          {applyCopy(copy.offerPickIntro, { clinic: clinicName })}
         </p>
       </header>
 

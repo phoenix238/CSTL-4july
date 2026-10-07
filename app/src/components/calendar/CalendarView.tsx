@@ -18,12 +18,14 @@ import { api, OutlineButton, PrimaryButton, Sheet, useIsPhone, useToast } from "
 import { AvailabilityComposer } from "./AvailabilityComposer";
 import { BookingPopover } from "./BookingPopover";
 import { BookingsList } from "./BookingsList";
-import { EventComposer, type EventCalendar } from "./EventComposer";
+import { calendarKeyForSpan, EventComposer, type EventCalendar } from "./EventComposer";
 import { MonthGrid } from "./MonthGrid";
 import { QuickBook } from "./QuickBook";
 import { TimeGrid, HOUR_PX, HOUR_PX_MAX, HOUR_PX_MIN } from "./TimeGrid";
 import { useWeekSpans } from "./useWeekSpans";
-import { AVAIL_COLORS, CLINIC_LABEL, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO, type SpanSource } from "./layout";
+import { useSpaces } from "../SpacesContext";
+import { spaceName } from "@/lib/spaces";
+import { availColors, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO, type SpanSource } from "./layout";
 import { mergeIntervals, overrideAppliesOn } from "@/lib/booking/availability";
 import { SESSION_MINUTES } from "@/lib/booking/rules";
 
@@ -58,20 +60,18 @@ interface AvailComposerState {
   id?: string;
 }
 
-const AVAIL_CLINICS: AvailClinic[] = ["bethnal", "waterloo"];
-
 interface ComposerState {
   mode: "create" | "edit";
   start: Date;
   end: Date;
   title?: string;
   eventId?: string;
-  source?: SpanSource;
+  calendarKey?: string;
 }
 
 const TZ = "Europe/London";
 
-const CALENDAR_SOURCES: SpanSource[] = ["booking", "room", "chalkFarm", "personal"];
+const CALENDAR_SOURCES: SpanSource[] = ["booking", "venue", "personal"];
 const HIDDEN_KEY = "cstl-calendar-hidden";
 const SHOW_AVAIL_KEY = "cstl-calendar-show-availability";
 const VIEW_KEY = "cstl-calendar-view";
@@ -105,11 +105,7 @@ export function CalendarView() {
   const [openSpan, setOpenSpan] = useState<{ span: SpanDTO; anchor: { x: number; y: number } } | null>(null);
   const [quickBookSlot, setQuickBookSlot] = useState<Date | null>(null);
   const [composer, setComposer] = useState<ComposerState | null>(null);
-  const [calendars, setCalendars] = useState<Record<EventCalendar, boolean>>({
-    personal: true,
-    room: false,
-    chalkFarm: false,
-  });
+  const [calendars, setCalendars] = useState<EventCalendar[]>([{ key: "personal", label: "Personal" }]);
   const [reschedule, setReschedule] = useState<{ bookingId: string; clientName: string } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   // A dragged session waiting to be confirmed — nothing has been sent yet.
@@ -123,26 +119,34 @@ export function CalendarView() {
 
   // Availability-editing mode: draw the times you're bookable for online booking.
   const [availMode, setAvailMode] = useState(false);
-  // Read-only counterpart: show both clinics' availability layered on the
+  // Read-only counterpart: show every space's availability layered on the
   // ordinary calendar view, without entering edit mode.
   const [showAvailability, setShowAvailability] = useState(false);
-  // Which clinic a newly-drawn window (or click) applies to — both clinics'
+  // Your spaces: every one (for colours and names of past sessions) and the
+  // ones open for booking (whose availability is drawn and edited).
+  const spaces = useSpaces();
+  // Keyed on the ids themselves, so the effects below don't refire every render.
+  const availKey = spaces.filter((sp) => sp.active).map((sp) => sp.id).join("\u0000");
+  const availIds = useMemo(() => (availKey ? availKey.split("\u0000") : []), [availKey]);
+  // Which space a newly-drawn window (or click) applies to — every space's
   // availability is always shown together; this only picks the drawing target.
-  const [availClinic, setAvailClinic] = useState<AvailClinic>("bethnal");
+  const [chosenAvailClinic, setAvailClinic] = useState<AvailClinic | null>(null);
+  const availClinic: AvailClinic =
+    chosenAvailClinic && availIds.includes(chosenAvailClinic) ? chosenAvailClinic : (availIds[0] ?? "");
   const [weeklyHours, setWeeklyHours] = useState<WeeklyHours | null>(null);
   const [overrides, setOverrides] = useState<OverrideDTO[]>([]);
   const [availComposer, setAvailComposer] = useState<AvailComposerState | null>(null);
   // What a client can genuinely book, straight from the booking engine — plus
-  // why any day has none. Fetched per clinic, only while availability is
+  // why any day has none. Fetched per space, only while availability is
   // showing, for the week shown.
   const [bookable, setBookable] = useState<Record<AvailClinic, { slots: string[]; days: BookableDay[] }> | null>(null);
 
   // Which calendars are wired up + the recurring weekly hours (baseline shown
   // faintly behind drawn availability).
   useEffect(() => {
-    api<{ calendars: Record<EventCalendar, boolean>; weeklyHours: WeeklyHours }>("/api/settings")
+    api<{ calendars: EventCalendar[]; weeklyHours: WeeklyHours }>("/api/settings")
       .then((s) => {
-        if (s.calendars) setCalendars(s.calendars);
+        if (Array.isArray(s.calendars) && s.calendars.length) setCalendars(s.calendars);
         if (s.weeklyHours) setWeeklyHours(s.weeklyHours);
       })
       .catch(() => {});
@@ -161,7 +165,8 @@ export function CalendarView() {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]");
-      if (Array.isArray(saved)) setHidden(new Set(saved as SpanSource[]));
+      // Older saves can name the per-venue toggles that no longer exist — drop them.
+      if (Array.isArray(saved)) setHidden(new Set(saved.filter((x): x is SpanSource => CALENDAR_SOURCES.includes(x))));
     } catch {
       /* ignore */
     }
@@ -290,11 +295,11 @@ export function CalendarView() {
   }, [loadOverrides, week, month]);
 
   // Availability is drawn whenever it's being edited, or the read-only
-  // "show availability" toggle is on — both clinics at once, each in its own
-  // colour, so Bethnal Green and Waterloo can be compared at a glance.
+  // "show availability" toggle is on — every space at once, each in its own
+  // colour, so they can be compared at a glance.
   const availShowing = availMode || showAvailability;
 
-  // The availability windows for the visible week & both clinics: the
+  // The availability windows for the visible week & every open space: the
   // recurring weekly baseline plus any one-off overrides drawn on the grid.
   const availWindows = useMemo<AvailWindowDTO[]>(() => {
     if (!availShowing) return [];
@@ -303,7 +308,7 @@ export function CalendarView() {
       const day = londonAddDays(rangeStart, i);
       const dateKey = londonDateKey(day);
       const weekday = londonWeekdayIndex(day);
-      for (const clinic of AVAIL_CLINICS) {
+      for (const clinic of availIds) {
         for (const w of weeklyHours?.[clinic] ?? []) {
           if (w.weekday === weekday) {
             out.push({ clinic, date: dateKey, kind: "weekly", startMin: w.startMin, endMin: w.endMin });
@@ -330,9 +335,9 @@ export function CalendarView() {
       }
     }
     return out;
-  }, [availShowing, weeklyHours, overrides, rangeStart, gridDays]);
+  }, [availShowing, weeklyHours, overrides, rangeStart, gridDays, availIds]);
 
-  // The real answer for the visible week, for both clinics — refetched
+  // The real answer for the visible week, for every open space — refetched
   // whenever the week or anything that could change availability moves.
   useEffect(() => {
     if (!availShowing) {
@@ -341,9 +346,9 @@ export function CalendarView() {
     }
     let stale = false;
     Promise.all(
-      AVAIL_CLINICS.map((clinic) =>
+      availIds.map((clinic) =>
         api<{ slots: string[]; days: BookableDay[] }>(
-          `/api/bookable?clinic=${clinic}&start=${encodeURIComponent(rangeStart.toISOString())}&days=${gridDays}`,
+          `/api/bookable?clinic=${encodeURIComponent(clinic)}&start=${encodeURIComponent(rangeStart.toISOString())}&days=${gridDays}`,
         ).then((r) => [clinic, r] as const),
       ),
     )
@@ -356,14 +361,14 @@ export function CalendarView() {
     return () => {
       stale = true;
     };
-  }, [availShowing, rangeStart, gridDays, overrides, week.spans]);
+  }, [availShowing, rangeStart, gridDays, overrides, week.spans, availIds]);
 
   // Bookable starts merged into the ranges they cover, so a run of half-hourly
   // slots reads as one solid band rather than a stack of overlapping hours.
   const bookableWindows = useMemo<AvailWindowDTO[]>(() => {
     if (!bookable) return [];
     const out: AvailWindowDTO[] = [];
-    for (const clinic of AVAIL_CLINICS) {
+    for (const clinic of availIds) {
       const slots = bookable[clinic]?.slots;
       if (!slots?.length) continue;
       const byDay = new Map<string, Array<{ start: number; end: number }>>();
@@ -381,9 +386,9 @@ export function CalendarView() {
       }
     }
     return out;
-  }, [bookable]);
+  }, [bookable, availIds]);
 
-  // Kept to the clinic currently being edited — with both clinics' bands on
+  // Kept to the space currently being edited — with several spaces' bands on
   // screen at once there's no single spot left to show two reasons for the
   // same day, and this note only matters while actively drawing availability.
   const dayNotes = useMemo<Record<string, string>>(() => {
@@ -531,7 +536,7 @@ export function CalendarView() {
       }`}
       style={
         availMode
-          ? { background: AVAIL_COLORS[availClinic].open.border, borderColor: AVAIL_COLORS[availClinic].open.border }
+          ? { background: availColors(spaces, availClinic).open.border, borderColor: availColors(spaces, availClinic).open.border }
           : undefined
       }
     >
@@ -634,7 +639,7 @@ export function CalendarView() {
             {availMode
               ? "Drag across the grid to mark when you're available for online booking. Tap a window to edit or remove it."
               : showAvailability
-                ? "Availability is shown for reference — Bethnal Green in green, Waterloo in blue. Tap a booking to manage it, tap a free space to book a client, or press and hold the grid to add an event. Only client sessions can be dragged, and a move is confirmed before anyone is told."
+                ? "Availability is shown for reference, each space in its own colour. Tap a booking to manage it, tap a free space to book a client, or press and hold the grid to add an event. Only client sessions can be dragged, and a move is confirmed before anyone is told."
                 : "Tap a booking to manage it, tap a free space to book a client, or press and hold the grid to add an event. Only client sessions can be dragged, and a move is confirmed before anyone is told."}
           </div>
         </div>
@@ -716,33 +721,36 @@ export function CalendarView() {
             <>
               <span className="font-semibold text-sage-text">Drawing for</span>
               <div className="flex rounded-full border border-line bg-card p-[3px]">
-                {(["bethnal", "waterloo"] as const).map((c) => (
+                {availIds.map((c) => (
                   <button
                     key={c}
                     onClick={() => setAvailClinic(c)}
                     className={`cursor-pointer rounded-full px-3 py-[5px] text-[12px] font-semibold select-none ${
                       availClinic === c ? "text-cream" : "text-[oklch(0.45_0.02_60)]"
                     }`}
-                    style={availClinic === c ? { background: AVAIL_COLORS[c].open.border } : undefined}
+                    style={availClinic === c ? { background: availColors(spaces, c).open.border } : undefined}
                   >
-                    {CLINIC_LABEL[c]}
+                    {spaceName(spaces, c)}
                   </button>
                 ))}
               </div>
             </>
           )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted">
-            {(["bethnal", "waterloo"] as const).map((c) => (
-              <span key={c} className="flex items-center gap-1.5">
-                <span
-                  className="inline-block h-3 w-3 rounded-[3px] border"
-                  style={{ background: AVAIL_COLORS[c].bookable.bg, borderColor: AVAIL_COLORS[c].bookable.border }}
-                />
-                <b className="font-semibold" style={{ color: AVAIL_COLORS[c].bookable.text }}>
-                  {CLINIC_LABEL[c]}
-                </b>
-              </span>
-            ))}
+            {availIds.map((c) => {
+              const col = availColors(spaces, c).bookable;
+              return (
+                <span key={c} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-3 w-3 rounded-[3px] border"
+                    style={{ background: col.bg, borderColor: col.border }}
+                  />
+                  <b className="font-semibold" style={{ color: col.text }}>
+                    {spaceName(spaces, c)}
+                  </b>
+                </span>
+              );
+            })}
             {/* The key is what the colours mean; the paragraph explaining the
                 edge cases is a screenful on a phone, so it waits for a laptop. */}
             <span className="hidden sm:inline">
@@ -843,7 +851,7 @@ export function CalendarView() {
                   end: new Date(span.end),
                   title: span.title,
                   eventId: span.googleEventId,
-                  source: "personal",
+                  calendarKey: calendarKeyForSpan(span.source, span.clinic),
                 });
               } else {
                 setOpenSpan({ span, anchor: a });
@@ -992,7 +1000,7 @@ export function CalendarView() {
           end={composer.end}
           title={composer.title}
           eventId={composer.eventId}
-          source={composer.source}
+          calendarKey={composer.calendarKey}
           calendars={calendars}
           onClose={() => setComposer(null)}
           onSaved={() => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, isOpenSpace } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
 import { describeReturningClient, findClientByEmail } from "@/lib/clients";
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       // Bot filled the hidden field — reject quietly, no booking attempted.
       return NextResponse.json({ error: "Something went wrong" }, { status: 400 });
     }
-    if (clinic !== "waterloo" && clinic !== "bethnal") {
+    if (!(await isOpenSpace(clinic)) || typeof clinic !== "string") {
       return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
     }
     const start = startISO ? new Date(startISO) : null;

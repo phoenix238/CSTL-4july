@@ -10,6 +10,7 @@ import {
   summariseAccount,
   type AccountBooking,
 } from "./account";
+import { legacySpaces } from "./spaces";
 
 const NOW = new Date("2026-08-09T12:00:00Z");
 const hoursFromNow = (h: number) => new Date(NOW.getTime() + h * 3_600_000);
@@ -30,13 +31,16 @@ function booking(over: Partial<AccountBooking> = {}): AccountBooking {
   };
 }
 
+// Phoenix's two clinics as an unsaved install resolves them.
+const [bethnal, waterloo] = legacySpaces({});
+
 describe("defaultAmountPence", () => {
   it("prices Waterloo at £80", () => {
-    expect(defaultAmountPence("waterloo")).toBe(8000);
+    expect(defaultAmountPence(waterloo)).toBe(8000);
   });
 
   it("leaves Bethnal's sliding scale unset rather than guessing", () => {
-    expect(defaultAmountPence("bethnal")).toBeNull();
+    expect(defaultAmountPence(bethnal)).toBeNull();
   });
 });
 
@@ -153,21 +157,21 @@ describe("suggestedGoodwillPence", () => {
 
 describe("sessionPriceLabel", () => {
   it("shows Waterloo's fixed price", () => {
-    expect(sessionPriceLabel("waterloo", null)).toBe("£80");
+    expect(sessionPriceLabel(waterloo, null)).toBe("£80");
   });
 
   it("shows Bethnal's scale rather than naming an amount", () => {
-    expect(sessionPriceLabel("bethnal", null)).toBe("£30–60 sliding scale");
+    expect(sessionPriceLabel(bethnal, null)).toBe("£30–60 sliding scale");
   });
 
   it("prefers what was actually recorded", () => {
-    expect(sessionPriceLabel("bethnal", 4500)).toBe("£45");
-    expect(sessionPriceLabel("waterloo", 6000)).toBe("£60");
+    expect(sessionPriceLabel(bethnal, 4500)).toBe("£45");
+    expect(sessionPriceLabel(waterloo, 6000)).toBe("£60");
   });
 
   it("shows a recorded zero as £0, not as the standard price", () => {
     // Someone who genuinely paid nothing is not someone who owes £80.
-    expect(sessionPriceLabel("waterloo", 0)).toBe("£0");
+    expect(sessionPriceLabel(waterloo, 0)).toBe("£0");
   });
 });
 

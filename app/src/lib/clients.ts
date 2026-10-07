@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/db";
+import { prisma, getSpaces } from "@/lib/db";
+import { activeSpaces } from "@/lib/spaces";
 import { ensureClientFolderAndDoc, renameClientDrive } from "@/lib/google/drive";
 import { upsertMarketingRow } from "@/lib/google/sheets";
 import { cancelBookingEvents } from "@/lib/google/calendar";
@@ -97,7 +98,8 @@ export async function createClientWithDrive(data: {
       name: data.name.trim(),
       email: data.email?.trim() ?? "",
       phone: data.phone?.trim() ?? "",
-      clinic: data.clinic ?? "bethnal",
+      // No space given → the first space open for booking.
+      clinic: data.clinic ?? activeSpaces(await getSpaces())[0]?.id ?? "",
       marketing: data.marketing ?? false,
     },
   });

@@ -1,11 +1,12 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
 import { applyCopy, resolveClientCopy } from "@/lib/clientCopy";
 import { practitionerIdentity } from "@/lib/practitioner";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { resolveSignOff } from "@/lib/booking/email";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
-import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import { resolveSpaces, spaceById, spaceName, spacePriceLabel, type LegacySpaceSettings } from "@/lib/spaces";
 
 /** How long after a session we start treating it as overdue for payment. */
 export const UNPAID_AFTER_HOURS = 25;
@@ -94,10 +95,11 @@ export async function sweepUnpaidSessions({
 
   const to = process.env.ALLOWED_EMAIL;
   if (to) {
+    const spaces = await getSpaces();
     const lines = [
       `${newlyFlagged.length} session${newlyFlagged.length === 1 ? " is" : "s are"} still unpaid a day on:`,
       "",
-      ...newlyFlagged.map((s) => `  ${s.clientName} — ${s.whenLabel} · ${CLINIC_LABEL[s.clinic]}`),
+      ...newlyFlagged.map((s) => `  ${s.clientName} — ${s.whenLabel} · ${spaceName(spaces, s.clinic)}`),
       "",
       "Send a reminder to any of them with one tap from Today, or leave it — nothing is chased automatically.",
     ];
@@ -121,7 +123,7 @@ export async function sweepUnpaidSessions({
 }
 
 /** Settings fields the reminder email reads — a plain shape so it stays pure. */
-export interface ReminderSettings {
+export interface ReminderSettings extends LegacySpaceSettings {
   bankAccountName?: string;
   bankSortCode?: string;
   bankAccountNumber?: string;
@@ -131,6 +133,8 @@ export interface ReminderSettings {
   practitionerName?: string;
   practitionerFullName?: string;
   practiceName?: string;
+  /** your spaces — the session's name and price come from here */
+  spaces?: unknown;
 }
 
 /**
@@ -143,7 +147,8 @@ export function composePaymentReminder(
 ): { subject: string; body: string } {
   const first = input.clientName.split(" ")[0] || "there";
   const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
-  const clinicLabel = CLINIC_LABEL[input.clinic];
+  const space = spaceById(resolveSpaces(settings), input.clinic);
+  const clinicLabel = space.name;
   const lines = [applyCopy(copy.paymentReminderBody, { name: first, when: input.whenLabel, clinic: clinicLabel })];
   const bank = [
     settings.bankAccountName?.trim() && `  Account name: ${settings.bankAccountName.trim()}`,
@@ -156,11 +161,11 @@ export function composePaymentReminder(
     if (input.paymentRef) lines.push("Please use that reference. It's how I match your payment to you.");
   }
   if (input.portalLink) lines.push("", "You can also see this any time on your own page:", input.portalLink);
-  const price = CLINIC_PRICE[input.clinic];
+  const price = spacePriceLabel(space);
   lines.push(
     "",
     applyCopy(
-      input.clinic === "bethnal" ? copy.paymentReminderClosingSliding : copy.paymentReminderClosingFixed,
+      space.priceKind === "sliding" ? copy.paymentReminderClosingSliding : copy.paymentReminderClosingFixed,
       { price },
     ),
     "",

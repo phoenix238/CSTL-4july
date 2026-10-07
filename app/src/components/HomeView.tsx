@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, Chip, clinicChip, inputClass, SectionLabel, useToast } from "./ui";
+import { useSpaces } from "./SpacesContext";
+import { spaceById } from "@/lib/spaces";
 import { formatPence } from "@/lib/account";
 import { fmtDate } from "@/lib/time";
 
@@ -137,6 +139,7 @@ export function HomeView({
   attention: AttentionItem[];
   allSynced: boolean;
 }) {
+  const spaces = useSpaces();
   const router = useRouter();
   const toast = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -243,7 +246,7 @@ export function HomeView({
         </div>
         <Card className="px-4 py-0.5 lg:px-[18px]">
           {day.rows.map((r, i) => {
-            const clinic = clinicChip(r.clinic);
+            const clinic = clinicChip(spaceById(spaces, r.clinic));
             return (
               <div
                 key={r.id}
@@ -401,7 +404,7 @@ export function HomeView({
               </div>
             )}
             {rows.map((r) => {
-              const clinic = clinicChip(r.clinic);
+              const clinic = clinicChip(spaceById(spaces, r.clinic));
               return (
                 <Card
                   key={r.id}

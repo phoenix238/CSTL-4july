@@ -1,7 +1,8 @@
-import { getSettings } from "@/lib/db";
+import { getSettings, getSpaces } from "@/lib/db";
+import { spaceName } from "@/lib/spaces";
 import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
 import { resolveSignOff } from "@/lib/booking/email";
 import { applyCopy, applyCopyOptional, resolveClientCopy } from "@/lib/clientCopy";
 import { practitionerIdentity } from "@/lib/practitioner";
@@ -61,7 +62,7 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
   const to = process.env.ALLOWED_EMAIL;
   if (!to) return;
 
-  const clinic = CLINIC_LABEL[input.clinic];
+  const clinic = spaceName(await getSpaces(), input.clinic);
   const lines = [`${input.clientName} just ${VERB[input.action]} from their client page.`, ""];
 
   if (input.action === "rescheduled" && input.previousWhenLabel) {
@@ -110,7 +111,7 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
 export async function confirmToClient(input: NotifyInput, bcc?: string): Promise<{ sent: boolean }> {
   if (!input.clientEmail) return { sent: false };
   const settings = await getSettings();
-  const clinic = CLINIC_LABEL[input.clinic];
+  const clinic = spaceName(await getSpaces(), input.clinic);
   const first = input.clientName.split(" ")[0] || "there";
 
   const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
@@ -233,7 +234,7 @@ export async function sendReceipt({
       unpricedCount,
       signOff,
       membershipId: settings.cstaMembershipId,
-      addressByClinic: { waterloo: settings.waterlooAddress, bethnal: settings.bethnalAddress },
+      addressByClinic: Object.fromEntries((await getSpaces()).map((sp) => [sp.id, sp.address])),
     });
     const filename = receiptNumber ? `Receipt ${receiptNumber}.pdf` : `Receipt - ${fmtDate(new Date())}.pdf`;
     await sendEmail(clientEmail, copy.receiptEmailSubject, body.join("\n"), undefined, [

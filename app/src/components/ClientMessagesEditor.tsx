@@ -5,20 +5,15 @@ import { useRouter } from "next/navigation";
 import { api, Card, OutlineButton, PrimaryButton, useToast } from "./ui";
 import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } from "@/lib/clientCopy";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { useActiveSpaces, useSpaces } from "./SpacesContext";
+import { spacePriceLabel, type Space } from "@/lib/spaces";
 import { fillIdentity, IDENTITY_PLACEHOLDERS, practitionerIdentity } from "@/lib/practitioner";
 
-// The saved clinic + bank settings the exact-email preview needs but doesn't edit
-// here (addresses live under Map Pin, bank details under Client Pages). The preview
-// reads the editable parts (letter, access note, payment, sign-off) live from the
-// draft, and these from the last save.
+// The saved bank settings the exact-email preview needs but doesn't edit here
+// (bank details live under Client Pages; each space's address and directions
+// come from your spaces). The preview reads the editable parts (letter, access
+// note, payment, sign-off) live from the draft, and these from the last save.
 export interface PreviewContext {
-  waterlooAddress: string;
-  bethnalAddress: string;
-  waterlooLocationUrl: string;
-  bethnalLocationUrl: string;
-  waterlooFindIt: string;
-  bethnalFindIt: string;
   bankAccountName: string;
   bankSortCode: string;
   bankAccountNumber: string;
@@ -38,12 +33,9 @@ export interface SettingsMessages {
   emailSignOff: string;
   accessNote: string;
   paymentDetails: string;
-  /** the review wording, written once for both clinics */
+  /** the review wording, written once for every space (each space carries its own review link) */
   reviewEmailSubject: string;
   reviewEmailBody: string;
-  /** the only part of the review email that differs per clinic */
-  mapsReviewUrlWaterloo: string;
-  mapsReviewUrlBethnal: string;
 }
 
 /**
@@ -53,14 +45,14 @@ export interface SettingsMessages {
 const PLACEHOLDER_HELP: Record<string, string> = {
   name: "their first name",
   when: "the day and time, e.g. Fri 14 Aug · 12:15",
-  clinic: "which clinic, e.g. Bethnal Green",
-  price: "that clinic's price",
+  clinic: "which space they booked",
+  price: "that space's price",
   times: "the list of times you picked",
   pickLink: "the self-book link line (written further down)",
   link: "their personal link (see the description above)",
   intakeLink: "their intake form link",
   accessNote: "your access note (written under “Written once”)",
-  mapsUrl: "your Google review link for that clinic",
+  mapsUrl: "the Google review link of the space they were seen at",
   optInLink: "their one-tap “send me news” link",
   emailLine: "“ to their@email” — or nothing if there's no email",
   previousWhen: "the old time — the whole line is left out if there isn't one",
@@ -153,7 +145,7 @@ const EMAIL_GROUPS: Group[] = [
     trigger: "auto",
     test: "first",
     blurb:
-      "Write the letter in your voice. The address, map pin, how to find the door, payment details, their booking page, the intake form and your sign-off are added around it for whichever clinic they booked — the two paragraphs below are the wording for those last two.",
+      "Write the letter in your voice. The address, map pin, how to find the door, payment details, their booking page, the intake form and your sign-off are added around it for whichever space they booked — the two paragraphs below are the wording for those last two.",
     fields: [
       c("bookingEmailSubject", "Subject (also used for returning clients)", { placeholders: ["when", "clinic"] }),
       st("emailTemplate", "Welcome letter", {
@@ -238,12 +230,12 @@ const EMAIL_GROUPS: Group[] = [
     trigger: "button",
     test: "reminder",
     blurb:
-      "Your bank details, their reference and a link to their page are placed between the message and the closing line. The closing line differs between a sliding-scale and a fixed-price clinic.",
+      "Your bank details, their reference and a link to their page are placed between the message and the closing line. The closing line differs between a sliding-scale and a fixed-price space.",
     fields: [
       c("paymentReminderSubject", "Subject"),
       c("paymentReminderBody", "Message", { multiline: true, placeholders: ["name", "when", "clinic"] }),
-      c("paymentReminderClosingSliding", "Closing line — sliding-scale clinic (Bethnal Green)", { multiline: true, placeholders: ["price"] }),
-      c("paymentReminderClosingFixed", "Closing line — fixed-price clinic (Waterloo)", { multiline: true, placeholders: ["price"] }),
+      c("paymentReminderClosingSliding", "Closing line — sliding-scale space", { multiline: true, placeholders: ["price"] }),
+      c("paymentReminderClosingFixed", "Closing line — fixed-price space", { multiline: true, placeholders: ["price"] }),
     ],
   },
   {
@@ -278,12 +270,10 @@ const EMAIL_GROUPS: Group[] = [
     trigger: "button",
     test: "review",
     blurb:
-      "Asks for a Google review and offers a one-tap opt-in to your news. Written once for both clinics — only the review link differs, because each clinic is its own Google listing. Sign off inside this one.",
+      "Asks for a Google review and offers a one-tap opt-in to your news. Written once for every space — {mapsUrl} becomes the Google review link of the space they were seen at, which you set on each space in Settings › Your spaces. Sign off inside this one.",
     fields: [
       st("reviewEmailSubject", "Subject"),
       st("reviewEmailBody", "Message", { multiline: true, placeholders: ["name", "mapsUrl", "optInLink"] }),
-      st("mapsReviewUrlWaterloo", "Google review link — Waterloo"),
-      st("mapsReviewUrlBethnal", "Google review link — Bethnal Green"),
     ],
   },
 ];
@@ -299,7 +289,7 @@ const BUILDING_BLOCK_GROUPS: Group[] = [
   {
     title: "The access note",
     blurb:
-      "Slots into the welcome letter wherever you put {accessNote} — stairs, access needs. Don't paste map links in here; the map pin is added for you from Settings › Where each clinic is.",
+      "Slots into the welcome letter wherever you put {accessNote} — stairs, access needs. Don't paste map links in here; the map pin is added for you from Settings › Your spaces.",
     fields: [st("accessNote", "Access note", { multiline: true })],
   },
   {
@@ -350,7 +340,7 @@ const PAGE_GROUPS: Group[] = [
 // Recommended wording for the settings-backed message fields — the clean,
 // voice-only starting point the composer is built around (facts placed for you,
 // signed once). Used by the per-field reset and the "fill everything" button.
-// Deliberately excludes your name and the map-review LINKS, which are yours.
+// Deliberately excludes your name, which is yours.
 const SETTINGS_MESSAGE_DEFAULTS: Partial<Record<keyof SettingsMessages, string>> = {
   emailTemplate:
     "Hi {name},\n\nLovely to hear from you — you're booked in for {when} at {clinic}, {price}. Everything you need for the day is below; there's nothing to print or bring.\n\n{accessNote}",
@@ -369,16 +359,15 @@ const PLAIN_VALUE_KEYS = new Set<keyof SettingsMessages>([
   "practitionerName",
   "practitionerFullName",
   "practiceName",
-  "mapsReviewUrlWaterloo",
-  "mapsReviewUrlBethnal",
 ]);
 
-// Sample values so the preview reads like a real message.
+// Sample values so the preview reads like a real message. The space and its
+// price come from your first open space (see sampleFor).
 const SAMPLE: Record<string, string> = {
   name: "Maya",
   when: "Fri 14 Aug · 12:15",
-  clinic: "Bethnal Green",
-  price: "£30–60 sliding scale",
+  clinic: "your space",
+  price: "£60",
   times: "  • Tuesday 5 August at 14:00\n  • Thursday 7 August at 10:30",
   link: "https://your-site/me/ab12cd",
   pickLink: "Or click here to pick one yourself and it'll be booked straight away:\nhttps://your-site/offer/ab12cd\n\n",
@@ -391,6 +380,12 @@ const SAMPLE: Record<string, string> = {
   amount: "£10",
   paymentRef: "MAYA-4K2",
 };
+
+/** The sample values, with the space and price taken from one of your own spaces. */
+function sampleFor(space: Space | undefined): Record<string, string> {
+  if (!space) return SAMPLE;
+  return { ...SAMPLE, clinic: space.name, price: spacePriceLabel(space) || SAMPLE.price };
+}
 
 /** Small coloured tag — when a message goes out, or who gets it. */
 function Badge({ children, tone }: { children: React.ReactNode; tone: "auto" | "button" | "who" }) {
@@ -430,7 +425,8 @@ function FieldEditor({
   // Every wording box can use your name — subjects included. Your details
   // themselves and the review links are plain values, so they get none.
   const chips = noPlaceholders ? [] : [...(placeholders ?? []), ...IDENTITY_PLACEHOLDERS];
-  const preview = value.includes("{") ? applyCopy(value, { ...SAMPLE, ...identity }) : null;
+  const sample = sampleFor(useActiveSpaces()[0]);
+  const preview = value.includes("{") ? applyCopy(value, { ...sample, ...identity }) : null;
 
   // Put the placeholder where the cursor is (or at the end), then put the cursor after it.
   function insert(p: string) {
@@ -504,7 +500,10 @@ function FieldEditor({
 // live draft — so the duplication a client used to see (the same directions
 // twice, a second sign-off) is visible here before anyone gets it.
 function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSettings; start?: "first" | "returning" }) {
-  const [clinic, setClinic] = useState<Clinic>("bethnal");
+  const spaces = useActiveSpaces();
+  const [picked, setPicked] = useState(spaces[0]?.id ?? "");
+  const clinic = spaces.some((sp) => sp.id === picked) ? picked : (spaces[0]?.id ?? "");
+  const clinicName = spaces.find((sp) => sp.id === clinic)?.name ?? "your space";
   const [which, setWhich] = useState<"first" | "returning">(start);
   const links = {
     intakeLink: "https://your-site/intake/ab12cd",
@@ -541,13 +540,15 @@ function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSet
           </button>
         </div>
       </div>
-      <div className="flex gap-1.5">
-        {(["bethnal", "waterloo"] as Clinic[]).map((c) => (
-          <button key={c} className={tab(clinic === c)} onClick={() => setClinic(c)}>
-            {CLINIC_LABEL[c]}
-          </button>
-        ))}
-      </div>
+      {spaces.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {spaces.map((sp) => (
+            <button key={sp.id} className={tab(clinic === sp.id)} onClick={() => setPicked(sp.id)}>
+              {sp.name}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5">
         <div className="border-b border-line pb-1.5 text-[12px] font-semibold text-ink">{email.subject}</div>
         <div className="whitespace-pre-line pt-2 text-[12px] leading-[1.55] text-[oklch(0.4_0.02_60)]">
@@ -555,7 +556,7 @@ function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSet
         </div>
       </div>
       <p className="text-[10.5px] text-faint">
-        Sample data (Maya, a Bethnal Green session). {which === "first" ? "A new" : "A returning"} client sees this —
+        Sample data (Maya, a session at {clinicName}). {which === "first" ? "A new" : "A returning"} client sees this —
         the address, map pin, how-to-find, payment and sign-off are placed once, in order.
       </p>
     </div>
@@ -594,7 +595,12 @@ export function ClientMessagesEditor({
   const [showPages, setShowPages] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<TestType | null>(null);
-  const [testClinic, setTestClinic] = useState<Clinic>("bethnal");
+  const spaces = useSpaces();
+  const activeSpaces = spaces.filter((sp) => sp.active);
+  const [pickedTest, setPickedTest] = useState(activeSpaces[0]?.id ?? "");
+  // The space tests use — the first open one if the picked one has been archived.
+  const testSpace = activeSpaces.find((sp) => sp.id === pickedTest) ?? activeSpaces[0];
+  const testClinic = testSpace?.id ?? "";
 
   const S_KEYS = Object.keys(settingsInitial) as (keyof SettingsMessages)[];
   const copyDirty = CLIENT_COPY_KEYS.some((k) => draft[k] !== initial[k]);
@@ -606,8 +612,9 @@ export function ClientMessagesEditor({
   const setSetting = (k: keyof SettingsMessages, v: string) => setSDraft((d) => ({ ...d, [k]: v }));
 
   // The composer's view of the draft — editable letter/access/payment/sign-off
-  // and wording from here, the rest of the clinic + bank details from the last save.
+  // and wording from here, your spaces and bank details from the last save.
   const previewSettings: EmailSettings = {
+    spaces,
     emailTemplate: sDraft.emailTemplate,
     emailTemplateReturning: sDraft.emailTemplateReturning,
     emailSignOff: sDraft.emailSignOff,
@@ -745,7 +752,7 @@ export function ClientMessagesEditor({
                 <span className="text-[11px] text-muted">
                   {dirty
                     ? "Save your changes first — the test is built from what's saved."
-                    : `Goes to your own inbox, with a sample client at ${CLINIC_LABEL[testClinic]}.`}
+                    : `Goes to your own inbox, with a sample client at ${testSpace?.name ?? "your space"}.`}
                 </span>
               </div>
             )}
@@ -759,7 +766,7 @@ export function ClientMessagesEditor({
   // every message; doesn't save on its own — review it, then Save (or Discard).
   function fillRecommended() {
     const ok = window.confirm(
-      "Replace the wording of every message with the recommended wording?\n\nYour name, review links, addresses and bank details are kept. Nothing is saved until you press Save — Discard undoes it.",
+      "Replace the wording of every message with the recommended wording?\n\nYour name, your spaces and bank details are kept. Nothing is saved until you press Save — Discard undoes it.",
     );
     if (!ok) return;
     setDraft({ ...CLIENT_COPY_DEFAULTS });
@@ -783,14 +790,16 @@ export function ClientMessagesEditor({
           <Badge tone="button">You press a button</Badge>. Open one, write it your way, and press Save. Words in{" "}
           {"{ }"} fill themselves in — open “Insert a detail” under any box to see what each one becomes.
         </div>
-        <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-[11.5px] text-muted">
-          <span>Tests use a sample client at</span>
-          {(["bethnal", "waterloo"] as Clinic[]).map((cl) => (
-            <button key={cl} className={tab(testClinic === cl)} onClick={() => setTestClinic(cl)}>
-              {CLINIC_LABEL[cl]}
-            </button>
-          ))}
-        </div>
+        {activeSpaces.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-3 text-[11.5px] text-muted">
+            <span>Tests use a sample client at</span>
+            {activeSpaces.map((sp) => (
+              <button key={sp.id} className={tab(testClinic === sp.id)} onClick={() => setPickedTest(sp.id)}>
+                {sp.name}
+              </button>
+            ))}
+          </div>
+        )}
       </Card>
 
       <SubHeading>Start here</SubHeading>

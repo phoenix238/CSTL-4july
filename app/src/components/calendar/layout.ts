@@ -1,8 +1,10 @@
 // Pure layout + colour logic for the calendar grids — no React, unit-tested.
 
 import type { Clinic } from "@/lib/booking/rules";
+import type { Space } from "@/lib/spaces";
 
-export type SpanSource = "booking" | "room" | "chalkFarm" | "personal";
+/** Where a span came from: a booking, one of your spaces' venue calendars, or your own calendar. */
+export type SpanSource = "booking" | "venue" | "personal";
 
 /** BusySpan as it arrives over the wire (dates are ISO strings). */
 export interface SpanDTO {
@@ -16,7 +18,7 @@ export interface SpanDTO {
   clinic?: Clinic;
   /** Google's event id — present on real Google events, enables edit/delete. */
   googleEventId?: string;
-  /** true for the shared Chalk Farm day block — visible, but ignored by
+  /** true for a space's shared venue day block — visible, but ignored by
    * availability/collision checks (only real sessions block time). */
   roomBlock?: boolean;
 }
@@ -31,17 +33,11 @@ export const SPAN_COLORS: Record<
     border: "oklch(0.58 0.115 42)",
     text: "oklch(0.42 0.1 42)",
   },
-  room: {
-    label: "R5 room",
+  venue: {
+    label: "Venue calendars",
     bg: "oklch(0.95 0.035 85)",
     border: "oklch(0.62 0.1 78)",
     text: "oklch(0.5 0.09 75)",
-  },
-  chalkFarm: {
-    label: "Chalk Farm block",
-    bg: "oklch(0.94 0.03 148)",
-    border: "oklch(0.62 0.13 148)",
-    text: "oklch(0.42 0.08 148)",
   },
   personal: {
     label: "Google Calendar",
@@ -51,10 +47,27 @@ export const SPAN_COLORS: Record<
   },
 };
 
-/** Clinic key an availability window belongs to. */
-export type AvailClinic = "waterloo" | "bethnal";
+/**
+ * A venue calendar that holds shared day blocks is drawn green rather than the
+ * venue amber, so a block reads differently from a per-session room booking.
+ */
+const VENUE_DAY_BLOCK_COLOR = {
+  bg: "oklch(0.94 0.03 148)",
+  border: "oklch(0.62 0.13 148)",
+  text: "oklch(0.42 0.08 148)",
+};
 
-export const CLINIC_LABEL: Record<AvailClinic, string> = { bethnal: "Bethnal Green", waterloo: "Waterloo" };
+/** The colours one span is drawn in — its source's, with day-block venues in green. */
+export function spanColors(span: Pick<SpanDTO, "source" | "clinic">, spaces: Space[]) {
+  const base = SPAN_COLORS[span.source] ?? SPAN_COLORS.personal;
+  if (span.source === "venue" && spaces.find((s) => s.id === span.clinic)?.venueMode === "dayBlock") {
+    return { ...base, ...VENUE_DAY_BLOCK_COLOR };
+  }
+  return base;
+}
+
+/** Space id an availability window belongs to. */
+export type AvailClinic = Clinic;
 
 /**
  * One availability window drawn on the calendar.
@@ -82,11 +95,11 @@ export interface AvailWindowDTO {
 }
 
 /**
- * Colours for the availability layer, one palette per clinic so Bethnal Green
- * and Waterloo read as distinct at a glance when both are drawn on the grid
- * together — Bethnal in green, Waterloo in blue. "Unavailable" stays a shared
- * red in both, since "closed" is a universal signal worth keeping recognisable
- * regardless of which clinic it belongs to.
+ * Colours for the availability layer, one palette per space so several spaces
+ * read as distinct at a glance when drawn on the grid together. Hues are handed
+ * out by the space's place in your list — blue, then green, then the rest —
+ * steering clear of red, because "Unavailable" stays a shared red in every
+ * space: "closed" is a universal signal worth keeping recognisable.
  */
 type AvailColorSet = { bg: string; border: string; text: string };
 type AvailKind = "bookable" | "open" | "weekly" | "block";
@@ -107,10 +120,13 @@ function clinicPalette(hue: number): Record<AvailKind, AvailColorSet> {
   };
 }
 
-export const AVAIL_COLORS: Record<AvailClinic, Record<AvailKind, AvailColorSet>> = {
-  bethnal: clinicPalette(148), // green
-  waterloo: clinicPalette(255), // blue
-};
+const AVAIL_HUES = [255, 148, 300, 75, 200, 330, 110, 230, 175, 280];
+
+/** A space's availability palette, by its position among all your spaces (archived included, so colours stay put). */
+export function availColors(spaces: Space[], id: string): Record<AvailKind, AvailColorSet> {
+  const i = spaces.findIndex((s) => s.id === id);
+  return clinicPalette(AVAIL_HUES[(i < 0 ? spaces.length : i) % AVAIL_HUES.length]);
+}
 
 export interface LaidOutEvent<T> {
   event: T;

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
+import { planBookingEvents, type Clinic } from "@/lib/booking/rules";
+import { spaceById, spaceName, spacePriceLabel } from "@/lib/spaces";
+import { useActiveSpaces, useSpaces } from "../SpacesContext";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import {
   api,
@@ -42,7 +44,9 @@ export function QuickBook({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [client, setClient] = useState<ClientHit | null>(null);
-  const [clinic, setClinic] = useState<Clinic>("bethnal");
+  const spaces = useSpaces();
+  const bookable = useActiveSpaces();
+  const [clinic, setClinic] = useState<Clinic>(() => bookable[0]?.id ?? "");
   const [sendEmail, setSendEmail] = useState(true);
   const [booking, setBooking] = useState(false);
 
@@ -59,7 +63,7 @@ export function QuickBook({
     return () => clearTimeout(t);
   }, [query, client]);
 
-  const plan = client ? planBookingEvents(clinic, slot) : [];
+  const plan = client && clinic ? planBookingEvents(spaceById(spaces, clinic), slot) : [];
 
   async function book() {
     if (!client) return;
@@ -128,12 +132,13 @@ export function QuickBook({
                       key={h.id}
                       onClick={() => {
                         setClient(h);
-                        setClinic((h.clinic as Clinic) || "bethnal");
+                        // Their usual space, if it's still open for booking; else the first that is.
+                        setClinic(bookable.some((sp) => sp.id === h.clinic) ? h.clinic : (bookable[0]?.id ?? ""));
                       }}
                       className="flex w-full cursor-pointer items-center justify-between px-3.5 py-2.5 text-left text-[13px] hover:bg-hoverbg"
                     >
                       <span className="font-medium">{h.name}</span>
-                      <span className="text-[11.5px] text-muted">{CLINIC_LABEL[h.clinic as Clinic] ?? h.clinic}</span>
+                      <span className="text-[11.5px] text-muted">{h.clinic ? spaceName(spaces, h.clinic) : ""}</span>
                     </button>
                   ))}
                 </div>
@@ -156,8 +161,11 @@ export function QuickBook({
                   change
                 </button>
               </div>
-              <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px] self-start">
-                {(["bethnal", "waterloo"] as const).map((c) => (
+              <div className="flex flex-wrap rounded-[18px] border border-line bg-[oklch(0.955_0.012_82)] p-[3px] self-start">
+                {bookable.map((sp) => {
+                  const c = sp.id;
+                  const price = spacePriceLabel(sp).replace(/ sliding scale$/, "");
+                  return (
                   <button
                     key={c}
                     onClick={() => setClinic(c)}
@@ -165,9 +173,11 @@ export function QuickBook({
                       clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
                     }`}
                   >
-                    {CLINIC_LABEL[c]} · {CLINIC_PRICE[c].split(" ")[0]}
+                    {sp.name}
+                    {price ? ` · ${price}` : ""}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <div className="flex flex-col gap-1 text-[12.5px]">
                 {plan.map((ev, i) => (
@@ -189,7 +199,7 @@ export function QuickBook({
           <div className="flex gap-2">
             <OutlineButton onClick={onClose}>Close</OutlineButton>
             {client && (
-              <PrimaryButton onClick={book} disabled={booking}>
+              <PrimaryButton onClick={book} disabled={booking || !clinic}>
                 {booking ? "Booking…" : "Book"}
               </PrimaryButton>
             )}

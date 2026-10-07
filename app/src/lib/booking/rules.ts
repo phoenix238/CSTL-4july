@@ -1,16 +1,15 @@
-// Phoenix's booking rules — the heart of the control tower.
+// The booking rules — the heart of the control tower.
 //
-//   Waterloo (£80 · 60 min):
-//     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
-//     1h  "R5 - Phoenix"          on the room calendar
+// Every session is at one of your spaces (lib/spaces.ts), and the space decides
+// what a booking puts on Google Calendar:
 //
-//   Bethnal Green (£30–60 sliding · 60 min):
-//     1h  "Craniosacral therapy"  on the personal calendar (location: the real address)
-//     A single shared "Phoenix" block on the Chalk Farm calendar, one per day,
-//     auto-sized to span that day's Bethnal sessions — see
-//     src/lib/google/chalkFarm.ts. Not part of planBookingEvents: it's kept in
-//     sync separately whenever a Bethnal booking is created/moved/cancelled,
-//     so sessions can sit as close together as the schedule allows.
+//   always      1h  "Craniosacral therapy" on your own calendar
+//                   (location: the space's real address, in the space's colour)
+//   room        1h  the venue title (e.g. "R5 - Phoenix") on the venue's calendar
+//   dayBlock    a shared block per cluster of sessions on the venue's calendar,
+//               auto-sized to span them — kept in sync separately whenever a
+//               session there is created/moved/cancelled (google/chalkFarm.ts),
+//               so sessions can sit as close together as the schedule allows.
 //
 // No client name goes on any calendar event — not the title, not the location.
 // The location DOES stay the real street address, same as before: Google
@@ -28,23 +27,31 @@
 // Reminders on each event are configurable — Phoenix's own in Settings (see
 // personalEventReminders below), the client's own on their portal.
 
-export type Clinic = "waterloo" | "bethnal";
+import type { Space } from "@/lib/spaces";
 
-export type CalendarKey = "personal" | "room" | "chalkFarm" | "availability";
+/**
+ * The id of a space a session is at — see lib/spaces.ts. Kept under its old
+ * name: it's what Booking.clinic, Client.clinic and the availability rows store,
+ * and on an install that predates spaces it's still "waterloo" or "bethnal".
+ */
+export type Clinic = string;
+
+/** "personal" = your own calendar; "venue" = the space's shared venue calendar. */
+export type CalendarKey = "personal" | "availability";
 
 export interface PlannedEvent {
-  calendar: CalendarKey;
+  calendar: "personal" | "venue";
   summary: string;
   start: Date;
   end: Date;
   /** the client is invited (receives the Google Calendar invite) */
   inviteClient: boolean;
-  /** clinic address — shown on the invite and turned into a Google Maps link */
+  /** space address — shown on the invite and turned into a Google Maps link */
   location?: string;
-  /** event body — used on the venue-facing room event to tell the clinic what
+  /** event body — used on the venue-facing room event to tell the venue what
    * they need (session time, a contact line) without exposing the client's name */
   description?: string;
-  /** Google event colour id — see CLINIC_EVENT_COLOR */
+  /** Google event colour id — the space's eventColor */
   colorId?: string;
 }
 
@@ -54,99 +61,51 @@ export const SESSION_MINUTES = 60;
  *  client name ever appears on a Google calendar. */
 export const SESSION_EVENT_TITLE = "Craniosacral therapy";
 
-export const CLINIC_LABEL: Record<Clinic, string> = {
-  waterloo: "Waterloo",
-  bethnal: "Bethnal Green",
-};
-
-/**
- * Clinic labels for the client-facing booking selectors — the public /book page
- * and the client portal. Kept separate from CLINIC_LABEL on purpose: the "low
- * cost" framing belongs where a client is choosing where to book, not on
- * calendar events, invites, emails, receipts, or session history, which all
- * stay on the plain CLINIC_LABEL.
- */
-export const CLINIC_BOOKING_LABEL: Record<Clinic, string> = {
-  waterloo: CLINIC_LABEL.waterloo,
-  bethnal: "Low cost Bethnal Green",
-};
-
-export const CLINIC_PRICE: Record<Clinic, string> = {
-  waterloo: "£80",
-  bethnal: "£30–60 sliding scale",
-};
-
-/**
- * Which colour each clinic's session shows as in Google Calendar, so a glance
- * at the phone says where you're meant to be without opening anything.
- *
- * These ids index Google's *event* palette, which is a fixed set of eleven:
- * Lavender 1, Sage 2, Grape 3, Flamingo 4, Banana 5, Tangerine 6, Peacock 7,
- * Graphite 8, Blueberry 9, Basil 10, Tomato 11. The longer list of names
- * including Cherry Blossom belongs to the palette for colouring a whole
- * calendar, and can't be applied to a single event — so Bethnal Green uses
- * Flamingo (#e67c73), the blossom pink of the set that is available.
- */
-export const CLINIC_EVENT_COLOR: Record<Clinic, string> = {
-  bethnal: "4", // Flamingo — the event palette's cherry-blossom pink
-  waterloo: "6", // Tangerine
-};
-
 const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60_000);
 
 /**
  * The exact calendar events a booking creates. Pure — unit-tested.
  *
- * No client name is passed in or placed on any event: the session title is
- * always the generic SESSION_EVENT_TITLE. `address`, if given, is the real
- * street address — used as-is for `location`, so Google can still geocode a
- * pin and both Phoenix and the client can tap through to navigate. Falls back
- * to the clinic name only when no address has been set yet in Settings.
+ * Always your own session event, at the space's address in its colour. A space
+ * whose venue books per session ("room") also gets its own event on the venue
+ * calendar under the venue title. A "dayBlock" venue isn't planned here — its
+ * shared block is computed from the whole day's sessions (google/chalkFarm.ts).
+ *
+ * No client name is placed on any event: the session title is always the
+ * generic SESSION_EVENT_TITLE. The location is the real street address, so
+ * Google can still geocode a pin; it falls back to the space's name only when
+ * no address has been set yet.
  */
 export function planBookingEvents(
-  clinic: Clinic,
+  space: Space,
   sessionStart: Date,
-  address?: string,
   /** venue-facing note for the room event's description (session time + contact
    * line); the caller composes it since it needs settings + London-time formatting */
   venueNote?: string,
 ): PlannedEvent[] {
   const sessionEnd = addMinutes(sessionStart, SESSION_MINUTES);
-  const location = address?.trim() || CLINIC_LABEL[clinic];
-  if (clinic === "waterloo") {
-    return [
-      {
-        calendar: "personal",
-        summary: SESSION_EVENT_TITLE,
-        start: sessionStart,
-        end: sessionEnd,
-        inviteClient: true,
-        location,
-        colorId: CLINIC_EVENT_COLOR.waterloo,
-      },
-      {
-        calendar: "room",
-        summary: "R5 - Phoenix",
-        start: sessionStart,
-        end: sessionEnd,
-        inviteClient: false,
-        description: venueNote || undefined,
-      },
-    ];
-  }
-  // Bethnal Green: just the 1h session — the shared Chalk Farm room block is
-  // computed separately (src/lib/google/chalkFarm.ts) from the day's bookings.
-  return [
+  const events: PlannedEvent[] = [
     {
       calendar: "personal",
       summary: SESSION_EVENT_TITLE,
       start: sessionStart,
       end: sessionEnd,
       inviteClient: true,
-      location,
-      colorId: CLINIC_EVENT_COLOR.bethnal,
+      location: space.address.trim() || space.name,
+      colorId: space.eventColor,
     },
   ];
+  if (space.venueMode === "room") {
+    events.push({
+      calendar: "venue",
+      summary: space.venueEventTitle.trim() || space.name,
+      start: sessionStart,
+      end: sessionEnd,
+      inviteClient: false,
+      description: venueNote || undefined,
+    });
+  }
+  return events;
 }
 
 /**
@@ -223,6 +182,6 @@ export function personalEventReminders(cfg: OwnReminderConfig, sessionMinuteOfDa
  * since the shared Chalk Farm block (see chalkFarm.ts) doesn't factor into
  * availability itself, only the real 1h sessions do.
  */
-export function blockedRange(clinic: Clinic, sessionStart: Date) {
+export function blockedRange(_clinic: Clinic, sessionStart: Date) {
   return { start: sessionStart, end: addMinutes(sessionStart, SESSION_MINUTES) };
 }

@@ -56,6 +56,16 @@ export interface ClientCopy {
   reminderEmailSubject: string; // {when} {clinic}
   reminderEmailBody: string; // {name} {when} {clinic}
 
+  // — First-session email: automatic, the day before a new client's first
+  //   session (or that morning if they booked late). Two versions, picked by
+  //   whether they've filled in the intake form. The address, how to find the
+  //   door, their booking page and your sign-off are added after it. —
+  firstSessionSubject: string; // {when} {clinic}
+  firstSessionBodyIntakeDone: string; // {name} {when} {clinic}
+  firstSessionBodyIntakeMissing: string; // {name} {when} {clinic} {intakeLink}
+  /** offers reminders, to a client who hasn't switched any on */
+  remindersOfferLine: string; // {link}
+
   // — A client moves a session from their own booking page. —
   movedEmailSubject: string;
   movedEmailBody: string; // {name} {when} {clinic} {previousWhen}
@@ -135,6 +145,14 @@ export const CLIENT_COPY_DEFAULTS: ClientCopy = {
   reminderEmailSubject: "A reminder: your session {when}",
   reminderEmailBody:
     "Hi {name},\n\nJust a gentle reminder that your craniosacral session is coming up: {when} at {clinic}. Looking forward to seeing you.",
+
+  firstSessionSubject: "Looking forward to meeting you — {when}",
+  firstSessionBodyIntakeDone:
+    "Hi {name},\n\nLooking forward to meeting you for our first session: {when} at {clinic}. Thank you for filling in your intake form — there's nothing else you need to do before you arrive.",
+  firstSessionBodyIntakeMissing:
+    "Hi {name},\n\nLooking forward to meeting you for our first session: {when} at {clinic}.\n\nI noticed you haven't filled in your intake form yet. If you have a few minutes beforehand, it's here:\n{intakeLink}\n\nIf not, no problem at all — we can go through it together at the start of the session.",
+  remindersOfferLine:
+    "Would a reminder before each session help? You can switch one on here — the day before, or the morning of:\n{link}",
 
   movedEmailSubject: "Your session has been moved",
   movedEmailBody:

@@ -3,6 +3,7 @@ import { SettingsView } from "@/components/SettingsView";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { resolveSpaces } from "@/lib/spaces";
 
 export default async function SettingsPage() {
   const settings = await getSettings();
@@ -12,11 +13,15 @@ export default async function SettingsPage() {
     orderBy: { name: "asc" },
     select: { id: true, name: true, paymentRef: true },
   });
+  // Your spaces, with their entrance photos — the editor shows and saves them.
+  // (Everywhere else gets them photo-less, from the dashboard's SpacesProvider.)
+  const spaces = resolveSpaces(settings);
 
   return (
     <SettingsView
       overrides={overrides}
       clients={clients}
+      spaces={spaces}
       settings={{
         aiModel: settings.aiModel,
         practitionerName: settings.practitionerName,
@@ -27,49 +32,21 @@ export default async function SettingsPage() {
         emailTemplateReturning: settings.emailTemplateReturning,
         emailSignOff: settings.emailSignOff,
         paymentDetails: settings.paymentDetails,
-        waterlooAddress: settings.waterlooAddress,
-        bethnalAddress: settings.bethnalAddress,
         clinicContactLine: settings.clinicContactLine,
-        waterlooFindIt: settings.waterlooFindIt,
-        bethnalFindIt: settings.bethnalFindIt,
-        waterlooPhoto: settings.waterlooPhoto,
-        bethnalPhoto: settings.bethnalPhoto,
-        waterlooLocationUrl: settings.waterlooLocationUrl,
-        bethnalLocationUrl: settings.bethnalLocationUrl,
-        // Superseded by waterlooFindIt/bethnalFindIt above — kept here only so
-        // Settings can show you what's still saved in them if the new field is
-        // empty, since that's the wording still going out until you copy it over.
-        waterlooDirections: settings.waterlooDirections,
-        bethnalDirections: settings.bethnalDirections,
-        waterlooArrivalNote: settings.waterlooArrivalNote,
-        bethnalArrivalNote: settings.bethnalArrivalNote,
-
         appUrl: settings.appUrl,
         personalCalendarId: settings.personalCalendarId,
-        roomCalendarId: settings.roomCalendarId,
-        chalkFarmCalendarId: settings.chalkFarmCalendarId,
         googleConnected: !!settings.googleRefreshToken,
         googleLastError: settings.googleLastError,
         intakeQuestions: resolveIntakeQuestions(settings.intakeQuestions),
-        mapsReviewUrlWaterloo: settings.mapsReviewUrlWaterloo,
-        mapsReviewUrlBethnal: settings.mapsReviewUrlBethnal,
         reviewEmailSubject: settings.reviewEmailSubject,
         reviewEmailBody: settings.reviewEmailBody,
-        // Legacy per-clinic wording — the fallback until the shared pair above is saved.
+        // Legacy wording — the fallback until the shared pair above is saved.
         reviewEmailSubjectWaterloo: settings.reviewEmailSubjectWaterloo,
-        reviewEmailSubjectBethnal: settings.reviewEmailSubjectBethnal,
         reviewEmailBodyWaterloo: settings.reviewEmailBodyWaterloo,
-        reviewEmailBodyBethnal: settings.reviewEmailBodyBethnal,
         weeklyHours: resolveWeeklyHours(settings.weeklyHours),
         bookingSlotMinutes: settings.bookingSlotMinutes,
         bookingMinNoticeMins: settings.bookingMinNoticeMins,
         bookingHorizonDays: settings.bookingHorizonDays,
-        bookingBufferMinutes: settings.bookingBufferMinutes,
-        bethnalBufferMinutes: settings.bethnalBufferMinutes,
-        chalkFarmBufferMinutes: settings.chalkFarmBufferMinutes,
-        chalkFarmEdgeBufferMinutes: settings.chalkFarmEdgeBufferMinutes,
-        chalkFarmClusterGapMinutes: settings.chalkFarmClusterGapMinutes,
-        chalkFarmWeeklyCapHours: settings.chalkFarmWeeklyCapHours,
         crossClinicGapMinutes: settings.crossClinicGapMinutes,
         bookingNotifyEmail: settings.bookingNotifyEmail,
         clientCopy: resolveClientCopy(settings.clientCopy),

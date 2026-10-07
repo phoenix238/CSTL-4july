@@ -4,6 +4,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
 import { resolveClientCopy } from "@/lib/clientCopy";
 import { practitionerIdentity } from "@/lib/practitioner";
+import { resolveSpaces, spacesForClient, validateSpaces } from "@/lib/spaces";
 import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 /** The editable settings the UI needs (email preview etc.) — no Google secrets. */
@@ -67,8 +68,16 @@ export const GET = guarded(async () => {
     practitionerName: s.practitionerName,
     practitionerFullName: s.practitionerFullName,
     practiceName: s.practiceName,
-    // Which calendars are wired up — for the calendar page's event composer.
-    calendars: { personal: true, room: !!s.roomCalendarId, chalkFarm: !!s.chalkFarmCalendarId },
+    // Your spaces (without entrance photos) — names, prices, addresses.
+    spaces: spacesForClient(resolveSpaces(s)),
+    // Which calendars a plain event can go on — your own, plus each space's
+    // venue calendar that's been set. For the calendar page's event composer.
+    calendars: [
+      { key: "personal", label: "Personal" },
+      ...resolveSpaces(s)
+        .filter((sp) => sp.venueMode !== "none" && sp.venueCalendarId)
+        .map((sp) => ({ key: `venue:${sp.id}`, label: `${sp.name} venue` })),
+    ],
     // Availability ⇄ Google Calendar two-way sync state — for the Settings card.
     availabilitySync: {
       connected: !!s.availabilityCalendarId,
@@ -86,7 +95,7 @@ export const GET = guarded(async () => {
  * silently rather than erroring.
  */
 const EDITABLE_SETTINGS = [
-  "aiModel",
+  "aiModel", "spaces",
   "practitionerName", "practitionerFullName", "practiceName",
   "accessNote", "emailTemplateWaterloo", "emailTemplateBethnal", "paymentDetails",
   "emailTemplate", "emailTemplateReturning", "emailSignOff",
@@ -121,6 +130,27 @@ export const PATCH = guarded(async (req: Request) => {
   const rejected = Object.keys(body).filter((k) => !(k in data));
   if (rejected.length) {
     return NextResponse.json({ error: `Not a settable field: ${rejected.join(", ")}` }, { status: 400 });
+  }
+  if ("spaces" in data) {
+    // Stored only in its clean shape, and only if it makes sense as a whole.
+    const spaces = resolveSpaces({ spaces: data.spaces });
+    if (!Array.isArray(data.spaces) || !data.spaces.length) {
+      return NextResponse.json({ error: "Keep at least one space." }, { status: 400 });
+    }
+    const problems = validateSpaces(spaces);
+    if (problems.length) return NextResponse.json({ error: problems.join(" ") }, { status: 400 });
+    // A space with sessions on record can be archived, never removed — its
+    // bookings, clients and history all point at it by id.
+    const kept = new Set(spaces.map((sp) => sp.id));
+    const inUse = await prisma.booking.findMany({ distinct: ["clinic"], select: { clinic: true } });
+    const orphaned = inUse.map((b) => b.clinic).filter((c) => c && !kept.has(c));
+    if (orphaned.length) {
+      return NextResponse.json(
+        { error: `A space with sessions on record can't be removed — archive it instead (${orphaned.join(", ")}).` },
+        { status: 400 },
+      );
+    }
+    data.spaces = spaces;
   }
   const settings = await prisma.appSettings.upsert({
     where: { id: 1 },
