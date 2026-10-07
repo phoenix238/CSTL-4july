@@ -82,6 +82,11 @@ describe("booking confirmation for a second practitioner", () => {
     expect(sent.trimEnd().endsWith("Warmly,\nEmily")).toBe(true);
   });
 
+  it("fills her name itself, so text copied to the clipboard has no bare placeholder", () => {
+    expect(email.body).not.toMatch(/\{your/);
+    expect(email.body.trimEnd().endsWith("Warmly,\nEmily")).toBe(true);
+  });
+
   it("has no trace of Phoenix", () => {
     expect(sent).not.toMatch(/phoenix/i);
   });

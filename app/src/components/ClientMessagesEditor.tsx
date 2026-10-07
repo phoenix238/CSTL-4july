@@ -364,6 +364,15 @@ const SETTINGS_MESSAGE_DEFAULTS: Partial<Record<keyof SettingsMessages, string>>
     "Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\n{yourName}",
 };
 
+/** Settings boxes that hold a plain value (a name, a link), not wording. */
+const PLAIN_VALUE_KEYS = new Set<keyof SettingsMessages>([
+  "practitionerName",
+  "practitionerFullName",
+  "practiceName",
+  "mapsReviewUrlWaterloo",
+  "mapsReviewUrlBethnal",
+]);
+
 // Sample values so the preview reads like a real message.
 const SAMPLE: Record<string, string> = {
   name: "Maya",
@@ -403,6 +412,7 @@ function FieldEditor({
   placeholders,
   multiline,
   identity,
+  noPlaceholders,
   onChange,
   onReset,
 }: {
@@ -412,12 +422,14 @@ function FieldEditor({
   placeholders?: string[];
   multiline?: boolean;
   identity: Record<string, string>;
+  noPlaceholders?: boolean;
   onChange: (v: string) => void;
   onReset?: () => void;
 }) {
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
-  // Message boxes can also use your name; one-line boxes like a review link can't.
-  const chips = multiline || placeholders?.length ? [...(placeholders ?? []), ...IDENTITY_PLACEHOLDERS] : [];
+  // Every wording box can use your name — subjects included. Your details
+  // themselves and the review links are plain values, so they get none.
+  const chips = noPlaceholders ? [] : [...(placeholders ?? []), ...IDENTITY_PLACEHOLDERS];
   const preview = value.includes("{") ? applyCopy(value, { ...SAMPLE, ...identity }) : null;
 
   // Put the placeholder where the cursor is (or at the end), then put the cursor after it.
@@ -678,6 +690,7 @@ export function ClientMessagesEditor({
         placeholders={f.placeholders}
         multiline={f.multiline}
         identity={identity}
+        noPlaceholders={PLAIN_VALUE_KEYS.has(f.key)}
         onChange={(v) => setSetting(f.key, v)}
         onReset={recommended !== undefined ? () => setSetting(f.key, recommended) : undefined}
       />

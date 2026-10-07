@@ -1,6 +1,6 @@
 import { CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "./rules";
 import { applyCopy, resolveClientCopy } from "../clientCopy";
-import { practitionerIdentity, type IdentitySettings } from "../practitioner";
+import { fillIdentity, practitionerIdentity, type IdentitySettings } from "../practitioner";
 
 export interface ComposedEmail {
   subject: string;
@@ -328,7 +328,7 @@ export function composeBookingEmail(
     }
     if (portalLink) includes.push("Their own booking page");
     sections.push(resolveSignOff(settings));
-    return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
+    return finish(subject, sections, includes, settings);
   }
 
   // One letter for both clinics — what differs between them (the price, and the
@@ -381,7 +381,22 @@ export function composeBookingEmail(
   if (settings.accessNote.trim()) includes.push("Access note — stairs, no step-free access");
 
   sections.push(resolveSignOff(settings));
-  return { subject, body: sections.filter(Boolean).join("\n\n"), includes };
+  return finish(subject, sections, includes, settings);
+}
+
+/**
+ * Join the email and fill your name in. Filled here, not only in sendEmail,
+ * because this text also leaves by other routes — copied to the clipboard for
+ * WhatsApp when there's no email address, and shown in the booking preview —
+ * where a bare {yourName} would otherwise reach the client.
+ */
+function finish(subject: string, sections: string[], includes: string[], settings: EmailSettings): ComposedEmail {
+  const identity = practitionerIdentity(settings);
+  return {
+    subject: fillIdentity(subject, identity),
+    body: fillIdentity(sections.filter(Boolean).join("\n\n"), identity),
+    includes,
+  };
 }
 
 /**

@@ -267,7 +267,7 @@ model AppSettings {
   // The one sign-off every email ends on. Appended by the composer after any
   // sign-off in the letter is stripped, so a template that still ends "See you
   // soon, Phoenix" can't produce a second ending.
-  emailSignOff          String @default("with gratitude\nPhoenix")
+  emailSignOff          String @default("with gratitude\n{yourName}")
   // Legacy per-clinic letters, superseded by emailTemplate above. Kept (rather
   // than dropped) so `prisma db push` never touches existing wording, and used
   // as the fallback for whichever clinic until emailTemplate is saved.
@@ -362,7 +362,7 @@ model AppSettings {
   // is the legacy split; it stays as the fallback until this pair is saved.
   mapsReviewUrl         String @default("") // legacy single review link, superseded by the per-clinic pair below
   reviewEmailSubject    String @default("How was your session?")
-  reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\nPhoenix")
+  reviewEmailBody       String @default("Hi {name},\n\nIt was lovely to see you. I really hope your session landed well.\n\nIf you have a moment, a short Google review means the world to a small practice like mine:\n{mapsUrl}\n\nAnd if you'd like the occasional email about offers and clinic news, you can opt in here (one tap, no obligation):\n{optInLink}\n\nwith gratitude\n{yourName}")
   // The review link per clinic — these two stay split, because Waterloo and
   // Bethnal Green are separate Google Business listings with separate reviews.
   mapsReviewUrlWaterloo    String @default("") // Google Maps "leave a review" link — Waterloo
