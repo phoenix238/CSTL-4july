@@ -16,7 +16,9 @@ export const GET = guarded(async () => {
     prisma.bankTransaction.findMany({
       where: { status: { in: ["unmatched", "ambiguous"] } },
       orderBy: { transactedAt: "desc" },
-      take: 25,
+      // Every incoming transfer that isn't a session lands here too, so a short
+      // list pushes a real client's payment out of sight within a few weeks.
+      take: 100,
     }),
     prisma.bankTransaction.findMany({
       where: { status: "matched" },

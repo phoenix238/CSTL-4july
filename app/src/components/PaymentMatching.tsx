@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, Card, PrimaryButton, useToast } from "./ui";
 import { formatPence } from "@/lib/account";
 import { fmtDate } from "@/lib/time";
+import { describeSync, type SyncCounts } from "@/lib/payments/syncMessage";
 
 interface PendingTx {
   id: string;
@@ -93,15 +94,11 @@ export function PaymentMatching({
   async function checkNow() {
     setChecking(true);
     try {
-      const s = await api<{ newCount: number; matchedCount: number; unmatchedCount: number; ambiguousCount: number }>(
+      const s = await api<SyncCounts>(
         "/api/payments/sync",
         { method: "POST", body: JSON.stringify({ force: true }) },
       );
-      toast(
-        s.newCount === 0
-          ? "No new payments since last time"
-          : `${s.newCount} new · ${s.matchedCount} matched · ${s.unmatchedCount + s.ambiguousCount} need a look`,
-      );
+      toast(describeSync(s));
       await load();
       router.refresh();
     } catch (err) {

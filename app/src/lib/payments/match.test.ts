@@ -38,6 +38,16 @@ describe("matchReference", () => {
     expect(matchReference("CSTL JS4 August", CANDIDATES)).toEqual({ status: "matched", clientId: "jono" });
   });
 
+  it("matches a reference split by a space or dash with other words around it", () => {
+    for (const typed of ["Jono JS-4", "JS 4 session", "CSTL js 4 August", "Jono Smith JS-4"]) {
+      expect(matchReference(typed, CANDIDATES)).toEqual({ status: "matched", clientId: "jono" });
+    }
+  });
+
+  it("rejoins a split reference as a whole number, never a shorter one", () => {
+    expect(matchReference("Jane JS 41", CANDIDATES)).toEqual({ status: "matched", clientId: "jane" });
+  });
+
   it("never lets one reference match a longer one — the whole point of the rule", () => {
     // JS4 is a substring of JS41. A contains-check would credit Jane's payment
     // to Jono the moment the counter passed ten.
