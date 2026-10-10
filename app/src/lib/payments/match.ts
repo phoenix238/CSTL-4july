@@ -41,13 +41,20 @@ export function matchReference(reference: string, candidates: RefCandidate[]): M
   if (!whole) return { status: "none" };
 
   // Words as the payer typed them, so "CSTL JS4 August" yields JS4 on its own.
-  const words = new Set(
-    reference
-      .split(/[^A-Za-z0-9]+/)
-      .map(normaliseRef)
-      .filter(Boolean),
-  );
+  const typed = reference
+    .split(/[^A-Za-z0-9]+/)
+    .map(normaliseRef)
+    .filter(Boolean);
+  const words = new Set(typed);
   words.add(whole);
+  // A reference split by the payer — "Hannah HS-7", "HS 7 session" — arrives as
+  // two words, initials then number, so neither matches alone and the whole
+  // string carries the extra words. Rejoin exactly that shape: a letters-only
+  // word followed by a digits-only word. Still whole words only, so "JS 41"
+  // becomes JS41 and never JS4.
+  for (let i = 0; i < typed.length - 1; i++) {
+    if (/^[A-Z]+$/.test(typed[i]) && /^[0-9]+$/.test(typed[i + 1])) words.add(typed[i] + typed[i + 1]);
+  }
 
   const hits = new Set<string>();
   for (const c of candidates) {
