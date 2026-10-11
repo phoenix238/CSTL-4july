@@ -33,7 +33,7 @@ describe("composeBookingEmail", () => {
     expect(email.includes.join(" ").toLowerCase()).toContain("intake");
     expect(email.body).toContain("Maya");
     expect(email.body).toContain(settings.accessNote);
-    expect(email.body).toContain(settings.waterlooAddress);
+    expect(email.body).toContain(settings.waterlooAddress!);
     expect(email.body).toContain(settings.paymentDetails);
   });
 
@@ -46,7 +46,7 @@ describe("composeBookingEmail", () => {
     expect(body.split("with gratitude").length - 1).toBe(1);
     expect(body).not.toContain("See you soon,");
     // Everything factual sits above the signature.
-    expect(body.indexOf(settings.waterlooAddress)).toBeLessThan(body.indexOf("with gratitude"));
+    expect(body.indexOf(settings.waterlooAddress!)).toBeLessThan(body.indexOf("with gratitude"));
     expect(body.indexOf(settings.paymentDetails)).toBeLessThan(body.indexOf("with gratitude"));
   });
 
@@ -68,7 +68,7 @@ describe("composeBookingEmail", () => {
   it("falls back to a Maps search link only when no pin has been set", () => {
     const body = compose({ waterlooLocationUrl: "" }).body;
     expect(body).toContain("maps/search");
-    expect(body).toContain(settings.waterlooAddress);
+    expect(body).toContain(settings.waterlooAddress!);
   });
 
   it("pulls just the link out of a map-pin field that has a sentence around it", () => {
@@ -108,7 +108,7 @@ describe("composeBookingEmail", () => {
     expect(w.body).toContain("at Waterloo — £80.");
     expect(b.body).toContain("at Bethnal Green — £30–60 sliding scale.");
     // …and each still gets its own address, so one letter doesn't mean one clinic.
-    expect(w.body).toContain(settings.waterlooAddress);
+    expect(w.body).toContain(settings.waterlooAddress!);
     expect(b.body).toContain(settings.bethnalAddress);
   });
 
@@ -159,7 +159,7 @@ describe("composeBookingEmail", () => {
     const email = compose({}, true);
     expect(email.body).toContain("confirming your next session");
     expect(email.body).toContain("Tue 5 Aug · 3:00 pm");
-    expect(email.body).toContain(settings.waterlooAddress);
+    expect(email.body).toContain(settings.waterlooAddress!);
     expect(email.body).toContain("https://maps.app.goo.gl/waterloo");
     expect(email.body).not.toContain(INTAKE_LINK);
     expect(email.body).not.toContain(settings.paymentDetails);
@@ -209,7 +209,7 @@ describe("composeBookingEmail", () => {
     // The whole point of folding the welcome, the booking-page email and the
     // intake email into one message: all of it in a single letter, signed once.
     const body = compose({ bankAccountName: "P Tanner" }).body;
-    for (const part of [settings.waterlooAddress, settings.paymentDetails, PORTAL_LINK, INTAKE_LINK]) {
+    for (const part of [settings.waterlooAddress!, settings.paymentDetails, PORTAL_LINK, INTAKE_LINK]) {
       expect(body.indexOf(part)).toBeGreaterThan(-1);
       expect(body.indexOf(part)).toBeLessThan(body.indexOf("with gratitude"));
     }
@@ -233,7 +233,7 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("Maya Okonkwo — see you Tue 5 Aug · 3:00 pm at Waterloo, £80 as always.");
     expect(email.body).not.toContain("confirming your next session");
     // Still gets the address block and one sign-off underneath.
-    expect(email.body).toContain(settings.waterlooAddress);
+    expect(email.body).toContain(settings.waterlooAddress!);
     expect(email.body.trimEnd().endsWith("with gratitude\nPhoenix")).toBe(true);
   });
 

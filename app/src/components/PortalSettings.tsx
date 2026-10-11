@@ -8,6 +8,7 @@ export interface PortalSettingsData {
   portalSelfBook: boolean;
   portalNotifyEmail: boolean;
   portalReceipts: boolean;
+  remindNewClientsByDefault: boolean;
   portalNoticeHours: number;
   lateCancelGoodwillPence: number;
   bankAccountName: string;
@@ -174,7 +175,9 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-[12.5px] font-medium text-ink">Suggested contribution for a late cancellation</span>
+          <span className="text-[12.5px] font-medium text-ink">
+            Contribution asked for a late cancellation or a missed session
+          </span>
           <div className="flex items-center gap-1.5">
             <span className="text-[13px] text-muted">£</span>
             <input
@@ -188,9 +191,10 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
             />
           </div>
           <span className="text-[11.5px] leading-[1.5] text-muted">
-            Asked for as a contribution towards the room, never charged and never counted as owing. The wording on
-            their page says plainly that this is a donation-based clinic and that it&apos;s completely okay not to pay
-            it if that&apos;s too much right now. Set to 0 to stop mentioning it at all.
+            Asked for as a contribution towards the room, never charged and never counted as owing — when a client
+            cancels inside the notice above, and when you press <strong>No-show</strong> on a missed session. It&apos;s
+            stated up front on the booking page, their own page and the first confirmation email (wording in Settings ›
+            Messages), so it&apos;s never a surprise. Set to 0 to stop mentioning it at all.
           </span>
         </label>
       </Card>
@@ -213,6 +217,12 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
           hint="Your only signal that something changed — worth leaving on."
           checked={draft.portalNotifyEmail}
           onChange={(v) => set("portalNotifyEmail", v)}
+        />
+        <Toggle
+          label="New clients get the day-before reminder email"
+          hint="Switched on for each new client as they're added — they can turn it off from their own page. Existing clients are never switched on by this. A new client's first session always gets its own 'looking forward to meeting you' email either way."
+          checked={draft.remindNewClientsByDefault}
+          onChange={(v) => set("remindNewClientsByDefault", v)}
         />
         <Toggle
           label="Clients can email themselves a receipt"

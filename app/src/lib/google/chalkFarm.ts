@@ -1,4 +1,5 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { dayBlockSpace } from "@/lib/spaces";
 import { getCalendarApi, withRetry } from "./client";
 import { EVENT_REMINDERS, NO_REMINDERS } from "@/lib/booking/rules";
 import { clusterSessions } from "@/lib/booking/availability";
@@ -54,15 +55,18 @@ export function chalkFarmBlockRanges(
  */
 export async function syncChalkFarmDayBlock(dateKey: string) {
   const settings = await getSettings();
-  const calId = settings.chalkFarmCalendarId;
-  if (!calId) return; // not configured yet — nothing to sync
+  // The one space whose venue keeps a shared day block (Phoenix's Bethnal Green
+  // on the Chalk Farm calendar). None, or its calendar not set yet — nothing to sync.
+  const space = dayBlockSpace(await getSpaces());
+  if (!space) return;
+  const calId = space.venueCalendarId;
 
   const [y, m, d] = dateKey.split("-").map(Number);
   const dayStart = londonTime(y, m, d, 0, 0);
   const dayEnd = londonDayStart(1, dayStart);
 
   const bookings = await prisma.booking.findMany({
-    where: { clinic: "bethnal", status: "confirmed", startsAt: { gte: dayStart, lt: dayEnd } },
+    where: { clinic: space.id, status: "confirmed", startsAt: { gte: dayStart, lt: dayEnd } },
   });
 
   const existing = await prisma.chalkFarmDayBlock.findUnique({ where: { date: dateKey } });
@@ -98,8 +102,8 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
 
   const ranges = chalkFarmBlockRanges(
     bookings.map((b) => b.startsAt),
-    settings.chalkFarmEdgeBufferMinutes,
-    settings.chalkFarmClusterGapMinutes,
+    space.venueEdgeMinutes,
+    space.venueClusterGapMinutes,
   );
 
   const eventIds: string[] = [];
@@ -118,7 +122,7 @@ export async function syncChalkFarmDayBlock(dateKey: string) {
       .join("\n");
 
     const requestBody = {
-      summary: "Phoenix",
+      summary: space.venueEventTitle.trim() || space.name,
       description,
       start: { dateTime: range.start.toISOString(), timeZone: TZ },
       end: { dateTime: range.end.toISOString(), timeZone: TZ },

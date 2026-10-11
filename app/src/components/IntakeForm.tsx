@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { api, Card, PrimaryButton, inputClass, useToast } from "./ui";
 import { formatDateInput } from "@/lib/time";
-import { CONSENT_PARAGRAPHS, type IntakeQuestion } from "@/lib/intakeQuestions";
+import { consentParagraphs, type IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
 
 export function IntakeForm({
@@ -14,6 +14,7 @@ export function IntakeForm({
   alreadyDone,
   questions,
   copy,
+  practitionerName,
   embedded = false,
   onDone,
 }: {
@@ -24,6 +25,8 @@ export function IntakeForm({
   alreadyDone: boolean;
   questions: IntakeQuestion[];
   copy: ClientCopy;
+  /** who the client is consenting to hold their data — Settings › Your details */
+  practitionerName: string;
   /** Rendered inline inside another page (e.g. filling it in with a client in the room) — no full-page chrome. */
   embedded?: boolean;
   onDone?: () => void;
@@ -136,7 +139,7 @@ export function IntakeForm({
 
         <div className="flex flex-col gap-2 rounded-[10px] bg-inputbg px-3.5 py-3.5">
           <span className="text-[12.5px] font-semibold text-ink-soft">Consent</span>
-          {CONSENT_PARAGRAPHS.map((p, i) => (
+          {consentParagraphs(practitionerName).map((p, i) => (
             <p key={i} className="text-[12.5px] leading-[1.55] text-[oklch(0.4_0.02_60)]">
               {p}
             </p>

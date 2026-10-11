@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { prisma, isOpenSpace } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
 import { defaultSlotWindow, loadAvailableSlots } from "@/lib/booking/slots";
 import { portalRoute } from "@/lib/portalRoute";
@@ -10,7 +10,7 @@ import { portalRoute } from "@/lib/portalRoute";
  */
 export const GET = portalRoute(async (req, client) => {
   const clinic = new URL(req.url).searchParams.get("clinic");
-  if (clinic !== "waterloo" && clinic !== "bethnal") {
+  if (!(await isOpenSpace(clinic)) || typeof clinic !== "string") {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }
 

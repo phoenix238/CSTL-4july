@@ -1,6 +1,6 @@
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceById, spaceName } from "@/lib/spaces";
 import {
-  CLINIC_EVENT_COLOR,
   EVENT_REMINDERS,
   NO_REMINDERS,
   SESSION_EVENT_TITLE,
@@ -8,7 +8,7 @@ import {
   planBookingEvents,
   type Clinic,
 } from "@/lib/booking/rules";
-import { calendarId, getCalendarApi, withRetry } from "./client";
+import { calendarId, getCalendarApi, venueCalendarIdFor, withRetry } from "./client";
 import { syncChalkFarmDayBlock } from "./chalkFarm";
 import { getOrCreatePortalToken, portalUrl } from "@/lib/portal";
 import { fmtTime, londonDateKey, londonMinutes } from "@/lib/time";
@@ -27,8 +27,7 @@ export async function createBookingEvents(bookingId: string) {
   });
   const calendar = await getCalendarApi();
   const settings = await getSettings();
-  const clinic = booking.clinic as Clinic;
-  const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
+  const space = spaceById(await getSpaces(), booking.clinic);
   // Venue-facing note for the room event — what the clinic needs (the session time
   // and how to reach Phoenix), without the client's name on the shared calendar.
   const sessionEnd = new Date(booking.startsAt.getTime() + 60 * 60_000);
@@ -38,7 +37,7 @@ export async function createBookingEvents(bookingId: string) {
   ]
     .filter(Boolean)
     .join("\n");
-  const plan = planBookingEvents(clinic, booking.startsAt, address, venueNote);
+  const plan = planBookingEvents(space, booking.startsAt, venueNote);
 
   // The personal (client-facing) event carries the client's own "manage this
   // session" link in its description, so the session that lands on their own
@@ -61,7 +60,7 @@ export async function createBookingEvents(bookingId: string) {
   let personalEventId = "";
   let secondaryEventId = "";
   for (const ev of plan) {
-    const calId = await calendarId(ev.calendar);
+    const calId = ev.calendar === "personal" ? await calendarId("personal") : venueCalendarIdFor(space);
     const res = await withRetry(() =>
       calendar.events.insert({
         calendarId: calId,
@@ -101,7 +100,7 @@ export async function createBookingEvents(bookingId: string) {
       data: { personalEventId, secondaryEventId },
     });
   }
-  if (clinic === "bethnal") {
+  if (space.venueMode === "dayBlock") {
     try {
       await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
     } catch (err) {
@@ -176,6 +175,7 @@ export async function restyleExistingSessionEvents(): Promise<{ scanned: number;
     where: { status: "confirmed", startsAt: { gte: new Date() }, personalEventId: { not: "" } },
     select: { id: true, personalEventId: true, clinic: true },
   });
+  const spaces = await getSpaces();
 
   let updated = 0;
   for (const b of bookings) {
@@ -186,7 +186,7 @@ export async function restyleExistingSessionEvents(): Promise<{ scanned: number;
           eventId: b.personalEventId,
           requestBody: {
             summary: SESSION_EVENT_TITLE,
-            colorId: CLINIC_EVENT_COLOR[b.clinic as Clinic],
+            colorId: spaceById(spaces, b.clinic).eventColor,
           },
         }),
       );
@@ -210,11 +210,11 @@ export async function deleteBookingGoogleEvents(booking: {
   secondaryEventId: string;
 }) {
   const calendar = await getCalendarApi();
-  const clinic = booking.clinic as Clinic;
+  const space = spaceById(await getSpaces(), booking.clinic);
   const targets: Array<[string, string]> = [];
   if (booking.personalEventId) targets.push([await calendarId("personal"), booking.personalEventId]);
-  if (booking.secondaryEventId) {
-    targets.push([await calendarId(clinic === "waterloo" ? "room" : "chalkFarm"), booking.secondaryEventId]);
+  if (booking.secondaryEventId && space.venueCalendarId) {
+    targets.push([space.venueCalendarId, booking.secondaryEventId]);
   }
   for (const [calId, eventId] of targets) {
     try {
@@ -239,7 +239,9 @@ export async function cancelBookingEvents(bookingId: string, by = "") {
     where: { id: bookingId },
     data: { status: "cancelled", cancelledAt: new Date(), cancelledBy: by },
   });
-  if (booking.clinic === "bethnal") await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
+  if (spaceById(await getSpaces(), booking.clinic).venueMode === "dayBlock") {
+    await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
+  }
 }
 
 /** Page a calendar's events for a window until Google runs out of pages. */
@@ -311,7 +313,7 @@ async function reconcileBookingsWithCalendar(
         if (newStart.getTime() !== booking.startsAt.getTime()) {
           await prisma.booking.update({ where: { id: booking.id }, data: { startsAt: newStart } });
           movedStarts.set(booking.id, newStart);
-          if (booking.clinic === "bethnal") {
+          if (spaceById(await getSpaces(), booking.clinic).venueMode === "dayBlock") {
             await syncChalkFarmDayBlock(londonDateKey(booking.startsAt));
             await syncChalkFarmDayBlock(londonDateKey(newStart));
           }
@@ -332,7 +334,8 @@ async function reconcileBookingsWithCalendar(
   return { removedIds, movedStarts };
 }
 
-export type SpanSource = "booking" | "room" | "chalkFarm" | "personal";
+/** "venue" = a space's shared venue calendar (a room, or a day-block calendar). */
+export type SpanSource = "booking" | "venue" | "personal";
 
 export interface BusySpan {
   start: Date;
@@ -355,11 +358,12 @@ export interface BusySpan {
    * so a client moving their session can see the time they currently hold.
    */
   ownBookingId?: string;
+  /** the space a booking is at, or whose venue calendar a venue span came from */
   clinic?: Clinic;
   /** Google's event id — set on real Google events (not our bookings / opaque
    * free-busy blocks); enables editing/deleting the event in place. */
   googleEventId?: string;
-  /** true for the shared Chalk Farm day block — shown for visibility, but
+  /** true for the shared venue day block — shown for visibility, but
    * ignored by every availability/collision check (only real sessions block
    * time; see syncChalkFarmDayBlock). */
   roomBlock?: boolean;
@@ -404,6 +408,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
 
   // The booking span is the 1-hour session itself. The paired room / Chalk Farm
   // event stays visible (see below) so it renders side by side with the session.
+  const spaces = await getSpaces();
   const known: BusySpan[] = bookings.map((b) => {
     const clinic = b.clinic as Clinic;
     const start = b.startsAt;
@@ -411,7 +416,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     return {
       start,
       end,
-      title: `${b.client.name} — ${clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}`,
+      title: `${b.client.name} — ${spaceName(spaces, clinic)}`,
       known: true,
       source: "booking" as const,
       clientId: b.clientId,
@@ -437,21 +442,20 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     chalkFarmBlocks.flatMap((b) => [...b.eventIds, ...(b.eventId ? [b.eventId] : [])]),
   );
 
-  const sources: Array<{ id: string; source: SpanSource }> = [];
-  // Room/Chalk Farm calendars are optional until configured in Settings.
-  for (const key of ["room", "chalkFarm"] as const) {
-    try {
-      sources.push({ id: await calendarId(key), source: key });
-    } catch {
-      /* not configured yet */
-    }
+  // Every space's venue calendar that's been set — optional until configured.
+  // Two spaces sharing one venue calendar list it once, against the first.
+  const sources: Array<{ id: string; source: SpanSource; clinic: Clinic; dayBlock: boolean }> = [];
+  for (const sp of spaces) {
+    if (sp.venueMode === "none" || !sp.venueCalendarId) continue;
+    if (sources.some((x) => x.id === sp.venueCalendarId)) continue;
+    sources.push({ id: sp.venueCalendarId, source: "venue", clinic: sp.id, dayBlock: sp.venueMode === "dayBlock" });
   }
 
   // Each calendar is a separate network round-trip to Google. Fetch them all
   // concurrently — running them together instead of one after another is the
   // main speedup for the calendar and availability views.
   const perSource = await Promise.all(
-    sources.map(async ({ id, source }): Promise<BusySpan[]> => {
+    sources.map(async ({ id, source, clinic, dayBlock }): Promise<BusySpan[]> => {
       try {
         // Page until Google runs out. A single 250-event page silently dropped
         // everything past the 250th event in the window — on a busy shared room
@@ -470,9 +474,10 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
             title: ev.summary || "Busy",
             known: false,
             source,
+            clinic,
             googleEventId: ev.id,
             ownBookingId: bookingIdBySecondaryEventId.get(ev.id),
-            roomBlock: source === "chalkFarm" && chalkFarmBlockEventIds.has(ev.id),
+            roomBlock: dayBlock && chalkFarmBlockEventIds.has(ev.id),
           });
         }
         return spans;
@@ -494,7 +499,7 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
               const start = new Date(span.start);
               const end = new Date(span.end);
               const isOwn = known.some((k) => start < k.end && end > k.start);
-              if (!isOwn) spans.push({ start, end, title: "Busy", known: false, source });
+              if (!isOwn) spans.push({ start, end, title: "Busy", known: false, source, clinic });
             }
           }
           return spans;

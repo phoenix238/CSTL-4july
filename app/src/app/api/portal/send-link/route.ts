@@ -3,7 +3,7 @@ import { getSettings } from "@/lib/db";
 import { findClientByEmail } from "@/lib/clients";
 import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { sendEmail } from "@/lib/google/gmail";
-import { resolveSignOff } from "@/lib/booking/email";
+import { composeBookingPageEmail } from "@/lib/bookingPageEmail";
 import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
 import { isValidEmail } from "@/lib/validate";
 
@@ -42,18 +42,8 @@ export async function POST(req: Request) {
       const { token } = await getPortalIdentity(client.id);
       const link = portalUrl(settings, token);
       if (link) {
-        const first = client.name.split(" ")[0] || "there";
-        const body = [
-          `Hi ${first},`,
-          "",
-          "Here's your own booking page — you can book, move or cancel a session from here any time:",
-          link,
-          "",
-          "No login, just keep the link — it's worth bookmarking.",
-          "",
-          ...resolveSignOff(settings).split("\n"),
-        ].join("\n");
-        await sendEmail(clean, "Your booking page", body, undefined, undefined, {
+        const { subject, body } = composeBookingPageEmail(settings, { clientName: client.name, link });
+        await sendEmail(clean, subject, body, undefined, undefined, {
           links: [{ url: link, label: "Click here for your booking page" }],
         });
       }

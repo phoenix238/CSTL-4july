@@ -1,4 +1,6 @@
-import { getSettings } from "@/lib/db";
+import { getSettings, getSpaces } from "@/lib/db";
+import { spacesForClient } from "@/lib/spaces";
+import { SpacesProvider } from "@/components/SpacesContext";
 import { ToastProvider } from "@/components/ui";
 import { ClientPortal } from "@/components/portal/ClientPortal";
 import { buildPortalView, loadPortalClient } from "@/lib/portalData";
@@ -36,8 +38,10 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ t
   const view = await buildPortalView(client.id);
 
   return (
-    <ToastProvider>
-      <ClientPortal token={token} view={view} />
-    </ToastProvider>
+    <SpacesProvider spaces={spacesForClient(await getSpaces())}>
+      <ToastProvider>
+        <ClientPortal token={token} view={view} />
+      </ToastProvider>
+    </SpacesProvider>
   );
 }

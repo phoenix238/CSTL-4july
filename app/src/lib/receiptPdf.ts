@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatPence } from "@/lib/account";
 import { fmtDate } from "@/lib/time";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
 import type { ReceiptLine } from "@/lib/portalNotify";
 
 const PAGE_WIDTH = 595.28; // A4, points
@@ -99,12 +99,14 @@ export async function buildReceiptPdf({
 
   // Only the address(es) of clinics this client actually has sessions at —
   // in the order those clinics first appear, not a fixed Waterloo-then-Bethnal order.
-  const clinicsUsed: Clinic[] = [];
-  for (const line of lines) if (!clinicsUsed.includes(line.clinic)) clinicsUsed.push(line.clinic);
-  for (const clinic of clinicsUsed) {
+  const clinicsUsed: Array<{ clinic: Clinic; label: string }> = [];
+  for (const line of lines) {
+    if (!clinicsUsed.some((u) => u.clinic === line.clinic)) clinicsUsed.push({ clinic: line.clinic, label: line.clinicLabel });
+  }
+  for (const { clinic, label } of clinicsUsed) {
     const address = addressByClinic[clinic];
     if (address) {
-      text(`${CLINIC_LABEL[clinic]}: ${address}`, MARGIN, 10, font, muted);
+      text(`${label}: ${address}`, MARGIN, 10, font, muted);
       y -= 14;
     }
   }

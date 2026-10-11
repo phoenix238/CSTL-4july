@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
-import { prisma, getSettings } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { spaceById } from "@/lib/spaces";
 import { sendEmail } from "@/lib/google/gmail";
 import { googleErrorMessage, googleFixFor } from "@/lib/google/health";
 import { composeReviewEmail } from "@/lib/booking/review";
@@ -16,7 +17,7 @@ export const POST = guarded(async (_req: Request, ctx: { params: Promise<{ id: s
   const settings = await getSettings();
   const optInLink = preferencesUrl(settings, await getOrCreateIntakeToken(client.id));
   const { subject, body } = composeReviewEmail(client.name, client.clinic as Clinic, settings, optInLink);
-  const mapsUrl = (client.clinic as Clinic) === "waterloo" ? settings.mapsReviewUrlWaterloo : settings.mapsReviewUrlBethnal;
+  const mapsUrl = spaceById(await getSpaces(), client.clinic).reviewUrl;
   try {
     await sendEmail(client.email, subject, body, undefined, undefined, {
       links: [

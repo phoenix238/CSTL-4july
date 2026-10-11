@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { prisma } from "@/lib/db";
+import { prisma, getSpaces } from "@/lib/db";
 import { toFinanceEvent } from "@/lib/payments/financeEvents";
 
 /**
@@ -63,10 +63,11 @@ export async function GET(req: Request) {
         select: { bookingId: true, feedItemUid: true },
       })
     : [];
+  const spaces = await getSpaces();
   const feedFor = new Map(settled.map((t) => [t.bookingId, t.feedItemUid]));
 
   return NextResponse.json(
-    { events: bookings.map((b) => toFinanceEvent(b, feedFor.get(b.id) ?? null)) },
+    { events: bookings.map((b) => toFinanceEvent(b, feedFor.get(b.id) ?? null, spaces)) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

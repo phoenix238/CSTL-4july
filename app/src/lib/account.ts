@@ -1,4 +1,5 @@
-import type { Clinic } from "@/lib/booking/rules";
+import { applyCopy, type ClientCopy } from "@/lib/clientCopy";
+import { spaceDefaultAmountPence, spacePriceLabel, type Space } from "@/lib/spaces";
 
 /**
  * What a client owes, and what they've already settled.
@@ -23,15 +24,15 @@ export interface AccountBooking {
 }
 
 /**
- * The standard price of a session, in pence.
+ * The standard price of a session at a space, in pence.
  *
- * Waterloo is a fixed £80. Bethnal Green is a £30–60 sliding scale — the client
- * chooses, so there's no correct number to assume; it stays null until the real
- * amount is recorded. Nothing guesses a sliding-scale figure, because a wrong
- * guess in a balance is worse than a blank.
+ * A fixed price is known up front. A sliding scale is the client's choice, so
+ * there's no correct number to assume; it stays null until the real amount is
+ * recorded. Nothing guesses a sliding-scale figure, because a wrong guess in a
+ * balance is worse than a blank.
  */
-export function defaultAmountPence(clinic: Clinic | string): number | null {
-  return clinic === "waterloo" ? 8000 : null;
+export function defaultAmountPence(space: Space): number | null {
+  return spaceDefaultAmountPence(space);
 }
 
 /** A session that has already happened and wasn't cancelled. */
@@ -111,13 +112,13 @@ export function formatPence(pence: number): string {
  * What to show a client against one session.
  *
  * A recorded amount always wins — that's what actually changed hands. Otherwise
- * Waterloo shows its fixed £80, and Bethnal Green shows the sliding scale itself
- * rather than a number, because on a donation basis the amount is the client's
- * to decide and naming one would quietly turn a scale into a price.
+ * the space's own price: a fixed price as a number, a sliding scale as the scale
+ * itself, because on a donation basis the amount is the client's to decide and
+ * naming one would quietly turn a scale into a price.
  */
-export function sessionPriceLabel(clinic: Clinic | string, amountPence: number | null): string {
+export function sessionPriceLabel(space: Space, amountPence: number | null): string {
   if (amountPence != null) return formatPence(amountPence);
-  return clinic === "waterloo" ? "£80" : "£30–60 sliding scale";
+  return spacePriceLabel(space);
 }
 
 /**
@@ -156,3 +157,17 @@ export function suggestedGoodwillPence(
 ): number {
   return hoursUntil(startsAt, now) < noticeHours ? goodwillPence : 0;
 }
+
+/** The policy sentence clients read before booking — "" when no contribution is asked for. */
+export function cancellationPolicyText(
+  copy: Pick<ClientCopy, "cancellationPolicyLine">,
+  noticeHours: number,
+  contributionPence: number,
+): string {
+  if (contributionPence <= 0) return "";
+  return applyCopy(copy.cancellationPolicyLine, {
+    hours: String(noticeHours),
+    amount: formatPence(contributionPence),
+  });
+}
+

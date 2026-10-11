@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
-import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import { activeSpaces, spaceBookingLabel, spaceById, spaceName, spacePriceLabel } from "@/lib/spaces";
+import { useSpaces } from "@/components/SpacesContext";
 import { formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
@@ -45,7 +47,12 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const router = useRouter();
 
   const [mode, setMode] = useState<"idle" | "book" | "reschedule">("idle");
-  const [clinic, setClinic] = useState<Clinic>(view.preferredClinic);
+  const spaces = useSpaces();
+  const bookable = activeSpaces(spaces);
+  // Their usual space — unless it's since been archived, then the first open one.
+  const [clinic, setClinic] = useState<Clinic>(
+    bookable.some((s) => s.id === view.preferredClinic) ? view.preferredClinic : (bookable[0]?.id ?? view.preferredClinic),
+  );
   const [selected, setSelected] = useState<string | null>(null);
   // Separate from `selected` on purpose. Picking a time opens the confirm box
   // over the page — the same treatment the first-booking flow gives it, rather
@@ -172,9 +179,13 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
 
   const picker = (
     <div className="flex flex-col gap-3 border-t border-hairline pt-4">
-      {mode === "book" && (
-        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-          {(["bethnal", "waterloo"] as const).map((c) => (
+      {mode === "book" && bookable.length > 1 && (
+        <div
+          className={`flex flex-wrap border border-line bg-[oklch(0.955_0.012_82)] p-[3px] ${
+            bookable.length > 3 ? "rounded-[22px]" : "rounded-full"
+          }`}
+        >
+          {bookable.map(({ id: c }) => (
             <button
               key={c}
               onClick={() => {
@@ -182,16 +193,21 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                 setSelected(null);
                 setSheetOpen(false);
               }}
-              className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold select-none ${
+              className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold whitespace-nowrap select-none ${
                 clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
               }`}
             >
-              {CLINIC_BOOKING_LABEL[c]}
+              {spaceBookingLabel(spaceById(spaces, c))}
             </button>
           ))}
         </div>
       )}
-      {mode === "book" && <div className="text-[12.5px] text-muted">{CLINIC_PRICE[clinic]} · 60 minutes</div>}
+      {mode === "book" && (
+        <div className="text-[12.5px] text-muted">
+          {bookable.length > 1 ? "" : `${spaceBookingLabel(spaceById(spaces, clinic))} · `}
+          {spacePriceLabel(spaceById(spaces, clinic)) ? `${spacePriceLabel(spaceById(spaces, clinic))} · ` : ""}60 minutes
+        </div>
+      )}
 
       {mode === "reschedule" && target && (
         <div className="rounded-lg bg-clay-tint px-3.5 py-2.5 text-[12.5px] text-clay-text">
@@ -240,7 +256,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   {mode === "book" ? "Confirm your booking" : "Move your session"}
                 </div>
                 <div className="mt-1 text-[12.5px] text-muted">
-                  {CLINIC_BOOKING_LABEL[pickerClinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
+                  {spaceBookingLabel(spaceById(spaces, pickerClinic))} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
                 </div>
               </div>
               <button
@@ -261,6 +277,13 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   {fmtDayLong(new Date(target.startsAtISO))}, {fmtTime(new Date(target.startsAtISO))}
                 </span>{" "}
                 to the new time above.
+              </p>
+            )}
+
+            {/* The policy, read before they commit — same words as the booking page. */}
+            {view.policy && (
+              <p className="rounded-xl bg-[oklch(0.97_0.01_85)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-soft">
+                {view.policy}
               </p>
             )}
 
@@ -302,7 +325,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                 <div>
                   <div className="text-[15px] font-semibold">{fmtDayLong(new Date(u.startsAtISO))}</div>
                   <div className="text-[13px] text-muted">
-                    {fmtTime(new Date(u.startsAtISO))} · {CLINIC_LABEL[u.clinic]}
+                    {fmtTime(new Date(u.startsAtISO))} · {spaceName(spaces, u.clinic)}
                   </div>
                 </div>
 
@@ -372,7 +395,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   <div className="font-serif text-[19px] leading-tight font-medium">Cancel your session</div>
                   <div className="mt-1 text-[12.5px] text-muted">
                     {fmtDayLong(new Date(cancelTarget.startsAtISO))} at {fmtTime(new Date(cancelTarget.startsAtISO))} ·{" "}
-                    {CLINIC_LABEL[cancelTarget.clinic]}
+                    {spaceName(spaces, cancelTarget.clinic)}
                   </div>
                 </div>
                 <button
@@ -407,11 +430,23 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       </Card>
 
       {/* ---------- reminders ---------- */}
-      <Card className="flex flex-col gap-3 px-5 py-5">
-        <SectionLabel>Email reminders</SectionLabel>
+      {/* id="reminders": emails link straight here ("switch one on here"). */}
+      <Card className="flex scroll-mt-4 flex-col gap-3 px-5 py-5" >
+        <div id="reminders" className="flex flex-col gap-1">
+          <SectionLabel>Reminder emails</SectionLabel>
+          <p className="text-[13px] font-semibold text-ink-soft">
+            {leadDays.length
+              ? `You'll get a reminder ${leadDays
+                  .slice()
+                  .sort((a, b) => b - a)
+                  .map((d) => (d === 1 ? "the day before" : d === 0 ? "on the morning" : `${d} days before`))
+                  .join(" and ")} each session.`
+              : "You're not getting reminder emails at the moment."}
+          </p>
+        </div>
         <p className="text-[12.5px] leading-relaxed text-muted">
-          Choose whether you&apos;d like an email reminder before each session, and how far ahead. Off by default —
-          turn one on if you&apos;d like it.
+          A short email before each session, so it doesn&apos;t slip your mind. Tick when you&apos;d like one — it
+          saves as soon as you tick, and you can change it any time.
         </p>
         {!view.hasEmail && (
           <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12px] leading-relaxed text-clay-text">
@@ -540,7 +575,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           )}
           {view.account.goodwillPence > 0 && (
             <p className="mt-1 text-[12px] leading-relaxed text-muted">
-              Plus an optional {formatPence(view.account.goodwillPence)} towards a short-notice cancellation — a
+              Plus an optional {formatPence(view.account.goodwillPence)} towards a late cancellation or missed session — a
               contribution, not a charge.
             </p>
           )}
@@ -592,14 +627,14 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                 <li key={s.id} className="flex items-baseline justify-between gap-4 text-[13px]">
                   <span className={s.cancelled ? "text-muted line-through" : ""}>
                     {fmtDayLong(d)}
-                    <span className="ml-1.5 text-[12px] text-muted">{CLINIC_LABEL[s.clinic]}</span>
+                    <span className="ml-1.5 text-[12px] text-muted">{spaceName(spaces, s.clinic)}</span>
                   </span>
                   <span className="shrink-0 text-[12px] text-muted">
                     {s.cancelled
                       ? "Cancelled"
                       : s.paid
                         ? `Paid${s.amountPence != null ? ` · ${formatPence(s.amountPence)}` : ""}`
-                        : sessionPriceLabel(s.clinic, s.amountPence)}
+                        : sessionPriceLabel(spaceById(spaces, s.clinic), s.amountPence)}
                   </span>
                 </li>
               );

@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { api, Card, OutlineButton, PrimaryButton, inputClass, useToast } from "./ui";
 import { AvailabilitySyncCard } from "./AvailabilitySyncCard";
+import { useActiveSpaces, useSpaces } from "./SpacesContext";
+import { spaceName } from "@/lib/spaces";
 import type { WeeklyHours, WeeklyWindow } from "@/lib/booking/availability";
-
-type ClinicKey = "waterloo" | "bethnal";
 
 export interface AvailabilityOverrideDTO {
   id: string;
@@ -57,12 +57,6 @@ export function AvailabilitySettings({
   bookingSlotMinutes,
   bookingMinNoticeMins,
   bookingHorizonDays,
-  bookingBufferMinutes,
-  bethnalBufferMinutes,
-  chalkFarmBufferMinutes,
-  chalkFarmEdgeBufferMinutes,
-  chalkFarmClusterGapMinutes,
-  chalkFarmWeeklyCapHours,
   crossClinicGapMinutes,
   bookingNotifyEmail,
   baseUrl,
@@ -72,12 +66,6 @@ export function AvailabilitySettings({
   bookingSlotMinutes: number;
   bookingMinNoticeMins: number;
   bookingHorizonDays: number;
-  bookingBufferMinutes: number;
-  bethnalBufferMinutes: number;
-  chalkFarmBufferMinutes: number;
-  chalkFarmEdgeBufferMinutes: number;
-  chalkFarmClusterGapMinutes: number;
-  chalkFarmWeeklyCapHours: number;
   crossClinicGapMinutes: number;
   bookingNotifyEmail: boolean;
   baseUrl: string;
@@ -85,65 +73,51 @@ export function AvailabilitySettings({
   const toast = useToast();
   const bookingLink = `${baseUrl}/book`;
 
+  const allSpaces = useSpaces();
+  const spaces = useActiveSpaces();
+
   /* ---------- weekly hours ---------- */
-  const [hoursClinic, setHoursClinic] = useState<ClinicKey>("bethnal");
-  const [drafts, setDrafts] = useState<Record<ClinicKey, DayDraft[]>>({
-    waterloo: windowsToDrafts(weeklyHours.waterloo),
-    bethnal: windowsToDrafts(weeklyHours.bethnal),
-  });
+  // One tab per space open for booking. An archived space's saved hours are
+  // left exactly as they are — it simply isn't offered.
+  const [pickedSpace, setPickedSpace] = useState<string>(spaces[0]?.id ?? "");
+  const hoursSpace = spaces.some((sp) => sp.id === pickedSpace) ? pickedSpace : (spaces[0]?.id ?? "");
+  const [drafts, setDrafts] = useState<Record<string, DayDraft[]>>({});
   const [hoursDirty, setHoursDirty] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
+  // A space added since this page loaded has no draft yet — start it from what's saved (usually nothing).
+  const draftFor = (id: string): DayDraft[] => drafts[id] ?? windowsToDrafts(weeklyHours[id] ?? []);
 
-  const toggleDayOpen = (i: number, open: boolean) => {
+  const editDays = (fn: (d: DayDraft, idx: number) => DayDraft) => {
     setDrafts((prev) => ({
       ...prev,
-      [hoursClinic]: prev[hoursClinic].map((d, idx) => (idx === i ? { ...d, open } : d)),
+      [hoursSpace]: (prev[hoursSpace] ?? windowsToDrafts(weeklyHours[hoursSpace] ?? [])).map(fn),
     }));
     setHoursDirty(true);
   };
 
-  const updateSegment = (i: number, segIdx: number, patch: Partial<Segment>) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [hoursClinic]: prev[hoursClinic].map((d, idx) =>
-        idx === i ? { ...d, segments: d.segments.map((s, si) => (si === segIdx ? { ...s, ...patch } : s)) } : d,
-      ),
-    }));
-    setHoursDirty(true);
-  };
+  const toggleDayOpen = (i: number, open: boolean) => editDays((d, idx) => (idx === i ? { ...d, open } : d));
+
+  const updateSegment = (i: number, segIdx: number, patch: Partial<Segment>) =>
+    editDays((d, idx) =>
+      idx === i ? { ...d, segments: d.segments.map((s, si) => (si === segIdx ? { ...s, ...patch } : s)) } : d,
+    );
 
   // New segment defaults to an evening slot — the day slot is usually added first.
-  const addSegment = (i: number) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [hoursClinic]: prev[hoursClinic].map((d, idx) =>
-        idx === i ? { ...d, segments: [...d.segments, { start: "17:00", end: "21:00" }] } : d,
-      ),
-    }));
-    setHoursDirty(true);
-  };
+  const addSegment = (i: number) =>
+    editDays((d, idx) => (idx === i ? { ...d, segments: [...d.segments, { start: "17:00", end: "21:00" }] } : d));
 
-  const removeSegment = (i: number, segIdx: number) => {
-    setDrafts((prev) => ({
-      ...prev,
-      [hoursClinic]: prev[hoursClinic].map((d, idx) =>
-        idx === i ? { ...d, segments: d.segments.filter((_, si) => si !== segIdx) } : d,
-      ),
-    }));
-    setHoursDirty(true);
-  };
+  const removeSegment = (i: number, segIdx: number) =>
+    editDays((d, idx) => (idx === i ? { ...d, segments: d.segments.filter((_, si) => si !== segIdx) } : d));
 
   async function saveHours() {
     // Guard against end ≤ start on any segment — the server silently drops such
     // windows, so without this the day would quietly fail to save under a "saved ✓" toast.
     const invalid = new Set<string>();
-    (["waterloo", "bethnal"] as const).forEach((c) => {
-      drafts[c].forEach((d, i) => {
+    spaces.forEach((sp) => {
+      draftFor(sp.id).forEach((d, i) => {
         if (!d.open) return;
         for (const s of d.segments) {
-          if (timeToMin(s.end) <= timeToMin(s.start)) {
-            invalid.add(`${c === "waterloo" ? "Waterloo" : "Bethnal Green"} ${WEEKDAY_LABELS[i]}`);
-          }
+          if (timeToMin(s.end) <= timeToMin(s.start)) invalid.add(`${sp.name} ${WEEKDAY_LABELS[i]}`);
         }
       });
     });
@@ -152,13 +126,12 @@ export function AvailabilitySettings({
       return;
     }
     setSavingHours(true);
+    // Every saved entry carried over (archived spaces' hours untouched), then
+    // each open space's hours from the editor on top.
+    const next: WeeklyHours = { ...weeklyHours };
+    for (const sp of spaces) next[sp.id] = draftsToWindows(draftFor(sp.id));
     try {
-      await api("/api/settings", {
-        method: "PATCH",
-        body: JSON.stringify({
-          weeklyHours: { waterloo: draftsToWindows(drafts.waterloo), bethnal: draftsToWindows(drafts.bethnal) },
-        }),
-      });
+      await api("/api/settings", { method: "PATCH", body: JSON.stringify({ weeklyHours: next }) });
       toast("Weekly hours saved ✓");
       setHoursDirty(false);
     } catch (err) {
@@ -171,7 +144,7 @@ export function AvailabilitySettings({
   /* ---------- date overrides ---------- */
   const [overrides, setOverrides] = useState(initialOverrides);
   const [newOverride, setNewOverride] = useState({
-    clinic: "bethnal" as ClinicKey,
+    clinic: spaces[0]?.id ?? "",
     date: "",
     kind: "block" as "open" | "block",
     allDay: true,
@@ -180,6 +153,9 @@ export function AvailabilitySettings({
     note: "",
   });
   const [addingOverride, setAddingOverride] = useState(false);
+
+  // Fall back to the first open space if the one picked has since been archived.
+  const overrideSpace = spaces.some((sp) => sp.id === newOverride.clinic) ? newOverride.clinic : (spaces[0]?.id ?? "");
 
   async function addOverride() {
     if (!newOverride.date) {
@@ -191,7 +167,7 @@ export function AvailabilitySettings({
       const { override } = await api<{ override: AvailabilityOverrideDTO }>("/api/availability-overrides", {
         method: "POST",
         body: JSON.stringify({
-          clinic: newOverride.clinic,
+          clinic: overrideSpace,
           date: newOverride.date,
           kind: newOverride.kind,
           startMin: newOverride.allDay ? 0 : timeToMin(newOverride.start),
@@ -223,12 +199,6 @@ export function AvailabilitySettings({
     slotMinutes: bookingSlotMinutes,
     minNoticeHours: Math.round(bookingMinNoticeMins / 60),
     horizonDays: bookingHorizonDays,
-    bufferMinutes: bookingBufferMinutes,
-    bethnalBufferMinutes,
-    chalkFarmBufferMinutes,
-    chalkFarmEdgeBufferMinutes,
-    chalkFarmClusterGapMinutes,
-    chalkFarmWeeklyCapHours,
     crossClinicGapMinutes,
     notifyEmail: bookingNotifyEmail,
   });
@@ -244,12 +214,6 @@ export function AvailabilitySettings({
           bookingSlotMinutes: tuning.slotMinutes,
           bookingMinNoticeMins: tuning.minNoticeHours * 60,
           bookingHorizonDays: tuning.horizonDays,
-          bookingBufferMinutes: tuning.bufferMinutes,
-          bethnalBufferMinutes: tuning.bethnalBufferMinutes,
-          chalkFarmBufferMinutes: tuning.chalkFarmBufferMinutes,
-          chalkFarmEdgeBufferMinutes: tuning.chalkFarmEdgeBufferMinutes,
-          chalkFarmClusterGapMinutes: tuning.chalkFarmClusterGapMinutes,
-          chalkFarmWeeklyCapHours: tuning.chalkFarmWeeklyCapHours,
           crossClinicGapMinutes: tuning.crossClinicGapMinutes,
           bookingNotifyEmail: tuning.notifyEmail,
         }),
@@ -285,21 +249,27 @@ export function AvailabilitySettings({
 
       <Card className="flex flex-col gap-3 px-[18px] py-4">
         <div className="text-[12px] font-semibold text-ink-soft">Weekly hours</div>
-        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-          {(["bethnal", "waterloo"] as const).map((c) => (
-            <button
-              key={c}
-              onClick={() => setHoursClinic(c)}
-              className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                hoursClinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-              }`}
-            >
-              {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
-            </button>
-          ))}
-        </div>
+        {spaces.length > 1 && (
+          <div className="flex w-fit max-w-full flex-wrap rounded-[18px] border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+            {spaces.map((sp) => (
+              <button
+                key={sp.id}
+                onClick={() => setPickedSpace(sp.id)}
+                className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
+                  hoursSpace === sp.id ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+                }`}
+              >
+                {sp.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {spaces.length === 1 && <div className="text-[12.5px] text-muted">{spaces[0].name}</div>}
+        {spaces.length === 0 && (
+          <div className="text-[12.5px] text-muted">Add a space (Settings › Your spaces) to set its hours.</div>
+        )}
         <div className="flex flex-col gap-1.5">
-          {drafts[hoursClinic].map((d, i) => (
+          {(hoursSpace ? draftFor(hoursSpace) : []).map((d, i) => (
             <div key={i} className="flex flex-wrap items-start gap-2.5 border-b border-hairline py-1.5 last:border-0">
               <label className="flex w-[80px] shrink-0 cursor-pointer items-center gap-1.5 pt-[7px] text-[12.5px] font-medium">
                 <input type="checkbox" checked={d.open} onChange={(e) => toggleDayOpen(i, e.target.checked)} />
@@ -351,11 +321,11 @@ export function AvailabilitySettings({
         <PrimaryButton onClick={saveHours} disabled={!hoursDirty || savingHours} className="self-start px-4 py-1.5 text-[12.5px]">
           {savingHours ? "Saving…" : "Save hours"}
         </PrimaryButton>
-        {hoursClinic === "bethnal" && (
+        {spaces.find((sp) => sp.id === hoursSpace)?.venueMode === "dayBlock" && (
           <div className="text-[11.5px] text-muted">
-            The shared &quot;Phoenix&quot; block on your Chalk Farm calendar grows and shrinks automatically to fit
-            that day&apos;s Bethnal Green sessions — book clients as close together as you like (use the buffer
-            slider below for breathing room between them).
+            The shared block on this venue&apos;s calendar grows and shrinks automatically to fit that day&apos;s
+            sessions here — book clients as close together as you like (the gap between sessions is set on the space,
+            in Your spaces).
           </div>
         )}
       </Card>
@@ -370,7 +340,7 @@ export function AvailabilitySettings({
                   {o.kind === "block" ? "Blocked" : "Open"}
                 </span>
                 <span>{o.date}</span>
-                <span className="text-muted">{o.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}</span>
+                <span className="text-muted">{spaceName(allSpaces, o.clinic)}</span>
                 <span className="text-muted">
                   {o.startMin === 0 && o.endMin === 1440 ? "all day" : `${minToTime(o.startMin)}–${minToTime(o.endMin)}`}
                 </span>
@@ -396,12 +366,15 @@ export function AvailabilitySettings({
             />
           </label>
           <select
-            value={newOverride.clinic}
-            onChange={(e) => setNewOverride((p) => ({ ...p, clinic: e.target.value as ClinicKey }))}
+            value={overrideSpace}
+            onChange={(e) => setNewOverride((p) => ({ ...p, clinic: e.target.value }))}
             className="cursor-pointer rounded-lg border border-inputline bg-inputbg px-2 py-2 text-[12.5px]"
           >
-            <option value="bethnal">Bethnal Green</option>
-            <option value="waterloo">Waterloo</option>
+            {spaces.map((sp) => (
+              <option key={sp.id} value={sp.id}>
+                {sp.name}
+              </option>
+            ))}
           </select>
           <select
             value={newOverride.kind}
@@ -492,96 +465,22 @@ export function AvailabilitySettings({
           }}
         />
         <TuningSlider
-          label="Gap between your own Waterloo clients"
-          value={tuning.bufferMinutes}
-          display={tuning.bufferMinutes === 0 ? "None — back-to-back OK" : `${tuning.bufferMinutes} min`}
-          min={0}
-          max={30}
-          step={5}
-          hint="Minimum breathing room kept before and after every Waterloo session. Set to None to let clients book back-to-back there."
-          onChange={(v) => {
-            setTuning((p) => ({ ...p, bufferMinutes: v }));
-            setTuningDirty(true);
-          }}
-        />
-        <TuningSlider
-          label="Gap between your own Bethnal Green clients"
-          value={tuning.bethnalBufferMinutes}
-          display={tuning.bethnalBufferMinutes === 0 ? "None — back-to-back OK" : `${tuning.bethnalBufferMinutes} min`}
-          min={0}
-          max={30}
-          step={5}
-          hint="Minimum breathing room kept before and after every Bethnal Green session — independent of the Waterloo gap above, since the shared Chalk Farm room may need different spacing."
-          onChange={(v) => {
-            setTuning((p) => ({ ...p, bethnalBufferMinutes: v }));
-            setTuningDirty(true);
-          }}
-        />
-        <TuningSlider
-          label="Travel time between the two clinics"
+          label="Travel time between two different spaces"
           value={tuning.crossClinicGapMinutes}
           display={tuning.crossClinicGapMinutes === 0 ? "None" : `${tuning.crossClinicGapMinutes} min`}
           min={0}
           max={180}
           step={15}
-          hint="Working a morning at one clinic and an evening at the other is fine — this is the clearance kept around a session at the other site, so nobody can book the two so close together that you can't make the journey."
+          hint="Working a morning at one space and an evening at another is fine — this is the clearance kept around a session at a different space, so nobody can book the two so close together that you can't make the journey."
           onChange={(v) => {
             setTuning((p) => ({ ...p, crossClinicGapMinutes: v }));
             setTuningDirty(true);
           }}
         />
-        <TuningSlider
-          label="Gap from a Chalk Farm studio-mate's booking"
-          value={tuning.chalkFarmBufferMinutes}
-          display={tuning.chalkFarmBufferMinutes === 0 ? "None" : `${tuning.chalkFarmBufferMinutes} min`}
-          min={0}
-          max={60}
-          step={5}
-          hint="Bethnal Green only, incoming direction. When someone else (e.g. Amy) already has the shared Chalk Farm calendar booked, this much clearance is kept either side of THEIR booking before you can book — on top of the gap above."
-          onChange={(v) => {
-            setTuning((p) => ({ ...p, chalkFarmBufferMinutes: v }));
-            setTuningDirty(true);
-          }}
-        />
-        <TuningSlider
-          label="Chalk Farm block edge padding"
-          value={tuning.chalkFarmEdgeBufferMinutes}
-          display={tuning.chalkFarmEdgeBufferMinutes === 0 ? "None" : `${tuning.chalkFarmEdgeBufferMinutes} min`}
-          min={0}
-          max={30}
-          step={5}
-          hint="Bethnal Green only, outgoing direction. Your daily 'Phoenix' block on the shared Chalk Farm calendar starts this much before your first client and ends this much after your last, so studio-mates see clearance and don't book right onto the front or back of your day."
-          onChange={(v) => {
-            setTuning((p) => ({ ...p, chalkFarmEdgeBufferMinutes: v }));
-            setTuningDirty(true);
-          }}
-        />
-        <TuningSlider
-          label="Chalk Farm block split gap"
-          value={tuning.chalkFarmClusterGapMinutes}
-          display={`${tuning.chalkFarmClusterGapMinutes} min`}
-          min={0}
-          max={180}
-          step={15}
-          hint="Bethnal Green only. Two sessions this far apart (or closer) share one 'Phoenix' block on the shared Chalk Farm calendar; a wider gap splits them into separate blocks, so a long gap between two clients isn't held as room time or counted against your weekly cap. Lower it to split more eagerly, raise it to keep a whole day as one block."
-          onChange={(v) => {
-            setTuning((p) => ({ ...p, chalkFarmClusterGapMinutes: v }));
-            setTuningDirty(true);
-          }}
-        />
-        <TuningSlider
-          label="Weekly Chalk Farm hours cap"
-          value={tuning.chalkFarmWeeklyCapHours}
-          display={tuning.chalkFarmWeeklyCapHours === 0 ? "No cap" : `${tuning.chalkFarmWeeklyCapHours} hrs/week`}
-          min={0}
-          max={30}
-          step={1}
-          hint="Bethnal Green only. Counts the actual Chalk Farm room time held each Monday–Sunday week — from the edge padding before your first session to after your last, gaps between sessions included, not just the session hours. Once a week reaches this many hours, no further Bethnal slots are offered that week on the public page, portal, or offer-pick link. Doesn't stop you booking over it yourself from QuickBook or Enquiries."
-          onChange={(v) => {
-            setTuning((p) => ({ ...p, chalkFarmWeeklyCapHours: v }));
-            setTuningDirty(true);
-          }}
-        />
+        <div className="text-[11.5px] leading-[1.5] text-muted">
+          The gap between your own sessions, a weekly hours limit and any venue-calendar spacing are set per space, in
+          Your spaces.
+        </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-ink">
           <input

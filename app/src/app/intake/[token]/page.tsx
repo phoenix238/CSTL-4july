@@ -3,6 +3,7 @@ import { IntakeForm } from "@/components/IntakeForm";
 import { ToastProvider } from "@/components/ui";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { practitionerIdentity } from "@/lib/practitioner";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
 
   const settings = await getSettings();
   const questions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
-  const copy = resolveClientCopy(settings.clientCopy);
+  const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
 
   return (
     <ToastProvider>
@@ -40,6 +41,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
         alreadyDone={client.intakeDone}
         questions={questions}
         copy={copy}
+        practitionerName={practitionerIdentity(settings).yourName}
       />
     </ToastProvider>
   );

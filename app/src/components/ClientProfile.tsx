@@ -9,7 +9,9 @@ import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
 import { InPersonIntakePanel } from "./InPersonIntakePanel";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import { spaceById, spaceName } from "@/lib/spaces";
+import { useSpaces } from "./SpacesContext";
 import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
@@ -79,6 +81,7 @@ export function ClientProfile({
   paymentRef = "",
   intakeQuestions,
   clientCopy,
+  practitionerName,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
@@ -92,6 +95,7 @@ export function ClientProfile({
   paymentRef?: string;
   intakeQuestions: IntakeQuestion[];
   clientCopy: ClientCopy;
+  practitionerName: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -114,6 +118,10 @@ export function ClientProfile({
   const [savingNote, setSavingNote] = useState(false);
   const [togglingIntake, setTogglingIntake] = useState(false);
   const [changingClinic, setChangingClinic] = useState(false);
+  const spaces = useSpaces();
+  // The open spaces, plus their current one if it's since been archived — so it still shows as theirs.
+  const clinicChoices = spaces.filter((s) => s.active || s.id === client.clinic);
+  if (!clinicChoices.some((s) => s.id === client.clinic)) clinicChoices.push(spaceById(spaces, client.clinic));
   const [sendingIntake, setSendingIntake] = useState(false);
   const [sendingReview, setSendingReview] = useState(false);
   const [inPersonOpen, setInPersonOpen] = useState(false);
@@ -208,7 +216,7 @@ export function ClientProfile({
     setChangingClinic(true);
     try {
       await api(`/api/clients/${client.id}`, { method: "PATCH", body: JSON.stringify({ clinic }) });
-      toast(`Moved to ${CLINIC_LABEL[clinic]} ✓`);
+      toast(`Moved to ${spaceName(spaces, clinic)} ✓`);
       router.refresh();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't change clinic");
@@ -309,7 +317,10 @@ export function ClientProfile({
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-[7px]">
               <div className="flex overflow-hidden rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[2px]">
-                {(["bethnal", "waterloo"] as const).map((c) => (
+                {clinicChoices.map((sp) => {
+                  const c = sp.id;
+                  const chip = clinicChip(sp);
+                  return (
                   <button
                     key={c}
                     onClick={() => setClinic(c)}
@@ -317,11 +328,12 @@ export function ClientProfile({
                     className={`cursor-pointer rounded-full px-2.5 py-[3px] text-[11.5px] font-medium whitespace-nowrap select-none disabled:cursor-default ${
                       client.clinic === c ? "" : "text-[oklch(0.5_0.02_58)]"
                     }`}
-                    style={client.clinic === c ? { color: clinicChip(c).color, background: clinicChip(c).bg } : undefined}
+                    style={client.clinic === c ? { color: chip.color, background: chip.bg } : undefined}
                   >
-                    {c === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                    {sp.name}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <button onClick={toggleIntakeDone} disabled={togglingIntake} className="cursor-pointer disabled:cursor-default">
                 {client.intakeDone ? (
@@ -463,14 +475,14 @@ export function ClientProfile({
           )}
 
           {notes.map((n) => {
-            const nChip = clinicChip(n.clinic);
+            const nChip = clinicChip(spaceById(spaces, n.clinic));
             const isEditing = editingNoteId === n.id;
             return (
               <Card key={n.id} className="px-[18px] py-[15px]">
                 <div className="flex items-center gap-2.5">
                   <div className="font-serif text-[15px] font-medium">{n.date}</div>
                   <Chip color={nChip.color} bg={nChip.bg}>
-                    {n.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                    {spaceName(spaces, n.clinic)}
                   </Chip>
                   <div className="flex-1" />
                   {!isEditing && (
@@ -569,14 +581,14 @@ export function ClientProfile({
             <div className="mt-4 flex flex-col gap-2.5">
               <SectionLabel>CLEAN LANGUAGE SESSIONS</SectionLabel>
               {recordings.map((r) => {
-                const rChip = clinicChip(r.clinic);
+                const rChip = clinicChip(spaceById(spaces, r.clinic));
                 const key = `rec-${r.id}`;
                 return (
                   <Card key={r.id} className="px-[18px] py-[15px]">
                     <div className="flex items-center gap-2.5">
                       <div className="font-serif text-[15px] font-medium">{r.date}</div>
                       <Chip color={rChip.color} bg={rChip.bg}>
-                        {r.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}
+                        {spaceName(spaces, r.clinic)}
                       </Chip>
                       <div className="flex-1" />
                       {r.transcript && (
@@ -671,7 +683,7 @@ export function ClientProfile({
                     <span>
                       {s.label}
                       <span className="ml-1.5 text-[11px] text-[oklch(0.5_0.09_45)]">
-                        {CLINIC_LABEL[s.clinic as Clinic]}
+                        {spaceName(spaces, s.clinic)}
                       </span>
                     </span>
                     <span className="flex-none text-[11px] font-semibold whitespace-nowrap text-[oklch(0.5_0.09_45)]">
@@ -682,7 +694,7 @@ export function ClientProfile({
                   {reschedulingId === s.id && (
                     <div className="mt-1 flex flex-col gap-2 rounded-xl border border-[oklch(0.87_0.05_48_/_0.6)] bg-card/70 px-3 py-3">
                       <span className="text-[11.5px] leading-[1.5] text-[oklch(0.45_0.06_45)]">
-                        Pick a new time for {client.name.split(" ")[0]} — {CLINIC_LABEL[s.clinic as Clinic]}. The
+                        Pick a new time for {client.name.split(" ")[0]} — {spaceName(spaces, s.clinic)}. The
                         calendar events move and the invite updates automatically.
                       </span>
                       <BookSlotPicker
@@ -801,6 +813,7 @@ export function ClientProfile({
               clientEmail={client.email}
               questions={intakeQuestions}
               copy={clientCopy}
+              practitionerName={practitionerName}
               onDone={() => {
                 toast(`${client.name.split(" ")[0]}'s intake form saved ✓`);
                 setInPersonOpen(false);

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { HIGHLIGHT_RUBRIC } from "./cleanLanguage";
-import { getSettings } from "./db";
+import { getSettings, getSpaces } from "./db";
+import { activeSpaces } from "./spaces";
+import { practitionerIdentity } from "./practitioner";
 
 // Called directly against Anthropic (api.anthropic.com) — not routed through a
 // third party — since every prompt here can carry a client's case history.
@@ -65,7 +67,7 @@ const enquirySchema = z.object({
   phone: z.string(),
   email: z.string(),
   via: z.enum(["WHATSAPP", "EMAIL", "PASTED"]).catch("PASTED"),
-  clinicSuggestion: z.enum(["waterloo", "bethnal"]).nullable(),
+  clinicSuggestion: z.string().nullable(),
   clinicReason: z.string(),
   requestedWhen: z.string(),
 });
@@ -74,15 +76,26 @@ export type EnquiryAnalysis = z.infer<typeof enquirySchema>;
 
 /**
  * Read a pasted WhatsApp/email enquiry: pull out the sender's name and contact
- * details, suggest a clinic (Waterloo, south/central vs Bethnal Green, east
- * London), and capture when they asked to come in. A suggestion only — the UI
- * always offers a one-tap override.
+ * details, suggest which of your spaces suits them (from each space's address
+ * and the areas it suits), and capture when they asked to come in. A suggestion
+ * only — the UI always offers a one-tap override.
  */
 export async function analyseEnquiry(message: string): Promise<EnquiryAnalysis> {
+  const settings = await getSettings();
+  const { yourFullName } = practitionerIdentity(settings);
+  const spaces = activeSpaces(await getSpaces());
+  const spaceLines = spaces
+    .map((sp) => {
+      const where = [sp.nearby.trim(), sp.address.trim()].filter(Boolean).join(" · ");
+      return `- "${sp.id}": ${sp.name}${where ? ` (${where})` : ""}`;
+    })
+    .join("\n");
+  const ids = spaces.map((sp) => `"${sp.id}"`).join(" | ");
   const text = await chat(
-    `You read new-client enquiries for Phoenix Tanner, a craniosacral therapist with two London clinics:
-- Waterloo (south/central: Waterloo, South Bank, Southwark, Kennington, Lambeth)
-- Bethnal Green (east: Bethnal Green, Victoria Park, Hackney, Mile End, "out east")
+    `You read new-client enquiries for ${yourFullName}, a craniosacral therapist who works from ${
+      spaces.length === 1 ? "one space" : `${spaces.length} spaces`
+    }:
+${spaceLines}
 
 Extract from the message and reply with ONLY a JSON object, no other text:
 {
@@ -90,15 +103,18 @@ Extract from the message and reply with ONLY a JSON object, no other text:
   "phone": "phone number as written, or empty string",
   "email": "email address, or empty string",
   "via": "WHATSAPP" when it reads like a WhatsApp/text message (informal, emoji, timestamps), "EMAIL" when it has a subject/signature/quoted thread, otherwise "PASTED",
-  "clinicSuggestion": "waterloo" | "bethnal" | null (null when the message gives no location clue),
-  "clinicReason": "short human explanation like 'Bethnal Green — the message mentions Victoria Park', or empty string",
+  "clinicSuggestion": ${ids || '""'} | null (one of the quoted ids above; null when the message gives no location clue),
+  "clinicReason": "short human explanation like '<space name> — the message mentions somewhere nearby', or empty string",
   "requestedWhen": "when they asked to come, in their words, e.g. 'Tuesday or Wednesday, after 5' — empty string if not stated"
 }`,
     message,
     500,
   );
   const json = parseJsonFrom(text, "{");
-  return enquirySchema.parse(json);
+  const parsed = enquirySchema.parse(json);
+  // Only ever suggest a space that exists and is open — anything else is no suggestion.
+  if (parsed.clinicSuggestion && !spaces.some((sp) => sp.id === parsed.clinicSuggestion)) parsed.clinicSuggestion = null;
+  return parsed;
 }
 
 /**

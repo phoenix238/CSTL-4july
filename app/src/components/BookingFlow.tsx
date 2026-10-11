@@ -5,7 +5,8 @@ import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
 import { EmbedBridge, scrollEmbedToTop } from "./EmbedBridge";
-import { CLINIC_BOOKING_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import { spaceBookingLabel, spaceById, spacePriceLabel, type Space } from "@/lib/spaces";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { ClientCopy } from "@/lib/clientCopy";
 
@@ -31,8 +32,8 @@ function notifyParentOfBooking(clinic: Clinic) {
   }
 }
 
-function MapsLink({ address }: { address: string }) {
-  const href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+function MapsLink({ address, mapUrl }: { address: string; mapUrl?: string }) {
+  const href = mapUrl?.trim() || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   return (
     <a
       href={href}
@@ -47,23 +48,21 @@ function MapsLink({ address }: { address: string }) {
 }
 
 export function BookingFlow({
-  waterlooAddress,
-  bethnalAddress,
-  waterlooNote,
-  bethnalNote,
+  spaces,
   copy,
+  policy = "",
   embedded = false,
 }: {
-  waterlooAddress: string;
-  bethnalAddress: string;
-  waterlooNote: string;
-  bethnalNote: string;
+  /** the bookable spaces, in the practitioner's order — with their entrance photos */
+  spaces: Space[];
   copy: ClientCopy;
+  /** the cancellation / missed-session policy, shown before they confirm — "" when none */
+  policy?: string;
   /** shown inside the website's iframe — no page heading, minimal padding */
   embedded?: boolean;
 }) {
   const toast = useToast();
-  const [clinic, setClinic] = useState<Clinic>("bethnal");
+  const [clinic, setClinic] = useState<Clinic>(spaces[0]?.id ?? "");
   const [selected, setSelected] = useState<string | null>(null);
   // Separate from `selected` on purpose. Closing the box leaves the time they
   // picked highlighted in the list behind it, and the box needs to keep
@@ -101,8 +100,9 @@ export function BookingFlow({
     intakeDone: boolean;
   } | null>(null);
 
-  const address = clinic === "waterloo" ? waterlooAddress : bethnalAddress;
-  const note = clinic === "waterloo" ? waterlooNote : bethnalNote;
+  const space = spaceById(spaces, clinic);
+  const address = space.address.trim();
+  const price = spacePriceLabel(space);
 
   interface BookResponse {
     whenLabel: string;
@@ -190,32 +190,60 @@ export function BookingFlow({
       )}
 
       <Card className="flex flex-col gap-4 px-5 py-6">
-        <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-          {(["bethnal", "waterloo"] as const).map((c) => (
+        {spaces.length > 1 ? (
+        <div
+          className={`flex flex-wrap border border-line bg-[oklch(0.955_0.012_82)] p-[3px] ${
+            spaces.length > 3 ? "rounded-[22px]" : "rounded-full"
+          }`}
+        >
+          {spaces.map((sp) => (
             <button
-              key={c}
+              key={sp.id}
               onClick={() => {
-                setClinic(c);
+                setClinic(sp.id);
                 setSelected(null);
                 setSheetOpen(false);
               }}
-              className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 text-[13px] font-semibold select-none ${
-                clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
+              className={`flex-1 cursor-pointer rounded-full px-3.5 py-2 whitespace-nowrap text-[13px] font-semibold select-none ${
+                clinic === sp.id ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
               }`}
             >
-              {CLINIC_BOOKING_LABEL[c]}
+              {spaceBookingLabel(sp)}
             </button>
           ))}
         </div>
+        ) : (
+          <div className="text-[14px] font-semibold text-ink-soft">{spaceBookingLabel(space)}</div>
+        )}
         <div className="flex flex-col gap-1.5 text-[12.5px] text-muted">
-          <div>{CLINIC_PRICE[clinic]} · 60 minutes</div>
+          <div>{price ? `${price} · 60 minutes` : "60 minutes"}</div>
           {address && (
             <div className="flex flex-col gap-1 text-[12px] leading-relaxed text-[oklch(0.45_0.02_60)]">
               <span>{address}</span>
-              <MapsLink address={address} />
+              <MapsLink address={address} mapUrl={space.mapUrl} />
             </div>
           )}
-          {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
+          {/* How-to-find-it runs to a dozen lines of pre-arrival detail, which
+              would push the times themselves below the fold on a phone — so it
+              sits folded away here (it's in the confirmation email in full). */}
+          {(space.findIt.trim() || space.photo) && (
+            <details key={space.id} className="text-[12px] leading-relaxed text-[oklch(0.45_0.02_60)]">
+              <summary className="w-fit cursor-pointer font-semibold text-clay-text select-none hover:text-clay">
+                How to find it
+              </summary>
+              <div className="mt-2 flex flex-col gap-2">
+                {space.findIt.trim() && <p className="whitespace-pre-line">{space.findIt.trim()}</p>}
+                {space.photo && (
+                  // eslint-disable-next-line @next/next/no-img-element -- a stored data: URL
+                  <img
+                    src={space.photo}
+                    alt={`The entrance at ${space.name}`}
+                    className="max-h-[260px] w-fit max-w-full rounded-xl border border-line object-cover"
+                  />
+                )}
+              </div>
+            </details>
+          )}
         </div>
 
         <BookSlotPicker
@@ -243,7 +271,7 @@ export function BookingFlow({
                   {recognised ? recognised.prompt : "Your details"}
                 </div>
                 <div className="mt-1 text-[12.5px] text-muted">
-                  {CLINIC_BOOKING_LABEL[clinic]} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
+                  {spaceBookingLabel(space)} · {fmtDayLong(new Date(selected))} at {fmtTime(new Date(selected))}
                 </div>
               </div>
               <button
@@ -255,6 +283,14 @@ export function BookingFlow({
                 ×
               </button>
             </div>
+
+            {/* The cancellation policy, read before they commit — so a short-notice
+                or missed-session contribution is never a surprise afterwards. */}
+            {policy && (
+              <p className="rounded-xl bg-[oklch(0.97_0.01_85)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-soft">
+                {policy}
+              </p>
+            )}
 
             {/* Recognised them: one tap to book into the record they already have,
                 one to back out if the address isn't theirs. Nothing is booked

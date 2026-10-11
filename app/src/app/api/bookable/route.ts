@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isOpenSpace } from "@/lib/db";
 import { guarded } from "@/lib/api";
 import { loadAvailabilityWithTrace } from "@/lib/booking/slots";
 import { explainEmptyDay } from "@/lib/booking/availability";
@@ -17,7 +18,7 @@ import type { Clinic } from "@/lib/booking/rules";
 export const GET = guarded(async (req: Request) => {
   const params = new URL(req.url).searchParams;
   const clinic = params.get("clinic");
-  if (clinic !== "waterloo" && clinic !== "bethnal") {
+  if (!(await isOpenSpace(clinic)) || typeof clinic !== "string") {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }
   const days = Math.min(Number(params.get("days") ?? "7") || 7, 42);

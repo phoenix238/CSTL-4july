@@ -5,13 +5,16 @@ import { fmtDayLong, fmtTime, londonYMD, londonTime } from "@/lib/time";
 import { api, Card, OutlineButton, PrimaryButton, SectionLabel, TintButton, inputClass, useEscapeKey, useToast } from "../ui";
 import type { SpanSource } from "./layout";
 
-export type EventCalendar = "personal" | "room" | "chalkFarm";
+/** A calendar a plain event can go on, as /api/settings lists them: "personal" or "venue:<space id>". */
+export interface EventCalendar {
+  key: string;
+  label: string;
+}
 
-const CAL_LABEL: Record<EventCalendar, string> = {
-  personal: "My calendar",
-  room: "R5 room",
-  chalkFarm: "Chalk Farm",
-};
+/** The /api/events calendar key for an existing span — your own calendar, or the venue it came from. */
+export function calendarKeyForSpan(source?: SpanSource, clinic?: string): string {
+  return source === "venue" && clinic ? `venue:${clinic}` : "personal";
+}
 
 /** Combine a reference day (from `base`) with an "HH:MM" wall-clock time. */
 function atTime(base: Date, hhmm: string): Date {
@@ -31,7 +34,7 @@ export function EventComposer({
   end,
   title: initialTitle = "",
   eventId,
-  source,
+  calendarKey,
   calendars,
   onClose,
   onSaved,
@@ -41,19 +44,17 @@ export function EventComposer({
   end: Date;
   title?: string;
   eventId?: string;
-  /** edit mode: which calendar the event lives on */
-  source?: SpanSource;
+  /** edit mode: which calendar the event lives on ("personal" / "venue:<space id>") */
+  calendarKey?: string;
   /** create mode: which calendars are wired up */
-  calendars: Record<EventCalendar, boolean>;
+  calendars: EventCalendar[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const toast = useToast();
   useEscapeKey(onClose);
-  const available = (["personal", "room", "chalkFarm"] as const).filter((c) => calendars[c]);
-  const [calendar, setCalendar] = useState<EventCalendar>(
-    (source as EventCalendar) || available[0] || "personal",
-  );
+  const available = calendars.length ? calendars : [{ key: "personal", label: "My calendar" }];
+  const [calendar, setCalendar] = useState<string>(calendarKey || available[0].key);
   const [title, setTitle] = useState(initialTitle);
   const [startTime, setStartTime] = useState(fmtTime(start));
   const [endTime, setEndTime] = useState(fmtTime(end));
@@ -161,13 +162,13 @@ export function EventComposer({
               <div className="flex flex-wrap gap-1.5">
                 {available.map((c) => (
                   <button
-                    key={c}
-                    onClick={() => setCalendar(c)}
+                    key={c.key}
+                    onClick={() => setCalendar(c.key)}
                     className={`cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] font-semibold select-none ${
-                      calendar === c ? "bg-clay text-cream" : "border border-line bg-card text-ink-soft hover:bg-hoverbg"
+                      calendar === c.key ? "bg-clay text-cream" : "border border-line bg-card text-ink-soft hover:bg-hoverbg"
                     }`}
                   >
-                    {CAL_LABEL[c]}
+                    {c.label}
                   </button>
                 ))}
               </div>

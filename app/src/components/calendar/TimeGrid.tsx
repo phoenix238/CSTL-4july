@@ -19,7 +19,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { blockedRange, type Clinic } from "@/lib/booking/rules";
 import { fmtDayShort, fmtTime, londonAddDays, londonDateKey, londonMinutes, londonTime, londonYMD } from "@/lib/time";
-import { AVAIL_COLORS, CLINIC_LABEL, layoutDayEvents, SPAN_COLORS, type AvailClinic, type AvailWindowDTO, type SpanDTO } from "./layout";
+import { availColors, layoutDayEvents, spanColors, type AvailClinic, type AvailWindowDTO, type SpanDTO } from "./layout";
+import { useSpaces } from "../SpacesContext";
+import { spaceName } from "@/lib/spaces";
 import { haptic } from "./haptics";
 
 /** Default height of one hour. Adjustable at runtime — see the `hourPx` prop. */
@@ -152,10 +154,11 @@ export function TimeGrid({
   dayNotes,
   onAvailabilityClick,
   availabilityMode = false,
-  activeClinic = "bethnal",
+  activeClinic,
   picker,
 }: TimeGridProps) {
-  const ghostColor = AVAIL_COLORS[activeClinic].open;
+  const spaces = useSpaces();
+  const ghostColor = availColors(spaces, activeClinic ?? spaces[0]?.id ?? "").open;
   const days = useMemo(
     () => Array.from({ length: dayCount }, (_, i) => londonAddDays(start, i)),
     [start, dayCount],
@@ -179,7 +182,7 @@ export function TimeGrid({
     startHour * 60 + Math.floor((offsetY / hourPx) * 60 / SNAP_MIN) * SNAP_MIN;
 
   // Would a clinic session starting at `slot` collide with anything busy?
-  // The shared Chalk Farm room block is excluded — only real sessions count.
+  // A shared venue day block is excluded — only real sessions count.
   const isBusyAt = (clinic: Clinic, slot: Date) => {
     const { start: bs, end: be } = blockedRange(clinic, slot);
     return spans.some((s) => !s.roomBlock && new Date(s.start) < be && new Date(s.end) > bs);
@@ -190,7 +193,7 @@ export function TimeGrid({
 
   // Only client sessions can be dragged. Everything else on this grid belongs to
   // a calendar this app doesn't own — your own Google entries, the venue's room
-  // events, the shared Chalk Farm block — and dragging those from here moves
+  // events, a shared venue day block — and dragging those from here moves
   // real appointments that have nothing to do with a booking. A personal event
   // is still editable, deliberately, by tapping it and using the composer.
   const isMovable = (span: SpanDTO) =>
@@ -764,9 +767,9 @@ export function TimeGrid({
                   </div>
                 )}
 
-                {/* availability layer — green = Bethnal Green, blue = Waterloo, red =
+                {/* availability layer — one colour per space, red =
                     closed. Weekly baseline is faint and untouchable; drawn overrides
-                    are clickable. When both clinics are drawn on the same day they get
+                    are clickable. When several spaces are drawn on the same day they get
                     their own side-by-side column instead of overlapping, so both stay
                     readable at once; within a clinic's column, its own weekly/bookable
                     layers still deliberately overlay each other. */}
@@ -774,7 +777,7 @@ export function TimeGrid({
                   const clinicsPresent = Array.from(new Set(dayAvail[di].map((w) => w.clinic)));
                   const multi = clinicsPresent.length > 1;
                   return dayAvail[di].map((w, wi) => {
-                    const c = AVAIL_COLORS[w.clinic][w.kind];
+                    const c = availColors(spaces, w.clinic)[w.kind];
                     const editable = w.kind !== "weekly" && !!w.id;
                     const top = toY(w.startMin);
                     const height = Math.max(((w.endMin - w.startMin) / 60) * hourPx, 12);
@@ -788,7 +791,7 @@ export function TimeGrid({
                             : w.exactStart
                               ? "Slot"
                               : "Available") + (w.repeatWeekly ? " ↻" : "");
-                    const label = multi ? `${CLINIC_LABEL[w.clinic]} · ${kindLabel}` : kindLabel;
+                    const label = multi ? `${spaceName(spaces, w.clinic)} · ${kindLabel}` : kindLabel;
                     const laneIndex = multi ? clinicsPresent.indexOf(w.clinic) : 0;
                     const laneCount = multi ? clinicsPresent.length : 1;
                     return (
@@ -967,7 +970,7 @@ export function TimeGrid({
 
                 {/* event blocks */}
                 {laid.map(({ event, lane, lanes }, i) => {
-                  const c = SPAN_COLORS[event.span.source];
+                  const c = spanColors(event.span, spaces);
                   const movable = isMovable(event.span);
                   const clickable = mode === "display" && !!onEventClick;
                   const pickerDim = mode === "picker";

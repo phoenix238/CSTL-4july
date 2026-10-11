@@ -1,7 +1,9 @@
 import { unstable_cache } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { prisma, getSpaces } from "@/lib/db";
+import { spacesForClient } from "@/lib/spaces";
+import { SpacesProvider } from "@/components/SpacesContext";
 import { Shell } from "@/components/Shell";
 import { ToastProvider } from "@/components/ui";
 
@@ -66,8 +68,11 @@ export default async function AppLayout({
   const { enquiryBadge, homeAlert, googleConnected, googleError } =
     await getShellData();
 
+  const spaces = spacesForClient(await getSpaces());
+
   return (
     <ToastProvider>
+      <SpacesProvider spaces={spaces}>
       <Shell
         enquiryBadge={enquiryBadge}
         homeAlert={homeAlert}
@@ -76,6 +81,7 @@ export default async function AppLayout({
       >
         {children}
       </Shell>
+      </SpacesProvider>
     </ToastProvider>
   );
 }

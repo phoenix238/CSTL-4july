@@ -21,12 +21,10 @@ export interface WeeklyWindow {
   endMin: number;
 }
 
-export interface WeeklyHours {
-  waterloo: WeeklyWindow[];
-  bethnal: WeeklyWindow[];
-}
+/** Recurring weekly hours, per space id. A space with no entry has no weekly hours. */
+export type WeeklyHours = Record<string, WeeklyWindow[]>;
 
-export const EMPTY_WEEKLY_HOURS: WeeklyHours = { waterloo: [], bethnal: [] };
+export const EMPTY_WEEKLY_HOURS: WeeklyHours = {};
 
 function resolveWindows(raw: unknown): WeeklyWindow[] {
   if (!Array.isArray(raw)) return [];
@@ -45,14 +43,17 @@ function resolveWindows(raw: unknown): WeeklyWindow[] {
   return out;
 }
 
-/** Validate/normalise whatever is stored in AppSettings.weeklyHours. */
+/** Validate/normalise whatever is stored in AppSettings.weeklyHours — every space's list. */
 export function resolveWeeklyHours(raw: unknown): WeeklyHours {
-  if (!raw || typeof raw !== "object") return EMPTY_WEEKLY_HOURS;
-  const obj = raw as Record<string, unknown>;
-  return {
-    waterloo: resolveWindows(obj.waterloo),
-    bethnal: resolveWindows(obj.bethnal),
-  };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: WeeklyHours = {};
+  for (const [id, windows] of Object.entries(raw as Record<string, unknown>)) out[id] = resolveWindows(windows);
+  return out;
+}
+
+/** One space's weekly hours — empty when it has none saved. */
+export function weeklyHoursFor(hours: WeeklyHours, clinic: string): WeeklyWindow[] {
+  return hours[clinic] ?? [];
 }
 
 export interface OverrideWindow {

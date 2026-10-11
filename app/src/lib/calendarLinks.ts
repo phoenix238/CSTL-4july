@@ -11,7 +11,7 @@
 // Pure and free of Google/Prisma — it just builds strings — so the ICS shape is
 // unit-testable.
 
-import { SESSION_EVENT_TITLE, SESSION_MINUTES, CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { SESSION_EVENT_TITLE, SESSION_MINUTES } from "@/lib/booking/rules";
 
 /** Compact UTC stamp for calendar formats: 2026-09-02T14:00:00Z → "20260902T140000Z". */
 export function toCalendarUTC(d: Date): string {
@@ -106,7 +106,7 @@ export function buildSessionIcs(d: SessionEventDetails, now = new Date()): strin
 // already gets the session on their calendar automatically, as an invited
 // attendee. The .ics above covers everyone who keeps their calendar elsewhere.
 
-/** The clinic address to show as an event location, falling back to the clinic name. */
-export function sessionLocation(clinic: Clinic, address: string | undefined | null): string {
-  return address?.trim() || CLINIC_LABEL[clinic];
+/** The space's address to show as an event location, falling back to its name. */
+export function sessionLocation(space: { name: string; address: string }): string {
+  return space.address.trim() || space.name;
 }

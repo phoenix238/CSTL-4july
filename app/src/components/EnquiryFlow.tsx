@@ -16,7 +16,9 @@ import {
   useIsPhone,
   useToast,
 } from "./ui";
-import { CLINIC_LABEL, CLINIC_PRICE, planBookingEvents, type Clinic } from "@/lib/booking/rules";
+import { planBookingEvents, type Clinic } from "@/lib/booking/rules";
+import { spaceById, spacePriceLabel } from "@/lib/spaces";
+import { useActiveSpaces, useSpaces } from "./SpacesContext";
 import { composeBookingEmail, type EmailSettings } from "@/lib/booking/email";
 import { composeOfferMessage, composeOfferTimesOnly } from "@/lib/booking/offer";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -94,7 +96,13 @@ export function EnquiryFlow({
     existingClient ? { ...existingClient, saved: true } : null,
   );
   const [saving, setSaving] = useState(false);
-  const [clinic, setClinic] = useState<Clinic>((existingClient?.clinic as Clinic) || "bethnal");
+  const spaces = useSpaces();
+  const bookable = useActiveSpaces();
+  /** A stored space id if it's still open for booking, else the first open space. */
+  const openSpaceId = (id: string | null | undefined): Clinic =>
+    bookable.some((s) => s.id === id) ? (id as Clinic) : (bookable[0]?.id ?? "");
+  const [clinic, setClinic] = useState<Clinic>(() => openSpaceId(existingClient?.clinic));
+  const space = spaceById(spaces, clinic);
   const [weekStart, setWeekStart] = useState(() => londonWeekStart());
   const [selected, setSelected] = useState<Date[]>([]);
   const [bookMode, setBookMode] = useState<"confirm" | "offer">("offer");
@@ -177,7 +185,7 @@ export function EnquiryFlow({
     if (!settings) return null;
     if (bookMode === "offer") {
       if (!selected.length) return null;
-      return { body: composeOfferMessage(displayName, clinic, selected, undefined, settings.clientCopy) };
+      return { body: composeOfferMessage(displayName, space.name, selected, undefined, settings.clientCopy) };
     }
     if (!confirmSlot) return null;
     const whenLabel = `${fmtDayLong(confirmSlot)} · ${fmtTime(confirmSlot)}`;
@@ -188,7 +196,7 @@ export function EnquiryFlow({
       sendPayment,
       settings,
     );
-  }, [settings, bookMode, selected, confirmSlot, clinic, sendPayment, activeClient, name]);
+  }, [settings, bookMode, selected, confirmSlot, clinic, space.name, sendPayment, activeClient, name]);
 
   useEffect(() => {
     if (composed && !emailDirty) setEmailBody(composed.body);
@@ -293,8 +301,8 @@ export function EnquiryFlow({
     const offered = (enq.offeredTimes ?? []).map((t) => new Date(t)).filter((d) => !Number.isNaN(d.getTime()));
     setOfferedTimes(offered);
     setBookMode(offered.length ? "confirm" : "offer");
-    if (m?.saved && m.clinic) setClinic(m.clinic as Clinic);
-    else if (a.clinicSuggestion) setClinic(a.clinicSuggestion);
+    if (m?.saved && m.clinic) setClinic(openSpaceId(m.clinic));
+    else if (a.clinicSuggestion && bookable.some((s) => s.id === a.clinicSuggestion)) setClinic(a.clinicSuggestion);
   }
 
   async function loadEnquiry(id: string, pick?: string) {
@@ -374,7 +382,7 @@ export function EnquiryFlow({
     setBookMode("offer");
     setOfferedTimes([]);
     setEmailDirty(false);
-    if (client.clinic) setClinic(client.clinic as Clinic);
+    if (client.clinic) setClinic(openSpaceId(client.clinic));
     if (message) toast(message);
     void refreshWaiting();
     void checkActiveOffer(client.id);
@@ -435,7 +443,7 @@ export function EnquiryFlow({
     try {
       const id = await ensureEnquiry();
       const displayName = (activeClient?.name || name || "there").trim();
-      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected, undefined, settings?.clientCopy);
+      const message = emailBody.trim() || composeOfferMessage(displayName, space.name, selected, undefined, settings?.clientCopy);
       // The clipboard gets either the full message or just the bare times/days;
       // the offer itself (times + status) is recorded the same way regardless.
       const clip = timesOnly ? composeOfferTimesOnly(selected) : message;
@@ -482,7 +490,7 @@ export function EnquiryFlow({
     try {
       const id = await ensureEnquiry();
       const displayName = (activeClient.name || name || "there").trim();
-      const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected, undefined, settings?.clientCopy);
+      const message = emailBody.trim() || composeOfferMessage(displayName, space.name, selected, undefined, settings?.clientCopy);
       await api(`/api/enquiries/${id}/offer`, {
         method: "POST",
         body: JSON.stringify({
@@ -652,8 +660,7 @@ export function EnquiryFlow({
 
   /* ---------------- grid / book ---------------- */
 
-  const clinicAddress = settings ? (clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress) : undefined;
-  const plan = confirmSlot ? planBookingEvents(clinic, confirmSlot, clinicAddress) : [];
+  const plan = confirmSlot ? planBookingEvents(space, confirmSlot) : [];
   const isReturning = !!activeClient?.welcomeSent;
   const canStartOver = !!(saved || match || name.trim() || enquiryId);
 
@@ -809,8 +816,8 @@ export function EnquiryFlow({
               · 60 min session
             </div>
           </div>
-          <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
-            {(["bethnal", "waterloo"] as const).map((c) => (
+          <div className="flex flex-wrap rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
+            {bookable.map(({ id: c }) => (
               <button
                 key={c}
                 onClick={() => {
@@ -821,7 +828,9 @@ export function EnquiryFlow({
                   clinic === c ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
                 }`}
               >
-                {CLINIC_LABEL[c]} · {c === "waterloo" ? "£80" : "£30–60"}
+                {spaceById(spaces, c).name}
+                {spacePriceLabel(spaceById(spaces, c)) &&
+                  ` · ${spacePriceLabel(spaceById(spaces, c)).replace(/ sliding scale$/, "")}`}
               </button>
             ))}
           </div>
@@ -891,8 +900,8 @@ export function EnquiryFlow({
 
       <SectionLabel>
         {bookMode === "offer"
-          ? `PICK A FEW TIMES TO OFFER — ${CLINIC_LABEL[clinic]} · tap free times on the grid`
-          : `PICK A SLOT — ${CLINIC_LABEL[clinic]} · tap a free time on the grid`}
+          ? `PICK A FEW TIMES TO OFFER — ${space.name} · tap free times on the grid`
+          : `PICK A SLOT — ${space.name} · tap a free time on the grid`}
       </SectionLabel>
 
       {bookMode === "confirm" && offeredTimes.length > 0 && (
@@ -982,7 +991,7 @@ export function EnquiryFlow({
       {bookMode === "confirm" && confirmSlot && (
         <Card className="flex flex-col gap-3 border-[1.5px] border-clay/35 px-5 py-4">
           <div className="text-[14px] font-semibold">
-            {fmtDayLong(confirmSlot)} · {fmtTime(confirmSlot)} — {CLINIC_LABEL[clinic]}
+            {fmtDayLong(confirmSlot)} · {fmtTime(confirmSlot)} — {space.name}
           </div>
           <SectionLabel>CALENDAR EVENTS TO CREATE</SectionLabel>
           <div className="flex flex-col gap-1.5 text-[13px]">
@@ -1010,7 +1019,7 @@ export function EnquiryFlow({
                   setEmailDirty(false);
                 }}
               />
-              New client — include payment details ({CLINIC_PRICE[clinic]})
+              New client — include payment details ({spacePriceLabel(space)})
             </label>
           )}
           <textarea

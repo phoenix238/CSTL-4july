@@ -1,8 +1,9 @@
-import { prisma } from "@/lib/db";
+import { prisma, getSpaces } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { getCalendarApi, calendarId } from "./client";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import { spaceName } from "@/lib/spaces";
 
 /** How far ahead to check that bookings still have a matching calendar event. */
 export const RECONCILE_HORIZON_DAYS = 14;
@@ -98,12 +99,13 @@ export async function reconcileUpcomingEvents({
   if (newIssues.length) {
     const to = process.env.ALLOWED_EMAIL;
     if (to) {
+      const spaces = await getSpaces();
       const lines = [
         `${newIssues.length} upcoming session${newIssues.length === 1 ? "'s calendar event looks" : "s' calendar events look"} out of sync:`,
         "",
         ...newIssues.map(
           (i) =>
-            `  ${i.clientName} — ${i.whenLabel} · ${CLINIC_LABEL[i.clinic]}: ${
+            `  ${i.clientName} — ${i.whenLabel} · ${spaceName(spaces, i.clinic)}: ${
               i.problem === "missing" ? "event missing from the calendar" : `moved to ${i.movedToLabel}`
             }`,
         ),

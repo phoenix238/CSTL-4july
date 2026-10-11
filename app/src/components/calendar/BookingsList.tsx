@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import { spaceName } from "@/lib/spaces";
+import { useSpaces } from "../SpacesContext";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { Card, OutlineButton, SectionLabel, api, useToast } from "../ui";
 import type { SpanDTO } from "./layout";
@@ -16,6 +17,7 @@ export function BookingsList({
   onChanged: () => void;
 }) {
   const toast = useToast();
+  const spaces = useSpaces();
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const bookings = (spans ?? [])
@@ -27,7 +29,7 @@ export function BookingsList({
   async function cancel(span: SpanDTO) {
     if (!span.bookingId) return;
     const name = span.title.split(" — ")[0];
-    if (!window.confirm(`Cancel ${name}'s session? Both the personal and clinic/room calendar events are deleted.`))
+    if (!window.confirm(`Cancel ${name}'s session? Both your own and any venue calendar events are deleted.`))
       return;
     setCancellingId(span.bookingId);
     try {
@@ -71,7 +73,7 @@ export function BookingsList({
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">{b.title.split(" — ")[0]}</span>
               )}
               <span className="flex-none text-[11.5px] text-muted">
-                {b.clinic ? CLINIC_LABEL[b.clinic as Clinic] : ""}
+                {b.clinic ? spaceName(spaces, b.clinic) : ""}
               </span>
               {isPast ? (
                 <span className="flex-none text-[11.5px] text-faint">Completed</span>

@@ -19,13 +19,22 @@ export const COLUMN_KEYS = new Set(["dob", "phone", "occupation", "doctor", "con
  * Fixed consent wording, shown on every intake form and logged verbatim to
  * the client's Doc alongside their answer — not part of the configurable
  * question list, since it shouldn't be casually reworded or removed.
+ *
+ * It names who holds the client's data, so it carries {yourName} and is read
+ * through consentParagraphs() — a second practitioner's clients must consent
+ * to HER storing their records, not to the practice's first practitioner.
  */
-export const CONSENT_PARAGRAPHS = [
+const CONSENT_TEMPLATE = [
   "I consent to receiving craniosacral therapy and understand I can stop the session at any time.",
   "I understand that this is not a substitute for medical treatment or diagnosis.",
-  "I give permission for Phoenix to take and securely store my information in line with data protection laws. My information will not be shared with anyone else and will only be used for therapeutic and record-keeping purposes.",
-  "I understand I can request to access or delete my data at any time by contacting Phoenix.",
+  "I give permission for {yourName} to take and securely store my information in line with data protection laws. My information will not be shared with anyone else and will only be used for therapeutic and record-keeping purposes.",
+  "I understand I can request to access or delete my data at any time by contacting {yourName}.",
 ];
+
+/** The consent paragraphs, naming the practitioner who holds the data. */
+export function consentParagraphs(yourName: string): string[] {
+  return CONSENT_TEMPLATE.map((p) => p.split("{yourName}").join(yourName));
+}
 
 /** The built-in questions, used when Settings hasn't customised them. */
 export const DEFAULT_INTAKE_QUESTIONS: IntakeQuestion[] = [

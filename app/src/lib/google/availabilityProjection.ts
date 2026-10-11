@@ -5,7 +5,8 @@
 // booking engine in lib/booking/availability.ts is.
 
 import { dayOpenIntervals, type OverrideWindow, type WeeklyHours } from "@/lib/booking/availability";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
+import type { Space } from "@/lib/spaces";
 import { londonAddDays, londonDateKey, londonMinutes, londonTime, londonWeekdayIndex } from "@/lib/time";
 
 /** How far ahead the availability calendar is materialised. ~12 weeks — long
@@ -13,22 +14,36 @@ import { londonAddDays, londonDateKey, londonMinutes, londonTime, londonWeekdayI
  *  events at most. The window rolls forward from today on each sync. */
 export const AVAIL_HORIZON_DAYS = 84;
 
-export const AVAIL_CLINICS: Clinic[] = ["waterloo", "bethnal"];
-
-/** The canonical title the app writes for a block, per clinic. */
-export function canonicalSummary(clinic: Clinic): string {
-  return `Available — ${CLINIC_LABEL[clinic]}`;
+/** The canonical title the app writes for a block, per space. */
+export function canonicalSummary(space: Pick<Space, "name">): string {
+  return `Available — ${space.name}`;
 }
 
+/** Shorthands the original two clinics were written as in Google, kept recognised. */
+const LEGACY_ALIASES: Record<string, RegExp> = {
+  bethnal: /bethnal|chalk|\bbg\b/,
+  waterloo: /waterloo|\bwloo\b/,
+};
+
 /**
- * Which clinic a block created in Google belongs to. One shared calendar can't
- * tell the two apart, so we read a keyword from the title and fall back to the
- * configured default clinic when there isn't one.
+ * Which space a block created in Google belongs to. One shared calendar can't
+ * tell them apart, so we look for a space's name in the title (or one of the
+ * original clinics' shorthands) and fall back to the configured default space
+ * when there isn't one. Longer names are tried first, so "Garden Room Annex"
+ * isn't claimed by "Garden Room".
  */
-export function clinicFromTitle(title: string | null | undefined, fallback: Clinic): Clinic {
+export function clinicFromTitle(
+  title: string | null | undefined,
+  spaces: Array<Pick<Space, "id" | "name">>,
+  fallback: Clinic,
+): Clinic {
   const t = (title ?? "").toLowerCase();
-  if (/bethnal|chalk|\bbg\b/.test(t)) return "bethnal";
-  if (/waterloo|\bwloo\b/.test(t)) return "waterloo";
+  if (!t) return fallback;
+  const byLength = [...spaces].sort((a, b) => b.name.length - a.name.length);
+  for (const sp of byLength) {
+    const name = sp.name.trim().toLowerCase();
+    if ((name && t.includes(name)) || LEGACY_ALIASES[sp.id]?.test(t)) return sp.id;
+  }
   return fallback;
 }
 
@@ -50,6 +65,7 @@ export const keyOf = (w: { clinic: string; dateKey: string; startMin: number; en
  */
 export function expectedWindows(args: {
   weeklyHours: WeeklyHours;
+  /** one entry per space to project — the bookable spaces */
   overridesByClinic: Record<Clinic, OverrideWindow[]>;
   windowStart: Date;
   windowEnd: Date;
@@ -59,8 +75,8 @@ export function expectedWindows(args: {
   for (let day = new Date(windowStart); day < windowEnd; day = londonAddDays(day, 1)) {
     const dateKey = londonDateKey(day);
     const weekday = londonWeekdayIndex(day);
-    for (const clinic of AVAIL_CLINICS) {
-      const intervals = dayOpenIntervals(weekday, dateKey, weeklyHours[clinic], overridesByClinic[clinic]);
+    for (const clinic of Object.keys(overridesByClinic)) {
+      const intervals = dayOpenIntervals(weekday, dateKey, weeklyHours[clinic] ?? [], overridesByClinic[clinic]);
       for (const iv of intervals) out.push({ clinic, dateKey, startMin: iv.start, endMin: iv.end });
     }
   }

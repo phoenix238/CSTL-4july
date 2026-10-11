@@ -11,22 +11,37 @@ import { londonAddDays, londonDateKey, londonTime } from "@/lib/time";
 
 describe("canonicalSummary", () => {
   it("names the clinic", () => {
-    expect(canonicalSummary("waterloo")).toBe("Available — Waterloo");
-    expect(canonicalSummary("bethnal")).toBe("Available — Bethnal Green");
+    expect(canonicalSummary({ name: "Waterloo" })).toBe("Available — Waterloo");
+    expect(canonicalSummary({ name: "Bethnal Green" })).toBe("Available — Bethnal Green");
   });
 });
 
+const LEGACY = [
+  { id: "waterloo", name: "Waterloo" },
+  { id: "bethnal", name: "Bethnal Green" },
+];
+
 describe("clinicFromTitle", () => {
+  it("finds any space by its name, longest name first", () => {
+    const spaces = [
+      { id: "garden", name: "Garden Room" },
+      { id: "annex", name: "Garden Room Annex" },
+    ];
+    expect(clinicFromTitle("garden room annex 10-12", spaces, "garden")).toBe("annex");
+    expect(clinicFromTitle("Garden Room 2pm", spaces, "annex")).toBe("garden");
+    expect(clinicFromTitle("Available", spaces, "garden")).toBe("garden");
+  });
+
   it("reads a clinic keyword from the title", () => {
-    expect(clinicFromTitle("Bethnal 6–7pm", "waterloo")).toBe("bethnal");
-    expect(clinicFromTitle("BG evening", "waterloo")).toBe("bethnal");
-    expect(clinicFromTitle("chalk farm slot", "waterloo")).toBe("bethnal");
-    expect(clinicFromTitle("Waterloo morning", "bethnal")).toBe("waterloo");
+    expect(clinicFromTitle("Bethnal 6–7pm", LEGACY, "waterloo")).toBe("bethnal");
+    expect(clinicFromTitle("BG evening", LEGACY, "waterloo")).toBe("bethnal");
+    expect(clinicFromTitle("chalk farm slot", LEGACY, "waterloo")).toBe("bethnal");
+    expect(clinicFromTitle("Waterloo morning", LEGACY, "bethnal")).toBe("waterloo");
   });
   it("falls back when there is no keyword", () => {
-    expect(clinicFromTitle("Available", "waterloo")).toBe("waterloo");
-    expect(clinicFromTitle("", "bethnal")).toBe("bethnal");
-    expect(clinicFromTitle(null, "bethnal")).toBe("bethnal");
+    expect(clinicFromTitle("Available", LEGACY, "waterloo")).toBe("waterloo");
+    expect(clinicFromTitle("", LEGACY, "bethnal")).toBe("bethnal");
+    expect(clinicFromTitle(null, LEGACY, "bethnal")).toBe("bethnal");
   });
 });
 

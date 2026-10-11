@@ -1,4 +1,5 @@
-import { prisma } from "@/lib/db";
+import { prisma, getSettings, getSpaces } from "@/lib/db";
+import { activeSpaces } from "@/lib/spaces";
 import { ensureClientFolderAndDoc, renameClientDrive } from "@/lib/google/drive";
 import { upsertMarketingRow } from "@/lib/google/sheets";
 import { cancelBookingEvents } from "@/lib/google/calendar";
@@ -97,7 +98,12 @@ export async function createClientWithDrive(data: {
       name: data.name.trim(),
       email: data.email?.trim() ?? "",
       phone: data.phone?.trim() ?? "",
-      clinic: data.clinic ?? "bethnal",
+      // No space given → the first space open for booking.
+      clinic: data.clinic ?? activeSpaces(await getSpaces())[0]?.id ?? "",
+      // The day-before reminder, on from the start unless switched off in
+      // Settings — a new client can turn it off from their own page. Only ever
+      // set as a record is created; no existing client is opted in.
+      reminderLeadDays: (await getSettings()).remindNewClientsByDefault ? [1] : [],
       marketing: data.marketing ?? false,
     },
   });

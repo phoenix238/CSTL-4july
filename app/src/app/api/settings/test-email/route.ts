@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
-import { getSettings } from "@/lib/db";
+import { getSettings, getSpaces } from "@/lib/db";
+import { activeSpaces } from "@/lib/spaces";
 import { sendEmail } from "@/lib/google/gmail";
 import { composeBookingEmail, resolveSignOff } from "@/lib/booking/email";
 import { composeReviewEmail } from "@/lib/booking/review";
 import { composePaymentReminder } from "@/lib/payments/unpaid";
 import { composeSessionReminder } from "@/lib/reminders/sessionReminders";
 import { resolveClientCopy } from "@/lib/clientCopy";
+import { composeBookingPageEmail } from "@/lib/bookingPageEmail";
+import { composeFirstSessionEmail } from "@/lib/reminders/firstSession";
+import { composeNoShowEmail } from "@/lib/noShow";
+import { practitionerIdentity } from "@/lib/practitioner";
 import { confirmToClient, sendReceipt } from "@/lib/portalNotify";
-import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
+import type { Clinic } from "@/lib/booking/rules";
 import { intakeUrl } from "@/lib/intake";
 import { portalUrl } from "@/lib/portal";
 import { sessionLocation } from "@/lib/calendarLinks";
@@ -19,10 +24,15 @@ export type TestEmailType =
   | "first"
   | "returning"
   | "cancellation"
+  | "moved"
   | "receipt"
   | "reminder"
   | "session-reminder"
-  | "review";
+  | "review"
+  | "booking-page"
+  | "first-session"
+  | "first-session-done"
+  | "no-show";
 
 /**
  * Send yourself the exact email a client would get, composed against your real
@@ -37,8 +47,12 @@ export const POST = guarded(async (req: Request) => {
     type?: TestEmailType;
     clinic?: Clinic;
   };
-  const clinic: Clinic = clinicIn === "waterloo" ? "waterloo" : "bethnal";
   const settings = await getSettings();
+  // The space picked for the sample — any open space; the first one otherwise.
+  const open = activeSpaces(await getSpaces());
+  const space = open.find((sp) => sp.id === clinicIn) ?? open[0];
+  if (!space) return NextResponse.json({ error: "Add a space in Settings first." }, { status: 400 });
+  const clinic: Clinic = space.id;
 
   const clientName = "Maya Sample";
   // A real (made-up) date two weeks out, rather than a hardcoded label, so the
@@ -48,8 +62,7 @@ export const POST = guarded(async (req: Request) => {
   const testStart = londonTime(y, m, d, 12, 15);
   const whenLabel = `${fmtDayLong(testStart)} · ${fmtTime(testStart)}`;
   const paymentRef = "MAYA-4K2";
-  const address = clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
-  const location = sessionLocation(clinic, address);
+  const location = sessionLocation(space);
   const portalLink = portalUrl(settings, "sample-token");
   const links = {
     intakeLink: intakeUrl(settings, "sample-token"),
@@ -90,6 +103,61 @@ export const POST = guarded(async (req: Request) => {
       });
       break;
     }
+    case "moved": {
+      // The real "your session has been moved" email, addressed to you.
+      await confirmToClient({
+        action: "rescheduled",
+        clientName,
+        clientEmail: to,
+        clinic,
+        whenLabel,
+        previousWhenLabel: `${fmtDayLong(londonAddDays(testStart, -2))} · ${fmtTime(testStart)}`,
+        portalLink: links.portalLink,
+      });
+      break;
+    }
+    case "booking-page": {
+      const { subject, body } = composeBookingPageEmail(settings, { clientName, link: portalLink, paymentRef });
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
+    case "first-session":
+    case "first-session-done": {
+      const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+      const { subject, body } = composeFirstSessionEmail(
+        {
+          clientFirstName: "Maya",
+          whenLabel,
+          space,
+          intakeDone: type === "first-session-done",
+          intakeLink: links.intakeLink,
+          portalLink,
+          remindersLink: `${portalLink}#reminders`,
+          offerReminders: !settings.remindNewClientsByDefault,
+        },
+        copy,
+        resolveSignOff(settings),
+      );
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
+    case "no-show": {
+      const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
+      const { subject, body } = composeNoShowEmail(
+        {
+          clientFirstName: "Maya",
+          whenLabel,
+          clinicName: space.name,
+          contributionPence: settings.lateCancelGoodwillPence,
+          paymentRef,
+          portalLink,
+        },
+        copy,
+        resolveSignOff(settings),
+      );
+      await sendEmail(to, `[Test] ${subject}`, body);
+      break;
+    }
     case "receipt": {
       await sendReceipt({
         clientName,
@@ -97,7 +165,7 @@ export const POST = guarded(async (req: Request) => {
         clientRef: paymentRef,
         // A made-up number rather than issueReceiptNumber() — a test send shouldn't burn a real one.
         receiptNumber: "RCT-SAMPLE",
-        lines: [{ whenLabel, clinic, clinicLabel: CLINIC_LABEL[clinic], amountPence: 4000, paymentNote: "Cash" }],
+        lines: [{ whenLabel, clinic, clinicLabel: space.name, amountPence: 4000, paymentNote: "Cash" }],
         totalPence: 4000,
         unpricedCount: 0,
       });
@@ -118,10 +186,10 @@ export const POST = guarded(async (req: Request) => {
       // The daily reminder sweep's own email — same composer, same sample links
       // as the "first"/"returning" cases above, so this reads exactly like a real
       // reminder for a session a client opted into.
-      const copy = resolveClientCopy(settings.clientCopy);
+      const copy = resolveClientCopy(settings.clientCopy, practitionerIdentity(settings));
       const signOff = resolveSignOff(settings);
       const { subject, body } = composeSessionReminder(
-        { clientName, whenLabel, clinic, location, icsUrl: links.calendarIcsUrl, portalLink: links.portalLink },
+        { clientName, whenLabel, clinicName: space.name, location, icsUrl: links.calendarIcsUrl, portalLink: links.portalLink },
         copy,
         signOff,
       );

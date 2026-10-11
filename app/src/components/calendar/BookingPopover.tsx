@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { fmtDayLong, fmtTime } from "@/lib/time";
-import { CLINIC_LABEL } from "@/lib/booking/rules";
+import { useSpaces } from "../SpacesContext";
+import { spaceName } from "@/lib/spaces";
 import { OutlineButton, PrimaryButton, TintButton, useEscapeKey } from "../ui";
 import type { SpanDTO } from "./layout";
 
@@ -27,6 +28,7 @@ export function BookingPopover({
   cancelling: boolean;
 }) {
   useEscapeKey(onClose);
+  const spaces = useSpaces();
   const start = new Date(span.start);
   // Once a session's start time has passed there's nothing left to reschedule
   // or cancel — same "already happened" definition used for accounting (see
@@ -60,7 +62,7 @@ export function BookingPopover({
               </Link>
               <div className="mt-0.5 text-[12.5px] text-muted">
                 {fmtDayLong(start)} · {fmtTime(start)}–{fmtTime(new Date(span.end))}
-                {span.clinic ? ` · ${CLINIC_LABEL[span.clinic]}` : ""}
+                {span.clinic ? ` · ${spaceName(spaces, span.clinic)}` : ""}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">

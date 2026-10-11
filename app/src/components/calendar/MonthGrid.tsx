@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { londonAddDays, londonWeekStart, londonYMD } from "@/lib/time";
-import { SPAN_COLORS, type SpanDTO } from "./layout";
+import { useSpaces } from "../SpacesContext";
+import { spanColors, type SpanDTO } from "./layout";
 
 /** Classic month grid: weeks as rows, each day showing its first few events. */
 export function MonthGrid({
@@ -14,6 +15,7 @@ export function MonthGrid({
   spans: SpanDTO[] | null;
   onDayClick: (day: Date) => void;
 }) {
+  const spaces = useSpaces();
   const { y: curY, m: curM } = londonYMD(month);
 
   const days = useMemo(() => {
@@ -91,7 +93,7 @@ export function MonthGrid({
                   {ymd.d}
                 </span>
                 {events.slice(0, 3).map((s, i) => {
-                  const c = SPAN_COLORS[s.source];
+                  const c = spanColors(s, spaces);
                   return (
                     <span
                       key={i}
