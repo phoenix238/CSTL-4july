@@ -5,6 +5,7 @@ import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { BookingConfirmation } from "./BookingConfirmation";
 import { EmbedBridge, scrollEmbedToTop } from "./EmbedBridge";
+import { readAttributionFromLocation } from "@/lib/booking/attribution";
 import { CLINIC_BOOKING_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import type { ClientCopy } from "@/lib/clientCopy";
@@ -133,7 +134,16 @@ export function BookingFlow({
     try {
       const result = await api<BookResponse>("/api/public/book", {
         method: "POST",
-        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning }),
+        body: JSON.stringify({
+          clinic,
+          startISO: selected,
+          name,
+          email,
+          phone,
+          company,
+          confirmReturning,
+          attribution: readAttributionFromLocation(),
+        }),
       });
       if (result.needsConfirm) {
         setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
