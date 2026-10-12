@@ -8,6 +8,7 @@ import { bookSession } from "@/lib/booking/book";
 import { isValidEmail } from "@/lib/validate";
 import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
 import { sendEmail } from "@/lib/google/gmail";
+import { cleanAttribution } from "@/lib/booking/attribution";
 
 // NOT guarded — public self-booking. Authorization model: we never trust the
 // posted startISO; we independently recompute the currently-available slot
@@ -25,6 +26,9 @@ export async function POST(req: Request) {
       /** the visitor has answered "yes, that's me" to the returning-client prompt */
       confirmReturning?: boolean;
     };
+    // Campaign tags from the website link. Untrusted input: cleaned to a few short
+    // plain strings, and a failure to read them never blocks a booking.
+    const attribution = cleanAttribution((body as { attribution?: unknown }).attribution);
 
     if (company?.trim()) {
       // Bot filled the hidden field — reject quietly, no booking attempted.
@@ -87,6 +91,7 @@ export async function POST(req: Request) {
       sendEmail: true,
       sendPayment: true,
       bookedVia: "online",
+      attribution,
       // A returning client booking here is arranging another session, not moving
       // the one they already have. Moving is what the portal's reschedule is for.
       replaceUpcoming: false,
