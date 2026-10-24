@@ -68,6 +68,10 @@ export async function calendarId(key: CalendarKey): Promise<string> {
     if (!s.roomCalendarId) throw new Error("The R5 room calendar isn't set yet — add it in Settings.");
     return s.roomCalendarId;
   }
+  if (key === "roomFallback") {
+    if (!s.roomFallbackCalendarId) throw new Error("The fallback room calendar isn't set yet — add it in Settings.");
+    return s.roomFallbackCalendarId;
+  }
   if (key === "availability") {
     if (!s.availabilityCalendarId) {
       throw new Error("The availability calendar isn't connected yet — connect it in Settings › Availability.");
