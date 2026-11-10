@@ -17,6 +17,7 @@ import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
 import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
 import { SlotTakenError } from "./slots";
+import type { Attribution } from "./attribution";
 
 export interface BookingRequest {
   /** existing client id — or absent with newClient set */
@@ -33,6 +34,8 @@ export interface BookingRequest {
   gmailMessageId?: string;
   /** where the booking came from: admin | online | portal | offer */
   bookedVia?: string;
+  /** campaign tags from the link that opened the public booking page (online bookings only) */
+  attribution?: Attribution;
   /**
    * Treat this as a move rather than an addition: cancel the client's existing
    * upcoming session and free its slot.
@@ -112,11 +115,13 @@ async function createBookingRow({
   clinic,
   start,
   bookedVia,
+  attribution,
 }: {
   clientId: string;
   clinic: Clinic;
   start: Date;
   bookedVia: string;
+  attribution?: Attribution;
 }) {
   const end = new Date(start.getTime() + SESSION_MINUTES * 60_000);
   return prisma.$transaction(async (tx) => {
@@ -137,6 +142,7 @@ async function createBookingRow({
         clinic,
         startsAt: start,
         bookedVia,
+        ...(attribution ?? {}),
         // Waterloo has a fixed price, so it's known the moment the session is booked.
         // Bethnal Green is a sliding scale the client chooses — left null rather than
         // guessed, and filled in from the profile once the real amount is known.
@@ -192,6 +198,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     clinic: req.clinic,
     start,
     bookedVia: req.bookedVia ?? "admin",
+    attribution: req.attribution,
   });
   await createBookingEvents(booking.id);
 
