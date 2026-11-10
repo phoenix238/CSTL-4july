@@ -181,6 +181,13 @@ model Booking {
 
   // How the booking was made, so the inbox and stats can tell them apart.
   bookedVia       String @default("admin") // admin | online | portal | offer
+  // Which campaign an online booking came from, taken from the utm_ tags on the
+  // website link that opened the booking page. Own data only: never sent to Meta
+  // or Google. Blank for admin/portal/offer bookings and untagged visits.
+  adSource   String @default("")
+  adMedium   String @default("")
+  adCampaign String @default("")
+  adContent  String @default("")
   rescheduleCount Int    @default(0)
   // Which of the client's chosen reminder lead times (see Client.reminderLeadDays)
   // have already been emailed for this session, so the daily sweep sends each one

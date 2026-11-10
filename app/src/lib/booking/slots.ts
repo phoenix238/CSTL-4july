@@ -7,8 +7,8 @@ import { SESSION_MINUTES, type Clinic } from "./rules";
 /**
  * Bethnal Green's weekly Chalk Farm hours cap, as a `computeAvailableSlots`-
  * ready `weeklyCap` — Phoenix's own session hours each London week (Mon-Sun),
- * counted one session length per confirmed session (gaps between them don't
- * count). Shared by `loadAvailableSlots` and the offer-pick flow
+ * counted as the Chalk Farm room blocks they make (padding included, close
+ * sessions sharing a block), the same blocks drawn on the shared calendar. Shared by `loadAvailableSlots` and the offer-pick flow
  * (`api/public/offer/[token]`), which re-verifies a hand-picked time without
  * going through that function. Queries a week of margin either side of
  * `windowStart`/`windowEnd` so every week touched by that window is fully
@@ -43,12 +43,16 @@ export async function loadBethnalWeeklyCap(
   for (const [dateKey, mins] of Object.entries(sessionMinsByDay)) {
     const [y, m, d] = dateKey.split("-").map(Number);
     const weekKey = londonDateKey(londonWeekStart(londonTime(y, m, d, 12, 0)));
-    capMinutesByWeek[weekKey] = (capMinutesByWeek[weekKey] ?? 0) + chalkFarmCapMinutes(mins);
+    capMinutesByWeek[weekKey] =
+      (capMinutesByWeek[weekKey] ?? 0) +
+      chalkFarmCapMinutes(mins, settings.chalkFarmEdgeBufferMinutes, settings.chalkFarmClusterGapMinutes);
   }
   return {
     capMinutes: settings.chalkFarmWeeklyCapHours * 60,
     capMinutesByWeek,
     sessionMinsByDay,
+    edgeBufferMinutes: settings.chalkFarmEdgeBufferMinutes,
+    clusterGapMinutes: settings.chalkFarmClusterGapMinutes,
   };
 }
 

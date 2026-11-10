@@ -159,6 +159,18 @@ describe("computeAvailableSlots on ordinary times on DST days", () => {
   }
 });
 
+describe("chalkFarmCapMinutes with block padding", () => {
+  it("counts a block from edge before the first session to edge after the last", () => {
+    // 14:45 + 16:00 share one block (14:30-17:15), 18:00 is its own (17:45-19:15)
+    expect(chalkFarmCapMinutes([885, 960, 1080], 15, 45)).toBe(165 + 90);
+  });
+  it("matches the week of 11 Nov: 11.25 hrs", () => {
+    const wed = chalkFarmCapMinutes([885, 960, 1080], 15, 45);
+    const thu = chalkFarmCapMinutes([660, 735, 810, 900, 1140], 15, 45);
+    expect((wed + thu) / 60).toBe(11.25);
+  });
+});
+
 describe("chalkFarmCapMinutes", () => {
   it("is zero for a day with no sessions", () => {
     expect(chalkFarmCapMinutes([])).toBe(0);

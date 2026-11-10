@@ -206,6 +206,13 @@ export interface AvailabilityParams {
     capMinutes: number;
     capMinutesByWeek: Record<string, number>;
     sessionMinsByDay: Record<string, number[]>;
+    /**
+     * The Chalk Farm block shape the cap is measured in: padding either side of
+     * each block, and the largest gap between sessions that still shares one
+     * block. Both default to 0 (plain session hours).
+     */
+    edgeBufferMinutes?: number;
+    clusterGapMinutes?: number;
   };
 }
 
@@ -237,18 +244,19 @@ export function clusterSessions(starts: number[], sessionLen: number, gap: numbe
 }
 
 /**
- * Minutes of Phoenix's own Bethnal (Chalk Farm) session time on one day that
- * count toward the weekly cap: one session length per session, and nothing
- * else. The gaps between sessions and the room's edge padding are deliberately
- * NOT counted — the cap budgets actual session hours, and Phoenix spaces the
- * day out himself when he needs to close a gap. (The shared calendar's physical
- * room blocks span each cluster first-to-last plus edges — see
- * chalkFarmBlockRanges in chalkFarm.ts — that's a separate concern from this
- * budget.) `sessionStartMins` is minutes past London midnight; only its length
- * matters here. Empty → 0. Pure, so the cap math is unit-testable.
+ * Minutes of shared Chalk Farm room time Phoenix holds on one day, which is what
+ * the weekly cap budgets. It is the length of the "Phoenix" blocks on the Chalk
+ * Farm calendar: sessions within `clusterGapMinutes` of each other share a block,
+ * and each block runs `edgeBufferMinutes` before its first session to the same
+ * after its last (the same shape as `chalkFarmBlockRanges` in chalkFarm.ts). With
+ * both left at 0 this is plain session hours. `sessionStartMins` is minutes past
+ * London midnight. Empty → 0. Pure, so the cap math is unit-testable.
  */
-export function chalkFarmCapMinutes(sessionStartMins: number[]): number {
-  return sessionStartMins.length * SESSION_MINUTES;
+export function chalkFarmCapMinutes(sessionStartMins: number[], edgeBufferMinutes = 0, clusterGapMinutes = 0): number {
+  return clusterSessions(sessionStartMins, SESSION_MINUTES, clusterGapMinutes).reduce(
+    (total, c) => total + (c[c.length - 1] + SESSION_MINUTES + edgeBufferMinutes) - (c[0] - edgeBufferMinutes),
+    0,
+  );
 }
 
 const pad = (iv: { start: Date; end: Date }, minutes: number) =>
@@ -359,12 +367,15 @@ function slotFits(
   if (busyClash) return "busy";
 
   if (weeklyCap) {
-    // The cap counts session hours, so a session costs exactly one session
-    // length wherever it lands that day — the gaps around it don't matter.
+    // The cap counts Chalk Farm block hours: what this session adds is the change
+    // in that day's block time, so joining an existing block costs less than a
+    // session on its own.
+    const edge = weeklyCap.edgeBufferMinutes ?? 0;
+    const clusterGap = weeklyCap.clusterGapMinutes ?? 0;
     const dateKey = londonDateKey(candidate);
     const weekKey = londonDateKey(londonWeekStart(candidate));
     const dayStarts = weeklyCap.sessionMinsByDay[dateKey] ?? [];
-    const delta = chalkFarmCapMinutes([...dayStarts, minute]) - chalkFarmCapMinutes(dayStarts);
+    const delta = chalkFarmCapMinutes([...dayStarts, minute], edge, clusterGap) - chalkFarmCapMinutes(dayStarts, edge, clusterGap);
     const weekTotal = weeklyCap.capMinutesByWeek[weekKey] ?? 0;
     if (weekTotal + delta > weeklyCap.capMinutes) return "cap";
   }
