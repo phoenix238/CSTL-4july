@@ -59,6 +59,20 @@ export function QuickBook({
     return () => clearTimeout(t);
   }, [query, client]);
 
+  // Hand-booking skips the slot list where the weekly Chalk Farm cap applies, so
+  // show where the week stands and what this session would take it to.
+  const [week, setWeek] = useState<{ capMinutes: number; usedMinutes: number; afterMinutes: number } | null>(null);
+  useEffect(() => {
+    setWeek(null);
+    if (!client || clinic !== "bethnal") return;
+    api<{ capMinutes: number; usedMinutes: number; afterMinutes: number }>(
+      `/api/chalk-farm-week?start=${encodeURIComponent(slot.toISOString())}`,
+    )
+      .then(setWeek)
+      .catch(() => setWeek(null));
+  }, [client, clinic, slot]);
+  const hrs = (m: number) => `${Math.round((m / 60) * 100) / 100}`;
+
   const plan = client ? planBookingEvents(clinic, slot) : [];
 
   async function book() {
@@ -179,6 +193,17 @@ export function QuickBook({
                   </div>
                 ))}
               </div>
+              {week && week.capMinutes > 0 && (
+                <div
+                  className={`rounded-lg px-3 py-2 text-[12.5px] ${
+                    week.afterMinutes > week.capMinutes ? "bg-[oklch(0.93_0.05_30)] font-semibold" : "bg-hoverbg text-muted"
+                  }`}
+                >
+                  Chalk Farm this week: {hrs(week.usedMinutes)} of {hrs(week.capMinutes)} hrs →{" "}
+                  {hrs(week.afterMinutes)} with this session
+                  {week.afterMinutes > week.capMinutes && " — over your cap"}
+                </div>
+              )}
               <label className="flex items-center gap-2 text-[13px]">
                 <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
                 Send confirmation email
