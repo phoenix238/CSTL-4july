@@ -18,6 +18,17 @@ import type { ClientCopy } from "@/lib/clientCopy";
  * silently skips delivery to the ones that don't, so it's safe to try all
  * three the site is ever embedded from.
  */
+const REMEMBERED_BOOKING_DETAILS = "cstl-booking-details";
+
+function readRememberedDetails(): { name: string; email: string } | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(REMEMBERED_BOOKING_DETAILS) ?? "null");
+    return typeof value?.name === "string" && typeof value?.email === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 const SITE_ORIGINS = [
   "https://craniosacraltherapylondon.com",
   "https://phoenix238.github.io",
@@ -78,6 +89,8 @@ export function BookingFlow({
   // than booking, so the same person doesn't end up as two clients (and so we
   // never book into someone else's record off a mistyped address).
   const [recognised, setRecognised] = useState<{ prompt: string; intakeDone: boolean } | null>(null);
+  const [rememberDetails, setRememberDetails] = useState(false);
+  const [hasRememberedDetails, setHasRememberedDetails] = useState(false);
   const [returningOnly, setReturningOnly] = useState(false);
   const [emailReview, setEmailReview] = useState<"editing" | "sent" | "booked" | null>(null);
   const [linkSending, setLinkSending] = useState(false);
@@ -145,6 +158,13 @@ export function BookingFlow({
       if (result.needsConfirm) {
         setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
         return;
+      }
+      if (rememberDetails) {
+        try {
+          localStorage.setItem(REMEMBERED_BOOKING_DETAILS, JSON.stringify({ name: name.trim(), email: email.trim() }));
+        } catch {
+          // Private browsers can disallow storage. Booking still succeeds.
+        }
       }
       notifyParentOfBooking(clinic);
       scrollEmbedToTop();
@@ -248,6 +268,13 @@ export function BookingFlow({
           clinic={clinic}
           selected={selected}
           onSelect={(iso) => {
+            const remembered = readRememberedDetails();
+            if (remembered) {
+              setName((current) => current || remembered.name);
+              setEmail((current) => current || remembered.email);
+              setRememberDetails(true);
+              setHasRememberedDetails(true);
+            }
             setSelected(iso);
             setRecognised(null);
             setSheetOpen(true);
@@ -392,6 +419,28 @@ export function BookingFlow({
                     className={inputClass}
                   />
                 </label>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={rememberDetails} onChange={(event) => {
+                      setRememberDetails(event.target.checked);
+                      if (!event.target.checked) {
+                        try { localStorage.removeItem(REMEMBERED_BOOKING_DETAILS); } catch { /* Storage unavailable. */ }
+                        setHasRememberedDetails(false);
+                      }
+                    }} />
+                    Remember my name and email on this device
+                  </label>
+                  {hasRememberedDetails && (
+                    <button type="button" className="text-clay-text underline" onClick={() => {
+                      const remembered = readRememberedDetails();
+                      try { localStorage.removeItem(REMEMBERED_BOOKING_DETAILS); } catch { /* Storage unavailable. */ }
+                      if (name === remembered?.name) setName("");
+                      if (email === remembered?.email) setEmail("");
+                      setHasRememberedDetails(false);
+                      setRememberDetails(false);
+                    }}>Forget saved details</button>
+                  )}
+                </div>
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
                   <input
