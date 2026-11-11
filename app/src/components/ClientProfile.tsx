@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { hasClientDraft } from "./clientDrafts";
 import { NotesComposer } from "./NotesComposer";
 import { ReflectionComposer } from "./ReflectionComposer";
 import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
+import { DuplicateClientReview } from "./DuplicateClientReview";
 import { ClientEmailAliases, ClientHistoryDocs, FirstSessionCard, IntakeExcerpt } from "./ClientIntakeCards";
 import type { IntakeAnswer } from "@/lib/intakeProfile";
 import { InPersonIntakePanel } from "./InPersonIntakePanel";
@@ -440,7 +442,7 @@ export function ClientProfile({
           <div className="flex items-center justify-between px-0.5">
             <SectionLabel>SESSION NOTES</SectionLabel>
             <TintButton onClick={() => setNoteOpen(!noteOpen)} className="px-3.5 py-1.5 text-xs">
-              {noteOpen ? "Close" : "+ Add note"}
+              {noteOpen ? "Close" : hasClientDraft(`session:${client.id}`) ? "Resume note draft" : "+ Add note"}
             </TintButton>
           </div>
 
@@ -818,6 +820,7 @@ export function ClientProfile({
           )}
 
           {!editing && <ClientEmailAliases clientId={client.id} emails={alternateEmails} />}
+          {!editing && <DuplicateClientReview clientId={client.id} />}
 
           {!editing && inPersonOpen && (
             <InPersonIntakePanel

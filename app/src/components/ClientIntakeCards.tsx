@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useClientDraft } from "./clientDrafts";
 import { useRouter } from "next/navigation";
 import { FIRST_SESSION_FIELDS, readLegacyIntakeReason, type IntakeAnswer } from "@/lib/intakeProfile";
 import { api, Card, inputClass, SectionLabel, TintButton, useToast } from "./ui";
@@ -22,7 +23,7 @@ export function FirstSessionCard({ clientId, answers, submitted, initial, docId 
   initial: Record<string, string>;
   docId: string;
 }) {
-  const [draft, setDraft] = useState(initial);
+  const [draft, setDraft, clearDraft] = useClientDraft(`intake:${clientId}`, initial);
   const [saved, setSaved] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [legacy, setLegacy] = useState<IntakeAnswer[]>([]);
@@ -51,6 +52,7 @@ export function FirstSessionCard({ clientId, answers, submitted, initial, docId 
     try {
       await api(`/api/clients/${clientId}/first-session`, { method: "PUT", body: JSON.stringify(draft) });
       setSaved(draft);
+      clearDraft(draft);
       toast("First-session notes saved");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Could not save first-session notes.");
@@ -99,7 +101,8 @@ export function FirstSessionCard({ clientId, answers, submitted, initial, docId 
                   rows={2}
                   maxLength={20000}
                   value={draft[key] ?? ""}
-                  onChange={(event) => setDraft((previous) => ({ ...previous, [key]: event.target.value }))}
+                  disabled={saving}
+                  onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
                 />
               </label>
             );
