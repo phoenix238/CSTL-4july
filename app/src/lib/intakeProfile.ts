@@ -50,3 +50,33 @@ export function extendedIntakeFields(questions: IntakeQuestion[], answers: Intak
     original: answers.find((answer) => (QUESTION_FIELDS[answer.key] ?? answer.key) === key)?.answer ?? "",
   }));
 }
+
+/** Read the archival sections added during the case-history consolidation. */
+export function readEarlierCaseHistory(text: string) {
+  const sectionHeading = /^Earlier case history — (.+)$/;
+  const newRecord = /^(?:Session — |INTAKE \/ CASE HISTORY — |Clean Language session — )/i;
+  const sections: { title: string; text: string }[] = [];
+  let title = "";
+  let lines: string[] = [];
+
+  function finish() {
+    const body = lines.join("\n").trim();
+    if (title && body) sections.push({ title, text: body });
+    title = "";
+    lines = [];
+  }
+
+  for (const line of text.split(/\r?\n/)) {
+    const heading = sectionHeading.exec(line.trim());
+    if (heading) {
+      finish();
+      title = heading[1];
+    } else if (newRecord.test(line.trim())) {
+      finish();
+    } else if (title && line.trim() !== "Open original case document") {
+      lines.push(line);
+    }
+  }
+  finish();
+  return sections;
+}

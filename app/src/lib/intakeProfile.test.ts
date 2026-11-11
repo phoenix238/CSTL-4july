@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extendedIntakeFields, readIntakeAnswers, readLegacyIntakeReason } from "./intakeProfile";
+import { extendedIntakeFields, readEarlierCaseHistory, readIntakeAnswers, readLegacyIntakeReason } from "./intakeProfile";
 
 describe("profile intake", () => {
   it("folds submitted answers into existing practitioner fields and keeps older custom answers", () => {
@@ -42,5 +42,28 @@ describe("profile intake", () => {
   it("requires the intake heading and a closing section", () => {
     expect(readLegacyIntakeReason("4. What brings them to therapy\nSession material\n5. Consent")).toEqual([]);
     expect(readLegacyIntakeReason("INTAKE / CASE HISTORY — submitted 2 Nov 2026\n4. What brings them to therapy\nMissing closing heading")).toEqual([]);
+  });
+});
+
+describe("earlier case history", () => {
+  it("shows archived sections without repeating live notes or the source link label", () => {
+    const text = [
+      "Current client record",
+      "Earlier case history — Old intake",
+      "Open original case document",
+      "",
+      "First paragraph.",
+      "",
+      "Second paragraph.",
+      "Earlier case history — Prior visit",
+      "Open original case document",
+      "Another note.",
+      "Session — 11 Nov 2026",
+      "Current CRM session.",
+    ].join("\n");
+    expect(readEarlierCaseHistory(text)).toEqual([
+      { title: "Old intake", text: "First paragraph.\n\nSecond paragraph." },
+      { title: "Prior visit", text: "Another note." },
+    ]);
   });
 });

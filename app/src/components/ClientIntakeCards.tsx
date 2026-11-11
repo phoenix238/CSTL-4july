@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useClientDraft } from "./clientDrafts";
 import { useRouter } from "next/navigation";
-import { extendedIntakeFields, readLegacyIntakeReason, type IntakeAnswer } from "@/lib/intakeProfile";
+import { extendedIntakeFields, readEarlierCaseHistory, readLegacyIntakeReason, type IntakeAnswer } from "@/lib/intakeProfile";
 import { CONSENT_PARAGRAPHS, type IntakeQuestion } from "@/lib/intakeQuestions";
 import { api, Card, inputClass, SectionLabel, TintButton, useToast } from "./ui";
 
@@ -158,6 +158,7 @@ export function ClientHistoryDocs({ clientId, primaryDoc, historyDocs }: {
   const [pending, setPending] = useState("");
   const [current, setCurrent] = useState<{ id: string; name: string; text: string } | null>(null);
   const ids = [...new Set([primaryDoc, ...historyDocs].filter(Boolean))];
+  const earlier = current && current.id === primaryDoc ? readEarlierCaseHistory(current.text) : [];
 
   async function load(doc: string) {
     setPending(doc);
@@ -173,7 +174,9 @@ export function ClientHistoryDocs({ clientId, primaryDoc, historyDocs }: {
 
   return (
     <Card className="p-4">
-      <details>
+      <details onToggle={(event) => {
+        if (event.currentTarget.open && !current && !pending && ids[0]) void load(ids[0]);
+      }}>
         <summary className="cursor-pointer text-sm font-semibold">Case history from Google Drive</summary>
         <div className="mt-3 flex flex-wrap gap-2">
           {ids.map((id, i) => (
@@ -200,7 +203,22 @@ export function ClientHistoryDocs({ clientId, primaryDoc, historyDocs }: {
                 }
               }}>Unlink from profile</button>}
             </div>
-            <p className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line p-3 text-sm">{current.text}</p>
+            {earlier.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {earlier.map(({ title, text }, index) => (
+                  <details key={index} className="rounded-lg border border-line p-3 text-sm">
+                    <summary className="cursor-pointer font-medium">{title.replace(/^Copy of /i, "")}</summary>
+                    <p className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words">{text}</p>
+                  </details>
+                ))}
+                <details className="text-sm">
+                  <summary className="cursor-pointer text-clay-text">Read full linked document</summary>
+                  <p className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line p-3">{current.text}</p>
+                </details>
+              </div>
+            ) : (
+              <p className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line p-3 text-sm">{current.text}</p>
+            )}
           </div>
         )}
         <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={async (event) => {
