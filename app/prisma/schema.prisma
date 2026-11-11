@@ -600,3 +600,10 @@ model AvailabilityOverride {
   // Repeating windows are fetched for the whole clinic regardless of date.
   @@index([clinic, repeatWeekly])
 }
+
+model ImprovementNote {
+  id        String    @id @default(cuid())
+  text      String
+  createdAt DateTime  @default(now())
+  doneAt    DateTime?
+}
