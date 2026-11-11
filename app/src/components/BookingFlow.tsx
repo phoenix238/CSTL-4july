@@ -20,10 +20,12 @@ import type { ClientCopy } from "@/lib/clientCopy";
  */
 const REMEMBERED_BOOKING_DETAILS = "cstl-booking-details";
 
-function readRememberedDetails(): { name: string; email: string } | null {
+function readRememberedEmail(): string | null {
   try {
     const value = JSON.parse(localStorage.getItem(REMEMBERED_BOOKING_DETAILS) ?? "null");
-    return typeof value?.name === "string" && typeof value?.email === "string" ? value : null;
+    if (typeof value?.email !== "string") return null;
+    if ("name" in value) localStorage.setItem(REMEMBERED_BOOKING_DETAILS, JSON.stringify({ email: value.email }));
+    return value.email;
   } catch {
     return null;
   }
@@ -121,7 +123,6 @@ export function BookingFlow({
 
   interface BookResponse {
     whenLabel: string;
-    clientName: string;
     emailSent: boolean;
     intakeUrl: string;
     returning: boolean;
@@ -137,7 +138,7 @@ export function BookingFlow({
       toast("Pick a time first");
       return;
     }
-    if (!name.trim()) {
+    if (!returningOnly && !name.trim()) {
       toast("Please add your name");
       return;
     }
@@ -161,7 +162,7 @@ export function BookingFlow({
       }
       if (rememberDetails) {
         try {
-          localStorage.setItem(REMEMBERED_BOOKING_DETAILS, JSON.stringify({ name: name.trim(), email: email.trim() }));
+          localStorage.setItem(REMEMBERED_BOOKING_DETAILS, JSON.stringify({ email: email.trim() }));
         } catch {
           // Private browsers can disallow storage. Booking still succeeds.
         }
@@ -268,10 +269,9 @@ export function BookingFlow({
           clinic={clinic}
           selected={selected}
           onSelect={(iso) => {
-            const remembered = readRememberedDetails();
+            const remembered = readRememberedEmail();
             if (remembered) {
-              setName((current) => current || remembered.name);
-              setEmail((current) => current || remembered.email);
+              setEmail((current) => current || remembered);
               setRememberDetails(true);
               setHasRememberedDetails(true);
             }
@@ -332,6 +332,10 @@ export function BookingFlow({
                 <label className="flex flex-col gap-1.5 text-sm">
                   Current email
                   <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  Full name
+                  <input className={inputClass} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm">
                   Phone number you used last time
@@ -399,17 +403,19 @@ export function BookingFlow({
                   I’ve seen Phoenix before
                 </button>
                 {returningOnly && <p className="text-xs text-muted">Use the email you booked with last time if you remember it. Returning clients don’t pay a deposit.</p>}
+                {!returningOnly && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                    className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-ink-soft">Email</span>
+                  <span className="text-[12.5px] font-semibold text-ink-soft">{returningOnly ? "Email you booked with last time" : "Email"}</span>
                   <input
                     type="email"
                     value={email}
@@ -428,29 +434,30 @@ export function BookingFlow({
                         setHasRememberedDetails(false);
                       }
                     }} />
-                    Remember my name and email on this device
+                    Remember my email on this device
                   </label>
                   {hasRememberedDetails && (
                     <button type="button" className="text-clay-text underline" onClick={() => {
-                      const remembered = readRememberedDetails();
+                      const remembered = readRememberedEmail();
                       try { localStorage.removeItem(REMEMBERED_BOOKING_DETAILS); } catch { /* Storage unavailable. */ }
-                      if (name === remembered?.name) setName("");
-                      if (email === remembered?.email) setEmail("");
+                      if (email === remembered) setEmail("");
                       setHasRememberedDetails(false);
                       setRememberDetails(false);
-                    }}>Forget saved details</button>
+                    }}>Forget saved email</button>
                   )}
                 </div>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                    inputMode="tel"
-                    className={inputClass}
-                  />
-                </label>
+                {!returningOnly && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      autoComplete="tel"
+                      inputMode="tel"
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <input
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}

@@ -41,7 +41,7 @@ export function BookingConfirmation({
   // A returning client who has already filled the form in is not asked for it
   // again. Asking is what made a rebooking feel like a first booking, and it's
   // the same reason their email is a confirmation rather than a whole welcome.
-  const showIntake = !(returning && intakeDone);
+  const showIntake = Boolean(intakeUrl) && !(returning && intakeDone);
   return (
     <div className="mx-auto flex min-h-[var(--vp-h,100vh)] max-w-[560px] flex-col items-center justify-center gap-4 px-5 py-10 text-center">
       <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full bg-sage-tint text-2xl text-sage-text">
@@ -61,9 +61,9 @@ export function BookingConfirmation({
             <PrimaryButton className="px-5 py-2.5">Fill out the intake form</PrimaryButton>
           </a>
         </Card>
-      ) : (
+      ) : returning && intakeDone ? (
         <p className="text-[12.5px] leading-relaxed text-muted">{copy.confirmReturningNote}</p>
-      )}
+      ) : null}
     </div>
   );
 }

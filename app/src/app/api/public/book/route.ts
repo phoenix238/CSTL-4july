@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid time" }, { status: 400 });
     }
     const cleanName = name?.trim() ?? "";
-    if (!cleanName || cleanName.length > 200) {
+    if ((!returningOnly && !cleanName) || cleanName.length > 200) {
       return NextResponse.json({ error: "Please add your name" }, { status: 400 });
     }
     const cleanEmail = email?.trim() ?? "";
@@ -66,10 +66,10 @@ export async function POST(req: Request) {
     // into someone else's record on a shared or mistyped address is worse than
     // one extra tap, and the alternative — creating a second record for the
     // same person — is what scatters one client's history across several.
-    if (returningOnly && (!existing || !describeReturningClient(existing.name, cleanName).nameMatches)) {
+    if (returningOnly && !existing) {
       return NextResponse.json({ needsEmailReview: true });
     }
-    if (existing && !confirmReturning) {
+    if (existing && !returningOnly && !confirmReturning) {
       const { knownName, nameMatches } = describeReturningClient(existing.name, cleanName);
       return NextResponse.json({
         needsConfirm: true,
@@ -145,9 +145,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       whenLabel: result.whenLabel,
-      clientName: result.clientName,
       emailSent: result.emailSent,
-      intakeUrl: result.intakeUrl,
+      intakeUrl: returningOnly ? "" : result.intakeUrl,
       // A returning client who has already filled the form in is not asked for
       // it again — the confirmation screen uses these to decide.
       returning: result.returning,
