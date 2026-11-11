@@ -398,11 +398,12 @@ export function BookingFlow({
                 }}
                 className="ct-swap flex flex-col gap-3"
               >
-                <button type="button" aria-pressed={returningOnly} onClick={() => setReturningOnly((previous) => !previous)}
-                  className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${returningOnly ? "border-clay bg-clay-tint text-clay-text" : "border-line bg-card text-clay-text hover:bg-hoverbg"}`}>
-                  I’ve seen Phoenix before
-                </button>
-                {returningOnly && <p className="text-xs text-muted">Use the email you booked with last time if you remember it. Returning clients don’t pay a deposit.</p>}
+                {!returningOnly && (
+                  <button type="button" onClick={() => setReturningOnly(true)}
+                    className="rounded-xl border border-line bg-card px-4 py-3 text-left text-sm font-semibold text-clay-text hover:bg-hoverbg">
+                    Seen Phoenix before? <span className="underline underline-offset-2">Click here</span>
+                  </button>
+                )}
                 {!returningOnly && (
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
