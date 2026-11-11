@@ -437,7 +437,6 @@ export function ClientProfile({
             initial={firstSessionIntake} docId={client.docId} questions={intakeQuestions} consentGiven={client.consentGiven}
             profileDefaults={{ dob: client.dob, phone: client.phone, occupation: client.occupation, doctor: client.doctor,
               meds: client.meds, health: client.conditions, emergency: client.emergency, referred: client.referred }} />
-          <ClientHistoryDocs clientId={client.id} primaryDoc={client.docId} historyDocs={historyDocs} />
           <div className="flex items-center justify-between px-0.5">
             <SectionLabel>SESSION NOTES</SectionLabel>
             <TintButton onClick={() => setNoteOpen(!noteOpen)} className="px-3.5 py-1.5 text-xs">
@@ -815,6 +814,7 @@ export function ClientProfile({
 
           {!editing && <ClientEmailAliases clientId={client.id} emails={alternateEmails} />}
           {!editing && <DuplicateClientReview clientId={client.id} />}
+          {!editing && <ClientHistoryDocs clientId={client.id} primaryDoc={client.docId} historyDocs={historyDocs} />}
 
           {!editing && (
             <div className="flex flex-col gap-0.5 px-0.5 text-[11px] text-muted">

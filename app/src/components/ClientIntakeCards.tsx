@@ -172,7 +172,7 @@ export function ClientHistoryDocs({ clientId, primaryDoc, historyDocs }: {
   }
 
   return (
-    <Card className="mt-3 p-4">
+    <Card className="p-4">
       <details>
         <summary className="cursor-pointer text-sm font-semibold">Case history from Google Drive</summary>
         <div className="mt-3 flex flex-wrap gap-2">
