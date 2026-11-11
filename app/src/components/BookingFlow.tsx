@@ -315,7 +315,7 @@ export function BookingFlow({
             {emailReview === "booked" ? (
               <div role="status" className="flex flex-col gap-2">
                 <p className="font-semibold text-sage-text">Your appointment is booked.</p>
-                <p className="text-sm text-ink-soft">Phoenix will double-check your new email and send your booking details there once it’s linked. No deposit is due.</p>
+                <p className="text-sm text-ink-soft">Phoenix will check and update your contact details. If he needs anything else, he’ll email you. No deposit is due.</p>
               </div>
             ) : emailReview === "sent" ? (
               <p role="status" className="text-sm text-sage-text">

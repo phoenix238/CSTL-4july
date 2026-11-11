@@ -3,8 +3,9 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { prisma, getSettings } from "@/lib/db";
 import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
-import { fmtDayLong, fmtTime } from "@/lib/time";
-
+import { appBaseUrl } from "@/lib/appUrl";
+import { sendEmail } from "@/lib/google/gmail";
+import { CLINIC_LABEL } from "@/lib/booking/rules";
 import { bookSession } from "@/lib/booking/book";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
 
@@ -41,40 +42,48 @@ export async function POST(req: Request) {
     const matches = phoneNumber.length >= 10 ? candidates.filter((client) =>
       phoneKey(client.phone) === phoneNumber && nameKey(client.name) === nameKey(name),
     ) : [];
-    const enquiry = await prisma.enquiry.create({
-      data: {
-        via: "WEB",
-        name,
-        clinic,
-        text: [
-          `From: ${name} <${email}>`,
-          `Phone: ${phone}`,
-          "",
-          "Returning client — please verify the existing record before adding this email.",
-          `Requested appointment: ${fmtDayLong(start)} at ${fmtTime(start)} (not booked).`,
-        ].join("\n"),
-      },
-    });
-    revalidateTag("shell");
-    if (matches.length !== 1) return NextResponse.json({ booked: false }, { status: 201 });
-
+    const match = matches.length === 1 ? matches[0] : undefined;
     const settings = await getSettings();
     await assertSlotAvailable({ clinic, start });
     const result = await bookSession({
-      clientId: matches[0].id, clinic, startISO, bookedVia: "online",
-      sendEmail: true, sendPayment: true, notifyOwner: settings.bookingNotifyEmail,
+      clientId: match?.id,
+      newClient: match ? undefined : { name, email, phone },
+      clinic, startISO, bookedVia: "online",
+      sendEmail: false, sendPayment: false,
     });
-    await prisma.enquiry.update({
-      where: { id: enquiry.id },
-      data: {
-        clientId: result.clientId,
-        text: enquiry.text.replace(
-          `Requested appointment: ${fmtDayLong(start)} at ${fmtTime(start)} (not booked).`,
-          `Appointment booked: ${result.whenLabel}. Verify the new email and resend confirmation after updating it.`,
-        ),
-      },
-    }).catch(() => console.error("Could not annotate returning client enquiry", enquiry.id));
-    revalidateTag("shell");
+
+    const details = [
+      `From: ${name} <${email}>`,
+      `Phone used last time: ${phone}`,
+      `Appointment booked: ${result.whenLabel} · ${CLINIC_LABEL[clinic]}`,
+      "",
+      match
+        ? "Returning client — verify and update the email on the linked client record."
+        : "Returning client — no unique name and phone match. The appointment is booked under a separate client record. Review it before linking it to any existing record.",
+    ].join("\n");
+    try {
+      const enquiry = await prisma.enquiry.create({
+        data: { via: "WEB", name, clinic, text: details, clientId: result.clientId },
+      });
+      revalidateTag("shell");
+      if (process.env.ALLOWED_EMAIL) {
+        try {
+          await sendEmail(
+            process.env.ALLOWED_EMAIL,
+            "Returning client booked — email needs review",
+            `${details}\n\nReview in Enquiries: ${appBaseUrl(settings)}/enquiries?open=${enquiry.id}`,
+            undefined, undefined, { replyTo: email },
+          );
+        } catch {
+          await prisma.enquiry.update({
+            where: { id: enquiry.id },
+            data: { text: `${details}\n\nNotification email failed to send.` },
+          });
+        }
+      }
+    } catch {
+      console.error("Could not record a returning-client email review", result.bookingId);
+    }
     return NextResponse.json({ booked: true }, { status: 201 });
   } catch (error) {
     if (error instanceof SlotTakenError) return NextResponse.json({ error: error.message }, { status: 409 });
