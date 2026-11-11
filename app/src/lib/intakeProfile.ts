@@ -1,3 +1,5 @@
+import type { IntakeQuestion } from "./intakeQuestions";
+
 export const FIRST_SESSION_FIELDS = {
   reason: "Reason for coming and goals",
   health: "Health conditions and injuries",
@@ -33,4 +35,18 @@ export function readLegacyIntakeReason(text: string): IntakeAnswer[] {
     if (answer && answer !== "—") return [{ key: "caseHistory", label: "What brings you to therapy", answer }];
   }
   return [];
+}
+
+const QUESTION_FIELDS: Record<string, string> = { caseHistory: "reason", conditions: "health" };
+
+export function extendedIntakeFields(questions: IntakeQuestion[], answers: IntakeAnswer[]) {
+  const fields = new Map<string, string>(Object.entries(FIRST_SESSION_FIELDS));
+  for (const { key, label } of [...questions.filter((question) => question.enabled), ...answers]) {
+    const field = QUESTION_FIELDS[key] ?? key;
+    if (!fields.has(field)) fields.set(field, label);
+  }
+  return [...fields].map(([key, label]) => ({
+    key, label,
+    original: answers.find((answer) => (QUESTION_FIELDS[answer.key] ?? answer.key) === key)?.answer ?? "",
+  }));
 }

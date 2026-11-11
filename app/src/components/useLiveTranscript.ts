@@ -9,6 +9,7 @@ interface SpeechRecognitionLike {
   lang: string;
   start(): void;
   stop(): void;
+  abort(): void;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onend: (() => void) | null;
   onerror: ((event: { error?: string }) => void) | null;
@@ -37,7 +38,7 @@ export function dictationSupported(): boolean {
  *
  * Unlike a one-off dictation, this KEEPS GOING through a whole session: Chrome's
  * recognizer quietly ends after silence / ~60s, so while the caller still wants
- * to listen we restart it on `onend`. Audio never leaves the browser.
+ * to listen we restart it on `onend`. The browser supplies the recognition service.
  */
 export function useLiveTranscript(opts: {
   lang?: string;
@@ -45,25 +46,42 @@ export function useLiveTranscript(opts: {
   onInterim?: (text: string) => void;
   onUnsupported?: () => void;
   onBlocked?: () => void;
+  onFailure?: (message: string) => void;
 }) {
   const [listening, setListening] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
-  const wantRef = useRef(false); // do we intend to be listening? (drives auto-restart)
-  const emittedRef = useRef(0); // how many results in this round we've already emitted
+  const wantRef = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const cbs = useRef(opts);
   cbs.current = opts;
 
-  // Stop cleanly if the component unmounts mid-session.
-  useEffect(
-    () => () => {
-      wantRef.current = false;
-      recRef.current?.stop();
-    },
-    [],
-  );
+  function release(rec: SpeechRecognitionLike | null) {
+    if (recRef.current !== rec) return;
+    clearTimeout(timer.current);
+    recRef.current = null;
+    if (rec) {
+      rec.onresult = rec.onerror = rec.onend = null;
+    }
+  }
 
-  const start = () => {
-    if (wantRef.current) return;
+  useEffect(() => () => {
+    wantRef.current = false;
+    const rec = recRef.current;
+    release(rec);
+    rec?.abort();
+  }, []);
+
+  function reset(rec: SpeechRecognitionLike) {
+    release(rec);
+    wantRef.current = false;
+    setListening(false);
+    setFinishing(false);
+    cbs.current.onInterim?.("");
+  }
+
+  function start() {
+    if (recRef.current) return;
     const SR = getSpeechRecognition();
     if (!SR) {
       cbs.current.onUnsupported?.();
@@ -73,65 +91,83 @@ export function useLiveTranscript(opts: {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = cbs.current.lang ?? "en-GB";
-    emittedRef.current = 0;
+    let emitted = 0;
+    let networkErrors = 0;
+    recRef.current = rec;
+    wantRef.current = true;
+
+    function begin() {
+      try {
+        rec.start();
+        setListening(true);
+      } catch {
+        reset(rec);
+        cbs.current.onFailure?.("Couldn’t start dictation. Try again or type your note.");
+      }
+    }
 
     rec.onresult = (event) => {
-      let interim = "";
-      for (let i = 0; i < event.results.length; i++) {
-        const r = event.results[i];
-        if (r.isFinal) {
-          if (i >= emittedRef.current) {
-            const t = r[0].transcript.trim();
-            if (t) cbs.current.onFinal(t);
-            emittedRef.current = i + 1;
-          }
-        } else {
-          interim += r[0].transcript;
+      networkErrors = 0;
+      const interim: string[] = [];
+      for (let i = Math.max(emitted, event.resultIndex); i < event.results.length; i++) {
+        const result = event.results[i];
+        const text = result[0].transcript.trim();
+        if (result.isFinal) {
+          emitted = i + 1;
+          if (text) cbs.current.onFinal(text);
+        } else if (text) {
+          interim.push(text);
         }
       }
-      cbs.current.onInterim?.(interim);
+      cbs.current.onInterim?.(interim.join(" "));
     };
 
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed") {
-        wantRef.current = false;
+    rec.onerror = ({ error }) => {
+      if (error === "not-allowed" || error === "service-not-allowed") {
+        reset(rec);
         cbs.current.onBlocked?.();
-        setListening(false);
+      } else if (error === "network" && ++networkErrors < 3) {
+        // Retry transient network errors through onend.
+      } else if (error !== "no-speech" && error !== "aborted") {
+        reset(rec);
+        cbs.current.onFailure?.(error === "audio-capture"
+          ? "No microphone is available. Check the input device and try again."
+          : "Dictation stopped. Check your connection and try again.");
       }
-      // Transient errors ("no-speech", "network", "aborted") fall through to
-      // onend, which restarts us while wantRef is still true.
     };
 
     rec.onend = () => {
-      if (wantRef.current) {
-        emittedRef.current = 0;
-        cbs.current.onInterim?.("");
-        try {
-          rec.start();
-        } catch {
-          // start() can throw if called too soon after end — safe to ignore.
-        }
-      } else {
-        setListening(false);
+      cbs.current.onInterim?.("");
+      if (!wantRef.current) {
+        reset(rec);
+        return;
       }
+      emitted = 0;
+      timer.current = setTimeout(() => {
+        if (wantRef.current && recRef.current === rec) begin();
+      }, networkErrors ? 600 * networkErrors : 180);
     };
+    begin();
+  }
 
-    recRef.current = rec;
-    wantRef.current = true;
-    try {
-      rec.start();
-      setListening(true);
-    } catch {
-      wantRef.current = false;
-    }
-  };
-
-  const stop = () => {
+  function stop() {
     wantRef.current = false;
-    recRef.current?.stop();
+    clearTimeout(timer.current);
+    const rec = recRef.current;
+    if (!rec) return;
     setListening(false);
-    cbs.current.onInterim?.("");
-  };
+    setFinishing(true);
+    try {
+      rec.stop();
+      // Some browsers don't emit onend after a stop during a restart gap.
+      if (recRef.current === rec) timer.current = setTimeout(() => {
+        reset(rec);
+        rec.abort();
+      }, 1400);
+    } catch {
+      reset(rec);
+    }
+  }
 
-  return { listening, start, stop };
+  return { listening, finishing, start, stop };
 }

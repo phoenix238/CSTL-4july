@@ -10,14 +10,12 @@ import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
 import { DuplicateClientReview } from "./DuplicateClientReview";
-import { ClientEmailAliases, ClientHistoryDocs, FirstSessionCard, IntakeExcerpt } from "./ClientIntakeCards";
+import { ClientEmailAliases, ClientHistoryDocs, FirstSessionCard, IntakeExcerpt, MedicationLinks } from "./ClientIntakeCards";
 import type { IntakeAnswer } from "@/lib/intakeProfile";
-import { InPersonIntakePanel } from "./InPersonIntakePanel";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
 import { api, Card, Chip, clinicChip, inputClass, PrimaryButton, SectionLabel, TintButton, useToast } from "./ui";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
-import type { ClientCopy } from "@/lib/clientCopy";
 
 export interface ProfileClient {
   id: string;
@@ -82,7 +80,6 @@ export function ClientProfile({
   accountBookings = [],
   paymentRef = "",
   intakeQuestions,
-  clientCopy,
   intakeAnswers,
   intakeSubmitted,
   firstSessionIntake,
@@ -102,7 +99,6 @@ export function ClientProfile({
   accountBookings?: AccountRow[];
   paymentRef?: string;
   intakeQuestions: IntakeQuestion[];
-  clientCopy: ClientCopy;
   intakeAnswers: IntakeAnswer[];
   intakeSubmitted: string | null;
   firstSessionIntake: Record<string, string>;
@@ -134,7 +130,6 @@ export function ClientProfile({
   const [changingClinic, setChangingClinic] = useState(false);
   const [sendingIntake, setSendingIntake] = useState(false);
   const [sendingReview, setSendingReview] = useState(false);
-  const [inPersonOpen, setInPersonOpen] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   async function cancelSession(bookingId: string, label: string) {
@@ -262,12 +257,13 @@ export function ClientProfile({
   const incomplete = coreFields.some((k) => !client[k]);
 
   const age = calcAge(client.dob);
+  const intakeReason = intakeAnswers.find(({ key }) => key === "caseHistory")?.answer || firstSessionIntake.reason;
 
   const primaryDetails: Array<[string, string]> = [
     ["DATE OF BIRTH", age !== null ? `${client.dob} — age ${age}` : client.dob],
     ["OCCUPATION", client.occupation],
-    ["MEDICATIONS", client.meds],
-    ["HEALTH CONDITIONS", client.conditions],
+    ["MEDICATIONS", firstSessionIntake.meds ?? client.meds],
+    ["HEALTH CONDITIONS", firstSessionIntake.health ?? client.conditions],
   ];
 
   // Less-often-needed at a glance — tucked behind "Show more".
@@ -437,7 +433,10 @@ export function ClientProfile({
               {nextClient && <Link href={`/clients/${nextClient.id}`} className="ml-auto text-clay-text hover:underline">{nextClient.time} · {nextClient.name} ›</Link>}
             </nav>
           )}
-          <FirstSessionCard clientId={client.id} answers={intakeAnswers} submitted={intakeSubmitted} initial={firstSessionIntake} docId={client.docId} />
+          <FirstSessionCard clientId={client.id} answers={intakeAnswers} submitted={intakeSubmitted}
+            initial={firstSessionIntake} docId={client.docId} questions={intakeQuestions} consentGiven={client.consentGiven}
+            profileDefaults={{ dob: client.dob, phone: client.phone, occupation: client.occupation, doctor: client.doctor,
+              meds: client.meds, health: client.conditions, emergency: client.emergency, referred: client.referred }} />
           <ClientHistoryDocs clientId={client.id} primaryDoc={client.docId} historyDocs={historyDocs} />
           <div className="flex items-center justify-between px-0.5">
             <SectionLabel>SESSION NOTES</SectionLabel>
@@ -810,33 +809,12 @@ export function ClientProfile({
               >
                 {sendingReview ? "Sending…" : "Send review request"}
               </button>
-              <button
-                onClick={() => setInPersonOpen((v) => !v)}
-                className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg"
-              >
-                {inPersonOpen ? "Close" : "Fill in person"}
-              </button>
+              <a href="#extended-intake" className="rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg">Open extended intake</a>
             </div>
           )}
 
           {!editing && <ClientEmailAliases clientId={client.id} emails={alternateEmails} />}
           {!editing && <DuplicateClientReview clientId={client.id} />}
-
-          {!editing && inPersonOpen && (
-            <InPersonIntakePanel
-              clientId={client.id}
-              clientName={client.name}
-              clientPhone={client.phone}
-              clientEmail={client.email}
-              questions={intakeQuestions}
-              copy={clientCopy}
-              onDone={() => {
-                toast(`${client.name.split(" ")[0]}'s intake form saved ✓`);
-                setInPersonOpen(false);
-                router.refresh();
-              }}
-            />
-          )}
 
           {!editing && (
             <div className="flex flex-col gap-0.5 px-0.5 text-[11px] text-muted">
@@ -863,7 +841,7 @@ export function ClientProfile({
 
           {!editing ? (
             <Card className="px-4 py-1.5">
-              {intakeAnswers.filter(({ key }) => key === "caseHistory").map((answer) => <IntakeExcerpt key={answer.key} answer={answer} />)}
+              {intakeReason && <IntakeExcerpt answer={{ key: "caseHistory", label: "Why they’re coming", answer: intakeReason }} />}
               {primaryDetails.map(([label, value], i) => (
                 <div
                   key={label}
@@ -874,17 +852,10 @@ export function ClientProfile({
                   </div>
                   {label === "HEALTH CONDITIONS" && value ? (
                     <IntakeExcerpt answer={{ key: "conditions", label: "Show full health history", answer: value }} />
+                  ) : label === "MEDICATIONS" && value ? (
+                    <MedicationLinks text={value} />
                   ) : (
                     <div className="mt-[3px] whitespace-pre-wrap text-[13px] leading-normal">{value || "Not yet recorded"}</div>
-                  )}
-                  {label === "MEDICATIONS" && value && (
-                    <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer font-semibold text-clay-text">Look up a medicine</summary>
-                      <form action="https://www.nhs.uk/search/" method="get" target="_blank" rel="noreferrer" className="mt-2 flex flex-wrap gap-2">
-                        <input aria-label="Medicine name" name="q" className={inputClass} placeholder="Enter just the medicine name" required />
-                        <TintButton type="submit">Search NHS</TintButton>
-                      </form>
-                    </details>
                   )}
                 </div>
               ))}

@@ -1,7 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { readIntakeAnswers, readLegacyIntakeReason } from "./intakeProfile";
+import { extendedIntakeFields, readIntakeAnswers, readLegacyIntakeReason } from "./intakeProfile";
 
 describe("profile intake", () => {
+  it("folds submitted answers into existing practitioner fields and keeps older custom answers", () => {
+    const fields = extendedIntakeFields([
+      { key: "caseHistory", label: "What brings you here?", type: "long", enabled: true },
+      { key: "conditions", label: "Health", type: "long", enabled: true },
+      { key: "olderQuestion", label: "Old question", type: "long", enabled: false },
+    ], [
+      { key: "caseHistory", label: "What brings you here?", answer: "My reason" },
+      { key: "conditions", label: "Health", answer: "Health history" },
+      { key: "olderQuestion", label: "Previously answered", answer: "Still important" },
+    ]);
+    expect(fields.filter(({ original }) => original).map(({ key, original }) => [key, original])).toEqual([
+      ["reason", "My reason"], ["health", "Health history"], ["olderQuestion", "Still important"],
+    ]);
+    expect(fields.some(({ key }) => key === "caseHistory" || key === "conditions")).toBe(false);
+  });
+
   it("preserves original line breaks and wording in a submitted response", () => {
     expect(readIntakeAnswers([
       { key: "caseHistory", label: "What brings you here?", answer: "  First paragraph.\n\nSecond paragraph.  " },

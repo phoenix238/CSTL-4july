@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useClientDraft } from "./clientDrafts";
 import { useRouter } from "next/navigation";
-import { FIRST_SESSION_FIELDS, readLegacyIntakeReason, type IntakeAnswer } from "@/lib/intakeProfile";
+import { extendedIntakeFields, readLegacyIntakeReason, type IntakeAnswer } from "@/lib/intakeProfile";
+import { CONSENT_PARAGRAPHS, type IntakeQuestion } from "@/lib/intakeQuestions";
 import { api, Card, inputClass, SectionLabel, TintButton, useToast } from "./ui";
 
 export function IntakeExcerpt({ answer }: { answer: IntakeAnswer }) {
@@ -16,23 +17,44 @@ export function IntakeExcerpt({ answer }: { answer: IntakeAnswer }) {
   );
 }
 
-export function FirstSessionCard({ clientId, answers, submitted, initial, docId }: {
+export function MedicationLinks({ text }: { text: string }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
+      {text.split(/[,;\n]+/).map((part) => part.trim()).filter(Boolean).map((entry, index) => {
+        const medicine = entry.split(/\s*(?:\(|\b\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)\b|\s+(?:for|during|as needed)\s+)/i)[0].trim();
+        return medicine ? (
+          <a key={index} href={`https://www.google.com/search?q=${encodeURIComponent(medicine + " medication")}`}
+            target="_blank" rel="noreferrer" className="text-clay-text underline underline-offset-2"
+            title={`Search Google for ${medicine}`}>{entry}</a>
+        ) : <span key={index}>{entry}</span>;
+      })}
+    </div>
+  );
+}
+
+export function FirstSessionCard({ clientId, answers, submitted, initial, docId, questions, consentGiven, profileDefaults }: {
   clientId: string;
   answers: IntakeAnswer[];
   submitted: string | null;
   initial: Record<string, string>;
   docId: string;
+  questions: IntakeQuestion[];
+  consentGiven: boolean | null;
+  profileDefaults: Record<string, string>;
 }) {
-  const [draft, setDraft, clearDraft] = useClientDraft(`intake:${clientId}`, initial);
-  const [saved, setSaved] = useState(initial);
+  const initialValues: Record<string, string> = { ...initial, consent: consentGiven === null ? "" : String(consentGiven) };
+  const [draft, setDraft, clearDraft] = useClientDraft(`intake:${clientId}`, initialValues);
+  const [saved, setSaved] = useState(initialValues);
   const [saving, setSaving] = useState(false);
   const [legacy, setLegacy] = useState<IntakeAnswer[]>([]);
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const toast = useToast();
+  const router = useRouter();
   const displayed = answers.length ? answers : legacy;
-  const reason = displayed.find((answer) => answer.key === "caseHistory");
-  const dirty = Object.keys(FIRST_SESSION_FIELDS).some((key) => (saved[key] ?? "") !== (draft[key] ?? ""));
+  const fields = extendedIntakeFields(questions, displayed);
+  const dirty = fields.some(({ key }) => saved[key] !== draft[key]) ||
+    saved.consent !== draft.consent;
 
   async function loadLegacy() {
     setChecking(true);
@@ -50,67 +72,77 @@ export function FirstSessionCard({ clientId, answers, submitted, initial, docId 
   async function save() {
     setSaving(true);
     try {
-      await api(`/api/clients/${clientId}/first-session`, { method: "PUT", body: JSON.stringify(draft) });
+      const consent = draft.consent;
+      const notes = Object.fromEntries(fields.filter(({ key }) => draft[key] !== saved[key]).map(({ key }) => [key, draft[key]]));
+      await api(`/api/clients/${clientId}/first-session`, {
+        method: "PUT",
+        body: JSON.stringify({ notes, ...(consent !== saved.consent ? { consent: consent === "true" } : {}) }),
+      });
       setSaved(draft);
       clearDraft(draft);
-      toast("First-session notes saved");
+      router.refresh();
+      toast("Extended intake saved");
     } catch (error) {
-      toast(error instanceof Error ? error.message : "Could not save first-session notes.");
+      toast(error instanceof Error ? error.message : "Could not save the intake.");
     } finally {
       setSaving(false);
     }
   }
 
+  function field({ key, label, original }: (typeof fields)[number]) {
+    const value = draft[key] ?? (original || profileDefaults[key] || "");
+    return (
+      <div key={key} className="min-w-0">
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-semibold">{key === "reason" ? "Why they’re coming" : label}</span>
+          {original && value === original && <span className="text-xs text-muted">Client’s response{submitted && ` · ${submitted}`}</span>}
+          <textarea className={inputClass} rows={key === "reason" ? Math.min(10, Math.max(3, Math.ceil(value.length / 95))) : 2}
+            maxLength={20000} value={value} disabled={saving}
+            onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />
+        </label>
+        {key === "meds" && value && <MedicationLinks text={value} />}
+        {original && value !== original && (
+          <details className="mt-1 text-xs">
+            <summary className="cursor-pointer text-clay-text">Original client response</summary>
+            <p className="mt-1 whitespace-pre-wrap">{original}</p>
+          </details>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <Card className="mb-3 flex flex-col gap-3 p-4">
-      <SectionLabel>FIRST-SESSION INTAKE</SectionLabel>
-      {reason && (
-        <div>
-          <h2 className="font-semibold">Why they’re coming</h2>
-          <p className="text-xs text-muted">{submitted ? `Client’s words · ${submitted}` : "Client’s words from the linked intake"}</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm">{reason.answer}</p>
-        </div>
-      )}
-      {!reason && <p className="text-sm text-muted">No reason for coming is saved in the CRM.</p>}
-      {!answers.length && docId && !checked && (
-        <div><TintButton disabled={checking} onClick={loadLegacy}>{checking ? "Checking…" : "Find intake in linked Google Doc"}</TintButton></div>
-      )}
-      {checked && !legacy.length && <p className="text-sm text-muted">No matching intake section was found in the linked Doc.</p>}
-      {displayed.some((answer) => answer.key !== "caseHistory") && (
+    <div id="extended-intake" className="scroll-mt-4">
+      <Card className="mb-3 flex flex-col gap-3 p-4">
+        <SectionLabel>EXTENDED INTAKE</SectionLabel>
+        {field(fields[0])}
+        {!answers.length && docId && !checked && (
+          <div><TintButton disabled={checking} onClick={loadLegacy}>{checking ? "Checking…" : "Find intake in linked Google Doc"}</TintButton></div>
+        )}
+        {checked && !legacy.length && <p className="text-sm text-muted">No matching intake section was found in the linked Doc.</p>}
         <details className="rounded-lg border border-line p-3 text-sm">
-          <summary className="cursor-pointer font-semibold">Full intake responses</summary>
-          {displayed.filter((answer) => answer.key !== "caseHistory").map((answer) => (
-            <div key={answer.key} className="mt-3">
-              <h3 className="font-semibold">{answer.label}</h3>
-              <p className="whitespace-pre-wrap">{answer.answer}</p>
-            </div>
-          ))}
+          <summary className="cursor-pointer font-semibold">Health history and practitioner notes</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">{fields.slice(1).map(field)}</div>
+          <details className="mt-3 rounded-lg border border-line p-3">
+            <summary className="cursor-pointer font-semibold">Consent{draft.consent && ` · ${draft.consent === "true" ? "Given" : "Declined"}`}</summary>
+            <div className="my-2 space-y-1 text-xs">{CONSENT_PARAGRAPHS.map((text) => <p key={text}>{text}</p>)}</div>
+            <label className="flex flex-col gap-1">
+              <span>Client’s consent in person</span>
+              <select className={inputClass} value={draft.consent} disabled={saving}
+                onChange={(event) => setDraft({ ...draft, consent: event.target.value })}>
+                <option value="" disabled>Not recorded</option>
+                <option value="true">Given</option>
+                <option value="false">Declined</option>
+              </select>
+            </label>
+          </details>
         </details>
-      )}
-      <details className="rounded-lg border border-line p-3 text-sm">
-        <summary className="cursor-pointer font-semibold">Practitioner notes{dirty ? " · Unsaved changes" : ""}</summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {Object.entries(FIRST_SESSION_FIELDS).map(([key, label]) => {
-            const clientAnswer = displayed.find((answer) => answer.key === (key === "reason" ? "caseHistory" : key === "health" ? "conditions" : key));
-            return (
-              <label key={key} className="flex flex-col gap-1">
-                <span className="font-medium">{label}</span>
-                {clientAnswer && <span className="line-clamp-2 whitespace-pre-wrap text-xs text-muted">{clientAnswer.answer}</span>}
-                <textarea
-                  className={inputClass}
-                  rows={2}
-                  maxLength={20000}
-                  value={draft[key] ?? ""}
-                  disabled={saving}
-                  onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
-                />
-              </label>
-            );
-          })}
+        <div className="flex items-center gap-3">
+          <TintButton disabled={!dirty || saving} onClick={save}>{saving ? "Saving…" : "Save extended intake"}</TintButton>
+          {dirty && <span className="text-xs text-muted">Unsaved changes</span>}
         </div>
-        <div className="mt-3"><TintButton disabled={!dirty || saving} onClick={save}>{saving ? "Saving…" : "Save first-session notes"}</TintButton></div>
-      </details>
-    </Card>
+      </Card>
+    </div>
   );
 }
 

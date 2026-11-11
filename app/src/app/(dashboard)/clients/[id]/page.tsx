@@ -4,7 +4,6 @@ import { fmtDate, fmtDayLong, fmtTime, londonDayStart } from "@/lib/time";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
 import { readIntakeAnswers, readLegacyIntakeReason } from "@/lib/intakeProfile";
 import { DOC_MIME, getDriveFileText } from "@/lib/google/drive";
-import { resolveClientCopy } from "@/lib/clientCopy";
 import { ClientProfile, type ProfileNote, type ProfileRecording } from "@/components/ClientProfile";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -95,7 +94,6 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   }));
 
   const intakeQuestions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
-  const clientCopy = resolveClientCopy(settings.clientCopy);
 
   return (
     <ClientProfile
@@ -108,7 +106,6 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
       previousClient={neighbour(-1)}
       nextClient={neighbour(1)}
       intakeQuestions={intakeQuestions}
-      clientCopy={clientCopy}
       client={{
         id: client.id,
         name: client.name,

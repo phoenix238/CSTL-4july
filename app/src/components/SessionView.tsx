@@ -101,12 +101,13 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
   const lastCountRef = useRef(0); // transcript lines already sent for extraction
   const extractingRef = useRef(false);
 
-  const { listening, start, stop } = useLiveTranscript({
+  const { listening, finishing, start, stop } = useLiveTranscript({
     onFinal: (text) => setLines((ls) => [...ls, { id: uid(), text }]),
     onInterim: setInterim,
     onUnsupported: () =>
       toast("Live transcription needs Chrome or Safari — you can still type your notes"),
     onBlocked: () => toast("Microphone blocked — allow it in your browser settings"),
+    onFailure: toast,
   });
 
   const addHighlights = useCallback((texts: string[], source: Highlight["source"]) => {
@@ -280,7 +281,7 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
             {phase === "live" ? (
               <PrimaryButton onClick={endSession}>End session</PrimaryButton>
             ) : (
-              <OutlineButton onClick={resumeSession}>Resume</OutlineButton>
+              <OutlineButton onClick={resumeSession} disabled={finishing}>{finishing ? "Finishing dictation…" : "Resume"}</OutlineButton>
             )}
           </div>
         )}
@@ -406,10 +407,10 @@ export function SessionView({ clients }: { clients: SessionClient[] }) {
             (every word, so every question you asked is kept) to {client?.name}&apos;s Doc.
           </div>
           <div className="flex-1" />
-          <TintButton onClick={discard} disabled={saving}>
+          <TintButton onClick={discard} disabled={saving || finishing}>
             Discard
           </TintButton>
-          <PrimaryButton onClick={save} disabled={saving}>
+          <PrimaryButton onClick={save} disabled={saving || finishing}>
             {saving ? "Saving…" : "Save to Doc"}
           </PrimaryButton>
         </Card>
