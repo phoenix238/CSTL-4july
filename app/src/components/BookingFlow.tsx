@@ -79,7 +79,7 @@ export function BookingFlow({
   // never book into someone else's record off a mistyped address).
   const [recognised, setRecognised] = useState<{ prompt: string; intakeDone: boolean } | null>(null);
   const [returningOnly, setReturningOnly] = useState(false);
-  const [emailReview, setEmailReview] = useState<"editing" | "sent" | null>(null);
+  const [emailReview, setEmailReview] = useState<"editing" | "sent" | "booked" | null>(null);
   const [linkSending, setLinkSending] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
@@ -167,11 +167,12 @@ export function BookingFlow({
     if (!selected) return;
     setSubmitting(true);
     try {
-      await api("/api/public/returning-client", {
+      const result = await api<{ booked: boolean }>("/api/public/returning-client", {
         method: "POST",
         body: JSON.stringify({ name, email, phone, company, clinic, startISO: selected }),
       });
-      setEmailReview("sent");
+      if (result.booked) notifyParentOfBooking(clinic);
+      setEmailReview(result.booked ? "booked" : "sent");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Couldn’t send your request.");
     } finally {
@@ -284,7 +285,12 @@ export function BookingFlow({
             {/* Recognised them: one tap to book into the record they already have,
                 one to back out if the address isn't theirs. Nothing is booked
                 either way until they answer, so a wrong guess here costs nothing. */}
-            {emailReview === "sent" ? (
+            {emailReview === "booked" ? (
+              <div role="status" className="flex flex-col gap-2">
+                <p className="font-semibold text-sage-text">Your appointment is booked.</p>
+                <p className="text-sm text-ink-soft">Phoenix will double-check your new email and send your booking details there once it’s linked. No deposit is due.</p>
+              </div>
+            ) : emailReview === "sent" ? (
               <p role="status" className="text-sm text-sage-text">
                 Request sent. I’ll check your details and get back to you. Your appointment hasn’t been booked yet.
               </p>
@@ -304,7 +310,7 @@ export function BookingFlow({
                   Phone number you used last time
                   <input className={inputClass} type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required />
                 </label>
-                <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Sending…" : "Ask Phoenix to update my email"}</PrimaryButton>
+                <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Checking…" : "Check my number and book"}</PrimaryButton>
                 <button type="button" className="text-sm text-clay-text underline" onClick={() => setEmailReview(null)} disabled={submitting}>Try my previous email</button>
               </form>
             ) : recognised ? (
@@ -357,14 +363,14 @@ export function BookingFlow({
                 key="details"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submit();
+                  submit(returningOnly);
                 }}
                 className="ct-swap flex flex-col gap-3"
               >
-                <label className="flex items-center gap-2 text-sm font-semibold">
-                  <input type="checkbox" checked={returningOnly} onChange={(event) => setReturningOnly(event.target.checked)} />
-                  I’ve been to see Phoenix before
-                </label>
+                <button type="button" aria-pressed={returningOnly} onClick={() => setReturningOnly((previous) => !previous)}
+                  className={`rounded-xl border px-4 py-3 text-left text-sm font-semibold ${returningOnly ? "border-clay bg-clay-tint text-clay-text" : "border-line bg-card text-clay-text hover:bg-hoverbg"}`}>
+                  I’ve seen Phoenix before
+                </button>
                 {returningOnly && <p className="text-xs text-muted">Use the email you booked with last time if you remember it. Returning clients don’t pay a deposit.</p>}
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>

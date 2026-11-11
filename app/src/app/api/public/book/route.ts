@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     // email all follow from here, so the ceiling is checked first, not after.
     // A confirming second pass is the same booking continuing, so it's checked
     // against the ceiling but doesn't add to it.
-    await assertBookingAllowed(req, cleanEmail, { record: !confirmReturning });
+    await assertBookingAllowed(req, cleanEmail, { record: returningOnly || !confirmReturning });
 
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
