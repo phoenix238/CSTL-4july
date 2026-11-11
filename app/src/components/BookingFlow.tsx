@@ -78,6 +78,8 @@ export function BookingFlow({
   // than booking, so the same person doesn't end up as two clients (and so we
   // never book into someone else's record off a mistyped address).
   const [recognised, setRecognised] = useState<{ prompt: string; intakeDone: boolean } | null>(null);
+  const [returningOnly, setReturningOnly] = useState(false);
+  const [emailReview, setEmailReview] = useState<"editing" | "sent" | null>(null);
   const [linkSending, setLinkSending] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
@@ -113,6 +115,7 @@ export function BookingFlow({
     intakeDone: boolean;
     /** the email is already on a record — confirm it's them before booking */
     needsConfirm?: boolean;
+    needsEmailReview?: boolean;
     prompt?: string;
   }
 
@@ -133,8 +136,12 @@ export function BookingFlow({
     try {
       const result = await api<BookResponse>("/api/public/book", {
         method: "POST",
-        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning }),
+        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning, returningOnly }),
       });
+      if (result.needsEmailReview) {
+        setEmailReview("editing");
+        return;
+      }
       if (result.needsConfirm) {
         setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
         return;
@@ -151,6 +158,22 @@ export function BookingFlow({
       });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't book that — please try again");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function requestEmailUpdate() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      await api("/api/public/returning-client", {
+        method: "POST",
+        body: JSON.stringify({ name, email, phone, company, clinic, startISO: selected }),
+      });
+      setEmailReview("sent");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Couldn’t send your request.");
     } finally {
       setSubmitting(false);
     }
@@ -177,6 +200,8 @@ export function BookingFlow({
     if (submitting) return;
     setSheetOpen(false);
     setRecognised(null);
+    setEmailReview(null);
+    setReturningOnly(false);
     setLinkSent(false);
   }
 
@@ -259,7 +284,30 @@ export function BookingFlow({
             {/* Recognised them: one tap to book into the record they already have,
                 one to back out if the address isn't theirs. Nothing is booked
                 either way until they answer, so a wrong guess here costs nothing. */}
-            {recognised ? (
+            {emailReview === "sent" ? (
+              <p role="status" className="text-sm text-sage-text">
+                Request sent. I’ll check your details and get back to you. Your appointment hasn’t been booked yet.
+              </p>
+            ) : emailReview === "editing" ? (
+              <form className="flex flex-col gap-3" onSubmit={(event) => {
+                event.preventDefault();
+                void requestEmailUpdate();
+              }}>
+                <p className="text-sm text-ink-soft">
+                  This email doesn’t match the details I have. Enter the phone number you used last time and I’ll check your record and add your new email.
+                </p>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  Current email
+                  <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  Phone number you used last time
+                  <input className={inputClass} type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required />
+                </label>
+                <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Sending…" : "Ask Phoenix to update my email"}</PrimaryButton>
+                <button type="button" className="text-sm text-clay-text underline" onClick={() => setEmailReview(null)} disabled={submitting}>Try my previous email</button>
+              </form>
+            ) : recognised ? (
               <div key="recognised" className="ct-swap flex flex-col gap-3">
                 <p className="text-[13.5px] leading-relaxed text-muted">
                   {recognised.intakeDone
@@ -313,6 +361,11 @@ export function BookingFlow({
                 }}
                 className="ct-swap flex flex-col gap-3"
               >
+                <label className="flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" checked={returningOnly} onChange={(event) => setReturningOnly(event.target.checked)} />
+                  I’ve been to see Phoenix before
+                </label>
+                {returningOnly && <p className="text-xs text-muted">Use the email you booked with last time if you remember it. Returning clients don’t pay a deposit.</p>}
                 <label className="flex flex-col gap-1.5">
                   <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
                   <input

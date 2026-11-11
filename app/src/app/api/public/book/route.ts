@@ -15,7 +15,7 @@ import { sendEmail } from "@/lib/google/gmail";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { clinic, startISO, name, email, phone, company, confirmReturning } = body as {
+    const { clinic, startISO, name, email, phone, company, confirmReturning, returningOnly } = body as {
       clinic?: string;
       startISO?: string;
       name?: string;
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
       company?: string; // honeypot
       /** the visitor has answered "yes, that's me" to the returning-client prompt */
       confirmReturning?: boolean;
+      returningOnly?: boolean;
     };
 
     if (company?.trim()) {
@@ -65,6 +66,9 @@ export async function POST(req: Request) {
     // into someone else's record on a shared or mistyped address is worse than
     // one extra tap, and the alternative — creating a second record for the
     // same person — is what scatters one client's history across several.
+    if (returningOnly && (!existing || !describeReturningClient(existing.name, cleanName).nameMatches)) {
+      return NextResponse.json({ needsEmailReview: true });
+    }
     if (existing && !confirmReturning) {
       const { knownName, nameMatches } = describeReturningClient(existing.name, cleanName);
       return NextResponse.json({
