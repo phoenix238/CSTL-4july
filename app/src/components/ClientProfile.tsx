@@ -812,10 +812,6 @@ export function ClientProfile({
             </div>
           )}
 
-          {!editing && <ClientEmailAliases clientId={client.id} emails={alternateEmails} />}
-          {!editing && <DuplicateClientReview clientId={client.id} />}
-          {!editing && <ClientHistoryDocs clientId={client.id} primaryDoc={client.docId} historyDocs={historyDocs} />}
-
           {!editing && (
             <div className="flex flex-col gap-0.5 px-0.5 text-[11px] text-muted">
               <span>
@@ -936,6 +932,10 @@ export function ClientProfile({
             paymentRef={paymentRef}
             bookings={accountBookings}
           />
+
+          {!editing && <ClientEmailAliases clientId={client.id} emails={alternateEmails} />}
+          {!editing && <DuplicateClientReview clientId={client.id} />}
+          {!editing && <ClientHistoryDocs clientId={client.id} primaryDoc={client.docId} historyDocs={historyDocs} />}
         </aside>
       </div>
     </div>
