@@ -43,6 +43,7 @@ interface OverrideDTO {
   startMin: number;
   endMin: number;
   repeatWeekly?: boolean;
+  excludedDates?: string[];
   exactStart?: boolean;
 }
 
@@ -123,15 +124,19 @@ export function CalendarView() {
 
   // Availability-editing mode: draw the times you're bookable for online booking.
   const [availMode, setAvailMode] = useState(false);
-  // Read-only counterpart: show both clinics' availability layered on the
-  // ordinary calendar view, without entering edit mode.
+  // View the bookable slots without entering availability editing.
   const [showAvailability, setShowAvailability] = useState(false);
-  // Which clinic a newly-drawn window (or click) applies to — both clinics'
-  // availability is always shown together; this only picks the drawing target.
+  // Clinic whose rules are shown and edited in availability mode.
   const [availClinic, setAvailClinic] = useState<AvailClinic>("bethnal");
   const [weeklyHours, setWeeklyHours] = useState<WeeklyHours | null>(null);
   const [overrides, setOverrides] = useState<OverrideDTO[]>([]);
   const [availComposer, setAvailComposer] = useState<AvailComposerState | null>(null);
+  const [lastRemoval, setLastRemoval] = useState<{ url: string; label: string } | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [syncState, setSyncState] = useState<{ connected: boolean; lastSyncAt?: string | null } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ range: string; slots: string[] } | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
   // What a client can genuinely book, straight from the booking engine — plus
   // why any day has none. Fetched per clinic, only while availability is
   // showing, for the week shown.
@@ -271,66 +276,75 @@ export function CalendarView() {
   // the daily cron is the periodic backstop). Server-side throttled and a
   // no-op when the availability calendar isn't connected. If it folded in real
   // changes, refresh the overrides + spans so they show without a manual reload.
-  const availSyncedRef = useRef(false);
+  const availabilitySynced = useRef(false);
+  const invalidateWeek = week.invalidate;
+  const invalidateMonth = month.invalidate;
+  const syncGoogle = useCallback(async (force: boolean) => {
+    if (force) setSyncing(true);
+    try {
+      const response = await api<{
+        connected: boolean;
+        lastSyncAt?: string | null;
+        result?: { imported: number; closed: number; moved: number };
+      }>(`/api/availability/sync${force ? "?force=1" : ""}`, { method: "POST" });
+      setSyncState(response);
+      if (force || (response.result && response.result.imported + response.result.closed + response.result.moved > 0)) {
+        loadOverrides();
+        invalidateWeek();
+        invalidateMonth();
+      }
+      if (force && response.connected) toast("Availability synced with Google Calendar");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Google availability sync failed");
+    } finally {
+      if (force) setSyncing(false);
+    }
+  }, [invalidateMonth, invalidateWeek, loadOverrides, toast]);
   useEffect(() => {
-    if (availSyncedRef.current) return;
-    availSyncedRef.current = true;
-    api<{ result?: { imported?: number; closed?: number; moved?: number } }>("/api/availability/sync", {
-      method: "POST",
-    })
-      .then((r) => {
-        const changed = (r?.result?.imported ?? 0) + (r?.result?.closed ?? 0) + (r?.result?.moved ?? 0);
-        if (changed > 0) {
-          loadOverrides();
-          week.invalidate();
-          month.invalidate();
-        }
-      })
-      .catch(() => {});
-  }, [loadOverrides, week, month]);
+    if (availabilitySynced.current) return;
+    availabilitySynced.current = true;
+    void syncGoogle(false);
+  }, [syncGoogle]);
 
   // Availability is drawn whenever it's being edited, or the read-only
   // "show availability" toggle is on — both clinics at once, each in its own
   // colour, so Bethnal Green and Waterloo can be compared at a glance.
   const availShowing = availMode || showAvailability;
 
-  // The availability windows for the visible week & both clinics: the
-  // recurring weekly baseline plus any one-off overrides drawn on the grid.
+  // Show the selected clinic's weekly hours and date overrides while editing.
   const availWindows = useMemo<AvailWindowDTO[]>(() => {
-    if (!availShowing) return [];
+    if (!availMode) return [];
     const out: AvailWindowDTO[] = [];
     for (let i = 0; i < gridDays; i++) {
       const day = londonAddDays(rangeStart, i);
       const dateKey = londonDateKey(day);
       const weekday = londonWeekdayIndex(day);
-      for (const clinic of AVAIL_CLINICS) {
-        for (const w of weeklyHours?.[clinic] ?? []) {
-          if (w.weekday === weekday) {
-            out.push({ clinic, date: dateKey, kind: "weekly", startMin: w.startMin, endMin: w.endMin });
-          }
+      for (const w of weeklyHours?.[availClinic] ?? []) {
+        if (w.weekday === weekday) {
+          out.push({ clinic: availClinic, date: dateKey, kind: "weekly", startMin: w.startMin, endMin: w.endMin });
         }
-        for (const o of overrides) {
-          if (o.clinic !== clinic || (o.kind !== "open" && o.kind !== "block")) continue;
-          // A one-off shows on its own date; a repeating one shows on its weekday
-          // every week from the date it was drawn onward — the same rule the
-          // booking engine uses, so what's drawn matches what's bookable.
-          if (overrideAppliesOn(o, dateKey, weekday)) {
-            out.push({
-              id: o.id,
-              clinic,
-              date: dateKey,
-              kind: o.kind,
-              startMin: o.startMin,
-              endMin: o.endMin,
-              repeatWeekly: o.repeatWeekly,
-              exactStart: o.exactStart,
-            });
-          }
+      }
+      for (const o of overrides) {
+        if (o.clinic !== availClinic || (o.kind !== "open" && o.kind !== "block")) continue;
+        // A one-off shows on its own date; a repeating one shows on its weekday
+        // every week from the date it was drawn onward — the same rule the
+        // booking engine uses, so what's drawn matches what's bookable.
+        if (overrideAppliesOn(o, dateKey, weekday)) {
+          out.push({
+            id: o.id,
+            clinic: availClinic,
+            date: dateKey,
+            kind: o.kind,
+            startMin: o.startMin,
+            endMin: o.endMin,
+            repeatWeekly: o.repeatWeekly,
+            exactStart: o.exactStart,
+          });
         }
       }
     }
     return out;
-  }, [availShowing, weeklyHours, overrides, rangeStart, gridDays]);
+  }, [availMode, availClinic, weeklyHours, overrides, rangeStart, gridDays]);
 
   // The real answer for the visible week, for both clinics — refetched
   // whenever the week or anything that could change availability moves.
@@ -398,8 +412,40 @@ export function CalendarView() {
     setAvailMode(true);
   }
 
+  const suggestionRange = `${availClinic}:${rangeStart.toISOString()}:${gridDays}`;
+  async function suggestAvailability() {
+    setSuggesting(true);
+    setSuggestions(null);
+    try {
+      const { suggestions: slots } = await api<{ suggestions: string[] }>(
+        `/api/availability/suggestions?clinic=${availClinic}&start=${encodeURIComponent(rangeStart.toISOString())}&days=${gridDays}`,
+      );
+      setSuggestions({ range: suggestionRange, slots });
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't suggest availability");
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  async function undoRemoval() {
+    if (!lastRemoval || restoring) return;
+    setRestoring(true);
+    try {
+      await api(lastRemoval.url, { method: "POST" });
+      setLastRemoval(null);
+      availabilitySaved();
+      toast("Availability restored");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't restore availability");
+    } finally {
+      setRestoring(false);
+    }
+  }
+
   function availabilitySaved() {
     setAvailComposer(null);
+    setSuggestions(null);
     loadOverrides();
     week.invalidate();
     month.invalidate();
@@ -743,18 +789,56 @@ export function CalendarView() {
                 </b>
               </span>
             ))}
-            {/* The key is what the colours mean; the paragraph explaining the
-                edge cases is a screenful on a phone, so it waits for a laptop. */}
             <span className="hidden sm:inline">
-              Solid = actually bookable now, faint = your{" "}
-              <a href="/settings" className="font-semibold text-sage-text underline">
-                usual hours
-              </a>
-              , red = unavailable. Where solid and faint differ, something has closed the time — a calendar event,
-              a gap setting, the notice window or the weekly cap.
-              {availMode && " Empty days say which. Draw here to open or close specific days."}
+              {availMode ? "Editing hours for the selected clinic." : "Shows times clients can book."}
             </span>
           </div>
+        </div>
+      )}
+
+      {availMode && (
+        <div className="flex flex-wrap items-center gap-2 px-3 text-[12px] text-muted sm:px-0">
+          <OutlineButton onClick={() => void suggestAvailability()} disabled={suggesting}>
+            {suggesting ? "Checking calendars…" : "Suggest availability"}
+          </OutlineButton>
+          <a href="/settings" className="font-semibold underline">Weekly hours and Google setup</a>
+          {syncState?.connected && (
+            <>
+              <OutlineButton onClick={() => void syncGoogle(true)} disabled={syncing}>
+                {syncing ? "Syncing…" : "Sync Google availability"}
+              </OutlineButton>
+              <a href="https://calendar.google.com/" target="_blank" rel="noreferrer" className="font-semibold underline">Open Google Calendar</a>
+              <span>{syncState.lastSyncAt ? `Last sync ${fmtTime(new Date(syncState.lastSyncAt))} · ${fmtDate(new Date(syncState.lastSyncAt))}` : "Waiting for first sync"}</span>
+              <span>Edit dated blocks on the CSTL Availability calendar.</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {availMode && suggestions?.range === suggestionRange && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-card px-3 py-2 text-[12px]">
+          <span className="font-semibold">Suggested one-hour slots</span>
+          {suggestions.slots.length === 0 && <span className="text-muted">No extra weekday slots between 09:00 and 18:00.</span>}
+          {suggestions.slots.map((iso) => {
+            const day = new Date(iso);
+            const startMin = londonMinutes(day);
+            return (
+              <OutlineButton key={iso} onClick={() => setAvailComposer({
+                mode: "create", clinic: availClinic, day, startMin, endMin: startMin + SESSION_MINUTES, exactStart: true,
+              })}>
+                {fmtDate(day)} · {fmtTime(day)}
+              </OutlineButton>
+            );
+          })}
+          <button type="button" className="ml-auto cursor-pointer text-muted" onClick={() => setSuggestions(null)}>Dismiss</button>
+        </div>
+      )}
+
+      {lastRemoval && (
+        <div role="status" className="flex flex-none items-center gap-3 rounded-xl border border-line bg-card px-3 py-2 text-[13px]">
+          <span>{lastRemoval.label}</span>
+          <OutlineButton onClick={undoRemoval} disabled={restoring}>{restoring ? "Restoring…" : "Undo"}</OutlineButton>
+          <button type="button" className="ml-auto cursor-pointer text-muted" onClick={() => setLastRemoval(null)} disabled={restoring}>Dismiss</button>
         </div>
       )}
 
@@ -814,12 +898,17 @@ export function CalendarView() {
             mode="display"
             availabilityMode={availMode}
             activeClinic={availClinic}
-            availWindows={availShowing ? [...availWindows, ...bookableWindows] : undefined}
+            availWindows={availMode ? availWindows : showAvailability ? bookableWindows : undefined}
             dayNotes={availMode ? dayNotes : undefined}
             onAvailabilityClick={(w) => {
-              // Only a real one-off override is editable here. The weekly
-              // baseline lives in Settings, and the bookable layer is a computed
-              // read-out — there's nothing to open for either.
+              if (!availMode) return;
+              if (w.kind === "weekly") {
+                setAvailComposer({
+                  mode: "create", clinic: w.clinic, day: new Date(`${w.date}T12:00:00Z`),
+                  startMin: w.startMin, endMin: w.endMin, kind: "block",
+                });
+                return;
+              }
               if (!w.id || (w.kind !== "open" && w.kind !== "block")) return;
               setAvailComposer({
                 mode: "edit",
@@ -1016,6 +1105,10 @@ export function CalendarView() {
           id={availComposer.id}
           onClose={() => setAvailComposer(null)}
           onSaved={availabilitySaved}
+          onRemoved={(url, label) => {
+            setLastRemoval({ url, label });
+            availabilitySaved();
+          }}
         />
       )}
     </div>

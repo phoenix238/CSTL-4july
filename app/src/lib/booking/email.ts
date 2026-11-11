@@ -177,21 +177,22 @@ function clinicDetails(clinic: Clinic, s: EmailSettings) {
   };
 }
 
-/**
- * A trailing sign-off, if the template ends with one.
- *
- * Templates are written as whole letters, ending "See you soon, / Phoenix" —
- * so anything the composer appended landed *after* the signature, and the
- * client got an email that signed off halfway down and then kept going with
- * the address and the payment details. Lifting the sign-off out lets the
- * factual block sit above it, where it belongs.
- */
-function splitSignOff(body: string): { main: string; signOff: string } {
-  const paragraphs = body.split(/\n\s*\n/);
-  const last = paragraphs[paragraphs.length - 1] ?? "";
-  const isSignOff = paragraphs.length > 1 && last.trim().split("\n").length <= 3 && /phoenix\s*$/i.test(last.trim());
-  if (!isSignOff) return { main: body.trimEnd(), signOff: "" };
-  return { main: paragraphs.slice(0, -1).join("\n\n").trimEnd(), signOff: last.trim() };
+const LEGACY_SIGN_OFF = /(?:^|\n)(?:(?:see you soon|with gratitude|with love|many thanks|thank you|thanks|warmly|warm regards|kind regards|best wishes|take care|all the best)[,!]?[ \t\n]+)?Phoenix(?:[ \t]+Tanner)?(?:[ \t]+x+)?[.!]?$/i;
+
+/** Drop a signature at the end of a letter or payment note before assembling the email. */
+export function stripBookingSignOff(body: string, settings: Pick<EmailSettings, "emailSignOff">): string {
+  const escaped = resolveSignOff(settings)
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  const configured = new RegExp(`(?:^|\\n)${escaped}$`, "i");
+  let text = body.replace(/\r\n?/g, "\n").trim();
+  let match = text.match(configured) ?? text.match(LEGACY_SIGN_OFF);
+  while (match?.index !== undefined) {
+    text = text.slice(0, match.index).trimEnd();
+    match = text.match(configured) ?? text.match(LEGACY_SIGN_OFF);
+  }
+  return text;
 }
 
 /**
@@ -219,9 +220,10 @@ function paymentBlock(s: EmailSettings, paymentRef?: string): string {
   const digits = (x?: string) => (x ?? "").replace(/\D/g, "");
   const acct = digits(s.bankAccountNumber);
   const sort = digits(s.bankSortCode);
+  const paymentDetails = stripBookingSignOff(s.paymentDetails, s);
   const freeText =
-    bank.length && s.paymentDetails.trim()
-      ? s.paymentDetails
+    bank.length && paymentDetails
+      ? paymentDetails
           .split("\n")
           .filter((line) => {
             const d = digits(line);
@@ -231,14 +233,15 @@ function paymentBlock(s: EmailSettings, paymentRef?: string): string {
           })
           .join("\n")
           .trim()
-      : s.paymentDetails.trim();
+      : paymentDetails;
 
   const lines = [freeText].filter(Boolean);
   if (bank.length) {
     lines.push(["For bank transfers:", ...bank].join("\n"));
     if (paymentRef) lines.push("Please use that reference every time — it's how I match your payment to you.");
   }
-  if (s.bankPaymentNote?.trim()) lines.push(s.bankPaymentNote.trim());
+  const bankNote = stripBookingSignOff(s.bankPaymentNote ?? "", s);
+  if (bankNote) lines.push(bankNote);
   return lines.join("\n\n");
 }
 
@@ -300,7 +303,10 @@ export function composeBookingEmail(
     // signed once at the end — so a sign-off left in the template can't produce
     // an email that ends twice.
     const returningTemplate = resolveReturningTemplate(settings);
-    const { main } = splitSignOff(fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }));
+    const main = stripBookingSignOff(
+      fillTemplate(returningTemplate, { ...common, portalLink: portalLink ?? "" }),
+      settings,
+    );
     const calendar = calendarBlock(links);
     if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");
     const sections = [main, whereBlock, calendar];
@@ -331,7 +337,7 @@ export function composeBookingEmail(
   });
   // Any sign-off the letter carries is dropped here and replaced by the single
   // emailSignOff below, so every email ends the same way and can't end twice.
-  const { main } = splitSignOff(filled);
+  const main = stripBookingSignOff(filled, settings);
 
   const calendar = calendarBlock(links);
   if (calendar) includes.push("Add-to-calendar link (Apple, Outlook & other calendars)");

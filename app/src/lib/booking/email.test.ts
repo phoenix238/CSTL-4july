@@ -57,6 +57,29 @@ describe("composeBookingEmail", () => {
     expect(body).not.toContain("with gratitude");
   });
 
+  it("removes a duplicate signature from old payment settings and a single-line template ending", () => {
+    const { body } = compose({
+      emailTemplate: "Hi {name},\n\nYou're booked for {when}.\nWith gratitude Phoenix",
+      paymentDetails: "Card or transfer works.\n\nWith gratitude\nPhoenix",
+      bankPaymentNote: "Cash works too.\r\n\r\nwith gratitude\r\nPhoenix",
+    });
+    expect(body).toContain("Card or transfer works.");
+    expect(body).toContain("Cash works too.");
+    expect(body.match(/with gratitude/gi)).toHaveLength(1);
+    expect(body.endsWith("with gratitude\nPhoenix")).toBe(true);
+  });
+
+  it("keeps regular sentences mentioning Phoenix while removing a custom signature", () => {
+    const { body } = compose({
+      emailTemplate: "Your appointment is with Phoenix.\n\nSpeak soon, P.T.",
+      emailSignOff: "Speak soon,\nP.T.",
+      bankPaymentNote: "The payment account belongs to Phoenix",
+    });
+    expect(body).toContain("Your appointment is with Phoenix.");
+    expect(body).toContain("The payment account belongs to Phoenix");
+    expect(body.match(/Speak soon/g)).toHaveLength(1);
+  });
+
   it("uses the map pin from Settings rather than a generated Maps search link", () => {
     const body = compose().body;
     expect(body).toContain("https://maps.app.goo.gl/waterloo");

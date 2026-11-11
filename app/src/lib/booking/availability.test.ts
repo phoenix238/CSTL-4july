@@ -51,6 +51,28 @@ describe("subtractInterval", () => {
   });
 });
 
+describe("skipping one repeating availability occurrence", () => {
+  it("leaves the first and following occurrences in place", () => {
+    const series: OverrideWindow = {
+      kind: "open", date: "2026-07-07", startMin: 540, endMin: 720,
+      repeatWeekly: true, excludedDates: ["2026-07-14"],
+    };
+    expect(dayOpenIntervals(tueWeekday, "2026-07-07", [], [series])).toEqual([{ start: 540, end: 720 }]);
+    expect(dayOpenIntervals(tueWeekday, "2026-07-14", [], [series])).toEqual([]);
+    expect(dayOpenIntervals(tueWeekday, "2026-07-21", [], [series])).toEqual([{ start: 540, end: 720 }]);
+  });
+
+  it("can skip a repeating block while leaving the weekly pattern untouched", () => {
+    const series: OverrideWindow = {
+      kind: "block", date: "2026-07-07", startMin: 540, endMin: 720,
+      repeatWeekly: true, excludedDates: ["2026-07-07"],
+    };
+    const weekly = [{ weekday: tueWeekday, startMin: 540, endMin: 720 }];
+    expect(dayOpenIntervals(tueWeekday, "2026-07-07", weekly, [series])).toEqual([{ start: 540, end: 720 }]);
+    expect(dayOpenIntervals(tueWeekday, "2026-07-14", weekly, [series])).toEqual([]);
+  });
+});
+
 describe("computeAvailableSlots across the autumn DST fall-back", () => {
   // Open 09:00–17:00 every weekday, so each day yields slots.
   const everyDay: WeeklyWindow[] = Array.from({ length: 7 }, (_, weekday) => ({

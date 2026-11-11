@@ -67,6 +67,7 @@ export interface OverrideWindow {
   endMin: number;
   /** applies to `date`'s weekday every week from `date` onward, until removed */
   repeatWeekly?: boolean;
+  excludedDates?: string[];
   /**
    * An "open" window that offers only its start time, as a single pickable slot,
    * instead of a grid of starts across it. So a day can be built from specific
@@ -83,10 +84,11 @@ export interface OverrideWindow {
  * "YYYY-MM-DD", and avoids inventing instants for a purely calendar question.
  */
 export function overrideAppliesOn(
-  o: { date: string; repeatWeekly?: boolean },
+  o: { date: string; repeatWeekly?: boolean; excludedDates?: string[] },
   dateKey: string,
   weekday: number,
 ): boolean {
+  if (o.excludedDates?.includes(dateKey)) return false;
   if (o.date === dateKey) return true;
   if (!o.repeatWeekly) return false;
   return o.date < dateKey && overrideWeekday(o.date) === weekday;

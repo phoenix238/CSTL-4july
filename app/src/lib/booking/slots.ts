@@ -1,6 +1,6 @@
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
-import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekStart } from "@/lib/time";
+import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonWeekStart } from "@/lib/time";
 import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
 
@@ -150,6 +150,7 @@ export async function loadOverridesForWindow(
   const rows = await prisma.availabilityOverride.findMany({
     where: {
       clinic,
+      deletedAt: null,
       OR: [
         { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
         { repeatWeekly: true, date: { lt: londonDateKey(windowEnd) } },
@@ -162,6 +163,7 @@ export async function loadOverridesForWindow(
     startMin: o.startMin,
     endMin: o.endMin,
     repeatWeekly: o.repeatWeekly,
+    excludedDates: o.excludedDates,
     exactStart: o.exactStart,
   }));
 }
@@ -172,16 +174,18 @@ async function availabilityParams({
   windowStart,
   windowEnd,
   excludeBookingId,
+  requireCalendars = false,
 }: {
   clinic: Clinic;
   windowStart: Date;
   windowEnd: Date;
   excludeBookingId?: string;
+  requireCalendars?: boolean;
 }): Promise<AvailabilityParams> {
   const settings = await getSettings();
   const [overrides, busy, weeklyCap] = await Promise.all([
     loadOverridesForWindow(clinic, windowStart, windowEnd),
-    getBusySpans(windowStart, windowEnd),
+    getBusySpans(windowStart, windowEnd, { requireClinic: requireCalendars ? clinic : undefined }),
     clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
   ]);
 
@@ -215,6 +219,40 @@ export async function loadAvailabilityWithTrace(args: {
   windowEnd: Date;
 }): Promise<{ slots: Date[]; days: DayTrace[] }> {
   return computeAvailability(await availabilityParams(args));
+}
+
+/** Suggest one new one-hour slot per weekday within the visible booking window. */
+export async function loadAvailabilitySuggestions(clinic: Clinic, windowStart: Date, windowEnd: Date) {
+  const settings = await getSettings();
+  const horizonEnd = londonDayStart(settings.bookingHorizonDays);
+  const until = windowEnd < horizonEnd ? windowEnd : horizonEnd;
+  if (windowStart >= until) return [];
+
+  const params = await availabilityParams({ clinic, windowStart, windowEnd: until, requireCalendars: true });
+  const currentSlots = new Set(computeAvailableSlots(params).map((slot) => slot.getTime()));
+  const candidates: OverrideWindow[] = [];
+  for (let day = windowStart; day < until; day = londonAddDays(day, 1)) {
+    if (londonWeekdayIndex(day) >= 5) continue;
+    const date = londonDateKey(day);
+    for (let startMin = 9 * 60; startMin + SESSION_MINUTES <= 18 * 60; startMin += 30) {
+      candidates.push({ date, kind: "open", startMin, endMin: startMin + SESSION_MINUTES, exactStart: true });
+    }
+  }
+
+  const suggestions: string[] = [];
+  const suggestedDays = new Set<string>();
+  for (const slot of computeAvailableSlots({ ...params, overrides: [...params.overrides, ...candidates] })) {
+    const date = londonDateKey(slot);
+    if (suggestedDays.has(date) || currentSlots.has(slot.getTime())) continue;
+    const candidate = candidates.find((row) => row.date === date && row.startMin === londonMinutes(slot));
+    if (!candidate) continue;
+    // Check it as the only added rule so a neighbouring candidate can't make
+    // this one fit by expanding its effective availability window.
+    if (!computeAvailableSlots({ ...params, overrides: [...params.overrides, candidate] }).some((s) => s.getTime() === slot.getTime())) continue;
+    suggestions.push(slot.toISOString());
+    suggestedDays.add(date);
+  }
+  return suggestions;
 }
 
 /** The browsing window a client sees: today out to the booking horizon. */

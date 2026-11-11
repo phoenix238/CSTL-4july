@@ -16,6 +16,10 @@ model Client {
   phone         String        @default("")
   clinic        String        @default("waterloo") // preferred clinic: waterloo | bethnal
   marketing     Boolean       @default(false)
+  intakeAnswers Json?
+  intakeSubmittedAt DateTime?
+  firstSessionIntake Json?
+  historyDocIds String[]      @default([])
   intakeDone    Boolean       @default(false)
   welcomeSent   Boolean       @default(false) // access note + intake link go in the FIRST email only
   dob           String        @default("")
@@ -67,6 +71,7 @@ model Client {
   knownReferences String[]    @default([])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  alternateEmails ClientEmailAlias[]
   bookings      Booking[]
   notes         SessionNote[]
   recordings    SessionRecording[]
@@ -77,6 +82,14 @@ model Client {
   @@index([intakeToken])
   @@index([portalToken])
   @@index([paymentRef])
+}
+
+model ClientEmailAlias {
+  email    String @id
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
 }
 
 // Cached copy of a session note for instant profile views;
@@ -244,10 +257,8 @@ model BookingAttempt {
 // Single row (id = 1). Holds editable settings and the Google wiring.
 model AppSettings {
   id                    Int    @id @default(1)
-  // Which Claude model powers the enquiry reader, note/session summaries and
-  // client-file import ("sonnet" | "haiku") — see lib/claude.ts. Sonnet is the
-  // more careful reader (worth it for case-history judgment calls); Haiku is
-  // faster/cheaper. Anything else falls back to sonnet.
+  // Model selection for enquiry reading, note/session summaries and imports.
+  // Allowed values are listed in src/lib/aiModels.ts.
   aiModel               String @default("sonnet")
   // Present in the shared production DB from the second-practitioner work on
   // claude/emily-onboarding-backend-874zrd (PR #42, not merged) — its preview
@@ -580,6 +591,8 @@ model AvailabilityOverride {
    * fills in. Ignored for a "block".
    */
   exactStart Boolean @default(false)
+  excludedDates String[] @default([])
+  deletedAt DateTime?
   note      String   @default("")
   createdAt DateTime @default(now())
 

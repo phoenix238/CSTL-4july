@@ -8,6 +8,8 @@ import { ReflectionComposer } from "./ReflectionComposer";
 import { LinkDocPanel } from "./LinkDocPanel";
 import { BookSlotPicker } from "./BookSlotPicker";
 import { ClientAccountPanel, type AccountRow } from "./ClientAccountPanel";
+import { ClientEmailAliases, ClientHistoryDocs, FirstSessionCard, IntakeExcerpt } from "./ClientIntakeCards";
+import type { IntakeAnswer } from "@/lib/intakeProfile";
 import { InPersonIntakePanel } from "./InPersonIntakePanel";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { calcAge, formatDateInput } from "@/lib/time";
@@ -79,6 +81,13 @@ export function ClientProfile({
   paymentRef = "",
   intakeQuestions,
   clientCopy,
+  intakeAnswers,
+  intakeSubmitted,
+  firstSessionIntake,
+  historyDocs,
+  alternateEmails,
+  previousClient,
+  nextClient,
 }: {
   client: ProfileClient;
   notes: ProfileNote[];
@@ -92,6 +101,13 @@ export function ClientProfile({
   paymentRef?: string;
   intakeQuestions: IntakeQuestion[];
   clientCopy: ClientCopy;
+  intakeAnswers: IntakeAnswer[];
+  intakeSubmitted: string | null;
+  firstSessionIntake: Record<string, string>;
+  historyDocs: string[];
+  alternateEmails: string[];
+  previousClient: { id: string; name: string; time: string } | null;
+  nextClient: { id: string; name: string; time: string } | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -413,6 +429,14 @@ export function ClientProfile({
 
       <div className="flex flex-col items-start gap-5 lg:flex-row">
         <section className="flex w-full min-w-0 flex-1 flex-col gap-2.5">
+          {(previousClient || nextClient) && (
+            <nav aria-label="Today's clients" className="flex flex-wrap gap-3 rounded-xl border border-line px-4 py-2 text-sm">
+              {previousClient && <Link href={`/clients/${previousClient.id}`} className="text-clay-text hover:underline">‹ {previousClient.time} · {previousClient.name}</Link>}
+              {nextClient && <Link href={`/clients/${nextClient.id}`} className="ml-auto text-clay-text hover:underline">{nextClient.time} · {nextClient.name} ›</Link>}
+            </nav>
+          )}
+          <FirstSessionCard clientId={client.id} answers={intakeAnswers} submitted={intakeSubmitted} initial={firstSessionIntake} docId={client.docId} />
+          <ClientHistoryDocs clientId={client.id} primaryDoc={client.docId} historyDocs={historyDocs} />
           <div className="flex items-center justify-between px-0.5">
             <SectionLabel>SESSION NOTES</SectionLabel>
             <TintButton onClick={() => setNoteOpen(!noteOpen)} className="px-3.5 py-1.5 text-xs">
@@ -793,6 +817,8 @@ export function ClientProfile({
             </div>
           )}
 
+          {!editing && <ClientEmailAliases clientId={client.id} emails={alternateEmails} />}
+
           {!editing && inPersonOpen && (
             <InPersonIntakePanel
               clientId={client.id}
@@ -834,6 +860,7 @@ export function ClientProfile({
 
           {!editing ? (
             <Card className="px-4 py-1.5">
+              {intakeAnswers.filter(({ key }) => key === "caseHistory").map((answer) => <IntakeExcerpt key={answer.key} answer={answer} />)}
               {primaryDetails.map(([label, value], i) => (
                 <div
                   key={label}
@@ -842,7 +869,20 @@ export function ClientProfile({
                   <div className="text-[10.5px] font-semibold tracking-[0.08em] text-[oklch(0.58_0.03_55)]">
                     {label}
                   </div>
-                  <div className="mt-[3px] text-[13px] leading-normal">{value || "Not yet recorded"}</div>
+                  {label === "HEALTH CONDITIONS" && value ? (
+                    <IntakeExcerpt answer={{ key: "conditions", label: "Show full health history", answer: value }} />
+                  ) : (
+                    <div className="mt-[3px] whitespace-pre-wrap text-[13px] leading-normal">{value || "Not yet recorded"}</div>
+                  )}
+                  {label === "MEDICATIONS" && value && (
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer font-semibold text-clay-text">Look up a medicine</summary>
+                      <form action="https://www.nhs.uk/search/" method="get" target="_blank" rel="noreferrer" className="mt-2 flex flex-wrap gap-2">
+                        <input aria-label="Medicine name" name="q" className={inputClass} placeholder="Enter just the medicine name" required />
+                        <TintButton type="submit">Search NHS</TintButton>
+                      </form>
+                    </details>
+                  )}
                 </div>
               ))}
               {detailsExpanded &&

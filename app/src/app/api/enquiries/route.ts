@@ -38,6 +38,7 @@ export const POST = guarded(async (req: Request) => {
         name: client.name,
         clinic: client.clinic,
         email: client.email,
+        phone: client.phone,
         welcomeSent: client.welcomeSent,
       },
     });
@@ -60,6 +61,7 @@ export const POST = guarded(async (req: Request) => {
           name: existing.name,
           clinic: existing.clinic,
           email: existing.email,
+          phone: existing.phone,
           welcomeSent: existing.welcomeSent,
         }
       : null,

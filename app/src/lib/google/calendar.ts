@@ -370,7 +370,11 @@ export interface BusySpan {
  * and booking ids) plus real events from every connected Google calendar.
  * Used by the availability grid, the week/month calendar, and the enquiry picker.
  */
-export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<BusySpan[]> {
+export async function getBusySpans(
+  windowStart: Date,
+  windowEnd: Date,
+  { requireClinic }: { requireClinic?: Clinic } = {},
+): Promise<BusySpan[]> {
   // These three are independent — fetch our confirmed bookings, the Chalk Farm
   // day blocks, and the Google client together rather than back to back.
   const [rawBookings, chalkFarmBlocks, calendar] = await Promise.all([
@@ -391,13 +395,16 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
   try {
     personalItems = await listCalendarEvents(calendar, personalCalId, windowStart, windowEnd);
   } catch (err) {
+    if (requireClinic) throw new Error("Couldn't check your personal Google calendar");
     console.error("Couldn't list the personal calendar — skipping calendar reconciliation this view", err);
   }
 
   // Mirror anything Phoenix deleted or moved straight in Google Calendar onto
   // our own records before building spans from them, so this view reflects
   // what's actually on the calendar rather than what we last knew.
-  const { removedIds, movedStarts } = await reconcileBookingsWithCalendar(calendar, rawBookings, personalItems);
+  const { removedIds, movedStarts } = requireClinic
+    ? { removedIds: new Set<string>(), movedStarts: new Map<string, Date>() }
+    : await reconcileBookingsWithCalendar(calendar, rawBookings, personalItems);
   const bookings = rawBookings
     .filter((b) => !removedIds.has(b.id))
     .map((b) => (movedStarts.has(b.id) ? { ...b, startsAt: movedStarts.get(b.id)! } : b));
@@ -447,11 +454,17 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
     }
   }
 
+  const requiredVenue = requireClinic === "bethnal" ? "chalkFarm" : requireClinic === "waterloo" ? "room" : null;
+  if (requiredVenue && !sources.some(({ source }) => source === requiredVenue)) {
+    throw new Error("Connect the clinic’s room calendar in Settings to suggest times");
+  }
+
   // Each calendar is a separate network round-trip to Google. Fetch them all
   // concurrently — running them together instead of one after another is the
   // main speedup for the calendar and availability views.
   const perSource = await Promise.all(
     sources.map(async ({ id, source }): Promise<BusySpan[]> => {
+      if (requiredVenue && source !== requiredVenue) return [];
       try {
         // Page until Google runs out. A single 250-event page silently dropped
         // everything past the 250th event in the window — on a busy shared room
@@ -487,6 +500,9 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
               items: [{ id }],
             },
           });
+          if (source === requiredVenue && (!fb.data.calendars?.[id] || fb.data.calendars[id].errors?.length)) {
+            throw new Error("Google couldn't check the room calendar");
+          }
           const spans: BusySpan[] = [];
           for (const cal of Object.values(fb.data.calendars ?? {})) {
             for (const span of cal.busy ?? []) {
@@ -494,11 +510,12 @@ export async function getBusySpans(windowStart: Date, windowEnd: Date): Promise<
               const start = new Date(span.start);
               const end = new Date(span.end);
               const isOwn = known.some((k) => start < k.end && end > k.start);
-              if (!isOwn) spans.push({ start, end, title: "Busy", known: false, source });
+              if (requireClinic || !isOwn) spans.push({ start, end, title: "Busy", known: false, source });
             }
           }
           return spans;
         } catch {
+          if (source === requiredVenue) throw new Error("Couldn't check the clinic’s Google room calendar");
           /* calendar unreachable — skip it rather than failing the whole view */
           return [];
         }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -42,6 +42,7 @@ interface Match {
   name: string;
   clinic: string;
   email: string;
+  phone: string;
   welcomeSent: boolean;
   saved?: boolean;
 }
@@ -63,7 +64,7 @@ export function EnquiryFlow({
   initialPick,
 }: {
   openEnquiryId?: string;
-  existingClient?: { id: string; name: string; clinic: string; email: string; welcomeSent: boolean };
+  existingClient?: { id: string; name: string; clinic: string; email: string; phone: string; welcomeSent: boolean };
   initialWaiting: WaitingEnquiry[];
   initialPick?: string;
 }) {
@@ -88,7 +89,11 @@ export function EnquiryFlow({
 
   // client
   const [name, setName] = useState(existingClient?.name ?? "");
+  const [email, setEmail] = useState(existingClient?.email ?? "");
+  const [phone, setPhone] = useState(existingClient?.phone ?? "");
+  const [savingContact, setSavingContact] = useState(false);
   const [match, setMatch] = useState<Match | null>(null);
+  const [checkingMatch, setCheckingMatch] = useState(false);
   const [ignoreMatch, setIgnoreMatch] = useState(false);
   const [saved, setSaved] = useState<Match | null>(
     existingClient ? { ...existingClient, saved: true } : null,
@@ -114,7 +119,7 @@ export function EnquiryFlow({
   const [offering, setOffering] = useState(false);
   const [sendingOffer, setSendingOffer] = useState(false);
   const [result, setResult] = useState<BookResult | null>(null);
-  // Intake is sent as its own step after booking — never inside the welcome email.
+  // The intake link can also be sent on its own after booking.
   const [sendingIntake, setSendingIntake] = useState(false);
   const [intakeSent, setIntakeSent] = useState(false);
 
@@ -126,6 +131,9 @@ export function EnquiryFlow({
   const [nameDraft, setNameDraft] = useState("");
 
   const activeClient = saved ?? (ignoreMatch ? null : match);
+  const contact = { email: email.trim(), phone: phone.trim() };
+  const contactChanged = !!saved && (contact.email !== saved.email || contact.phone !== saved.phone);
+  const validEmail = !contact.email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email);
   // Three columns on a phone, a full week on a laptop — the same grid either way.
   const gridDays = useIsPhone() ? 3 : 7;
   const { spans, invalidate } = useWeekSpans(weekStart, gridDays);
@@ -150,26 +158,30 @@ export function EnquiryFlow({
     api<EmailSettings & { clientCopy?: ClientCopy }>("/api/settings").then(setSettings).catch(() => {});
   }, []);
 
-  // Debounced dedupe check while the name is typed (only when nothing is saved yet).
-  const matchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Discard in-flight lookups when any of the fields used for matching changes.
   useEffect(() => {
-    if (saved) return;
-    clearTimeout(matchTimer.current);
-    if (!name.trim()) {
-      setMatch(null);
+    const params = new URLSearchParams({ name: name.trim(), email: email.trim(), phone: phone.trim() });
+    if (saved || ignoreMatch || ![...params.values()].some(Boolean)) {
+      setCheckingMatch(false);
       return;
     }
-    matchTimer.current = setTimeout(() => {
-      const p = new URLSearchParams({ name: name.trim() });
-      if (analysis?.email) p.set("email", analysis.email);
-      if (analysis?.phone) p.set("phone", analysis.phone);
-      api<{ match: Match | null }>(`/api/clients/match?${p}`)
-        .then((d) => setMatch(d.match))
-        .catch(() => {});
+    setCheckingMatch(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      api<{ match: Match | null }>(`/api/clients/match?${params}`, { signal: controller.signal })
+        .then((d) => {
+          if (!controller.signal.aborted) setMatch(d.match);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!controller.signal.aborted) setCheckingMatch(false);
+        });
     }, 350);
-    return () => clearTimeout(matchTimer.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, saved]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [name, email, phone, saved, ignoreMatch]);
 
   // Live message preview — recomposed until the therapist edits it by hand.
   const composed = useMemo(() => {
@@ -239,6 +251,8 @@ export function EnquiryFlow({
     setMatch(null);
     setIgnoreMatch(false);
     setName(existingClient?.name ?? "");
+    setEmail(existingClient?.email ?? "");
+    setPhone(existingClient?.phone ?? "");
     setText("");
     setOfferedTimes([]);
     setBookMode("offer");
@@ -284,6 +298,8 @@ export function EnquiryFlow({
     setEnquiryId(enq.id);
     setAnalysis(enq.text.trim() ? a : null); // shadow enquiries carry no real message
     setName(m?.saved ? m.name : a.name);
+    setEmail(m?.saved ? m.email || a.email : a.email);
+    setPhone(m?.saved ? m.phone || a.phone : a.phone);
     setMatch(m && !m.saved ? m : null);
     setSaved(m?.saved ? m : null);
     setIgnoreMatch(false);
@@ -365,62 +381,79 @@ export function EnquiryFlow({
   }
 
   /** Make the picked/saved client the active one for this session, wherever it came from. */
-  function activateClient(client: Match, message?: string) {
+  function activateClient(client: Match, keepDraft = false) {
     setSaved(client);
     setName(client.name);
+    setEmail(keepDraft ? contact.email || client.email : client.email);
+    setPhone(keepDraft ? contact.phone || client.phone : client.phone);
     setMatch(null);
     setIgnoreMatch(false);
-    setSelected([]);
-    setBookMode("offer");
-    setOfferedTimes([]);
-    setEmailDirty(false);
-    if (client.clinic) setClinic(client.clinic as Clinic);
-    if (message) toast(message);
-    void refreshWaiting();
-    void checkActiveOffer(client.id);
+    if (!keepDraft) {
+      setSelected([]);
+      setBookMode("offer");
+      setOfferedTimes([]);
+      setEmailDirty(false);
+      if (client.clinic) setClinic(client.clinic as Clinic);
+      void checkActiveOffer(client.id);
+    }
   }
 
-  async function saveNewClient() {
-    if (!name.trim()) {
-      toast("Add a name first");
-      return;
-    }
+  async function saveNewClient(): Promise<Match | null> {
+    if (!name.trim() || !validEmail || saving || checkingMatch) return null;
     setSaving(true);
     try {
-      if (enquiryId) {
-        const d = await api<{ client: Match; existed: boolean }>(`/api/enquiries/${enquiryId}/client`, {
-          method: "POST",
-          body: JSON.stringify({ name: name.trim(), email: analysis?.email, phone: analysis?.phone, clinic }),
-        });
-        activateClient(
-          { ...d.client, saved: true },
-          d.existed
-            ? `Linked to ${d.client.name}'s existing record — one record kept`
-            : `${d.client.name} saved — Drive folder + Doc ready`,
-        );
-      } else if (match && !ignoreMatch) {
-        activateClient({ ...match, saved: true }, `Linked to ${match.name}'s existing record — one record kept`);
-      } else {
-        const client = await api<Match>("/api/clients", {
-          method: "POST",
-          body: JSON.stringify({ name: name.trim(), clinic }),
-        });
-        activateClient({ ...client, saved: true }, `${client.name} saved — Drive folder + Doc ready`);
-      }
+      const candidate = ignoreMatch ? null : match;
+      const { client, existed } = enquiryId
+        ? await api<{ client: Match; existed: boolean }>(`/api/enquiries/${enquiryId}/client`, {
+            method: "POST",
+            body: JSON.stringify({ name: name.trim(), ...contact, clinic, clientId: candidate?.id, createNew: ignoreMatch }),
+          })
+        : candidate
+          ? { client: candidate, existed: true }
+          : {
+              client: await api<Match>("/api/clients", {
+                method: "POST",
+                body: JSON.stringify({ name: name.trim(), ...contact, clinic }),
+              }),
+              existed: false,
+            };
+      activateClient({ ...client, saved: true }, true);
+      toast(existed ? `Linked to ${client.name}'s record` : `${client.name} saved`);
+      void refreshWaiting();
+      return client;
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't save the client");
+      return null;
     } finally {
       setSaving(false);
     }
   }
 
-  /** Create the Enquiry row an offer/confirm hangs its status off, if one doesn't exist yet. */
-  async function ensureEnquiry(): Promise<string> {
+  async function saveContact() {
+    if (!saved || !contactChanged || !validEmail || savingContact || booking || sendingOffer || offering) return;
+    setSavingContact(true);
+    try {
+      const client = await api<Match>(`/api/clients/${saved.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(contact),
+      });
+      setSaved({ ...client, saved: true });
+      setEmail(client.email);
+      setPhone(client.phone);
+      toast("Contact details saved");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't save the contact details");
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  /** Create the enquiry that holds offer/confirm status for a picked client. */
+  async function ensureEnquiry(clientId: string): Promise<string> {
     if (enquiryId) return enquiryId;
-    if (!saved) throw new Error("Pick or save a client first");
     const d = await api<{ enquiry: { id: string } }>("/api/enquiries", {
       method: "POST",
-      body: JSON.stringify({ clientId: saved.id }),
+      body: JSON.stringify({ clientId }),
     });
     setEnquiryId(d.enquiry.id);
     return d.enquiry.id;
@@ -431,10 +464,17 @@ export function EnquiryFlow({
       toast("Pick some times to offer first");
       return;
     }
+    if (contactChanged || !validEmail || saving || checkingMatch || offering) return;
+    if (!saved && activeClient) {
+      toast("Link the existing client before offering times");
+      return;
+    }
     setOffering(true);
     try {
-      const id = await ensureEnquiry();
-      const displayName = (activeClient?.name || name || "there").trim();
+      const client = saved ?? await saveNewClient();
+      if (!client) return;
+      const id = await ensureEnquiry(client.id);
+      const displayName = client.name;
       const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected, undefined, settings?.clientCopy);
       // The clipboard gets either the full message or just the bare times/days;
       // the offer itself (times + status) is recorded the same way regardless.
@@ -447,7 +487,7 @@ export function EnquiryFlow({
           clinic,
           times: selected.map((d) => d.toISOString()),
           sendEmail: false,
-          clientId: activeClient?.id,
+          clientId: client.id,
           emailBody: message,
         }),
       });
@@ -470,18 +510,25 @@ export function EnquiryFlow({
       toast("Pick some times to offer first");
       return;
     }
-    if (!activeClient?.id) {
-      toast("Save or link a client first — an email needs somewhere to go");
-      return;
-    }
-    if (!activeClient.email) {
-      toast("This client has no email on record — use Copy instead");
+    if (contactChanged || !validEmail || saving || checkingMatch || sendingOffer) return;
+    if (!saved && activeClient) {
+      toast("Link the existing client before emailing");
       return;
     }
     setSendingOffer(true);
     try {
-      const id = await ensureEnquiry();
-      const displayName = (activeClient.name || name || "there").trim();
+      const client = saved ?? await saveNewClient();
+      if (!client) return;
+      if ((contact.email && contact.email !== client.email) || (contact.phone && contact.phone !== client.phone)) {
+        toast("Save the edited contact details before sending");
+        return;
+      }
+      if (!client.email) {
+        toast("Add an email address, or copy the message for WhatsApp");
+        return;
+      }
+      const id = await ensureEnquiry(client.id);
+      const displayName = client.name;
       const message = emailBody.trim() || composeOfferMessage(displayName, clinic, selected, undefined, settings?.clientCopy);
       await api(`/api/enquiries/${id}/offer`, {
         method: "POST",
@@ -490,8 +537,8 @@ export function EnquiryFlow({
           clinic,
           times: selected.map((d) => d.toISOString()),
           sendEmail: true,
-          email: activeClient.email,
-          clientId: activeClient.id,
+          email: client.email,
+          clientId: client.id,
           emailBody: message,
         }),
       });
@@ -505,13 +552,15 @@ export function EnquiryFlow({
     }
   }
 
-  // Does this booking have somewhere to email the confirmation? New clients only
-  // have an email if the pasted message gave us one. When there's no email, the
-  // booking still goes through and the message is copied for WhatsApp instead.
-  const bookingHasEmail = activeClient ? !!activeClient.email : !!analysis?.email;
+  const bookingHasEmail = !!(activeClient?.email || contact.email);
+  const contactNeedsReview = checkingMatch || (!saved && !!activeClient) || contactChanged;
 
   async function confirmBooking() {
-    if (!confirmSlot) return;
+    if (!confirmSlot || contactChanged || !validEmail || booking || saving || checkingMatch) return;
+    if (!saved && activeClient) {
+      toast("Link the existing client before booking");
+      return;
+    }
     setBooking(true);
     try {
       const req: Record<string, unknown> = {
@@ -525,12 +574,18 @@ export function EnquiryFlow({
         enquiryId,
       };
       if (activeClient) req.clientId = activeClient.id;
-      else req.newClient = { name: name.trim(), email: analysis?.email, phone: analysis?.phone };
+      else req.newClient = { name: name.trim(), ...contact };
 
       const res = await api<BookResult>("/api/book", { method: "POST", body: JSON.stringify(req) });
       if (res.emailTextForClipboard) {
-        await navigator.clipboard?.writeText(res.emailTextForClipboard).catch(() => {});
-        toast(res.emailSent ? "Booked ✓" : "Booked ✓ — no email on record, message copied for WhatsApp");
+        try {
+          await navigator.clipboard.writeText(res.emailTextForClipboard);
+          toast(sendConfirmEmail && bookingHasEmail
+            ? "Booked. Email couldn't be sent, so the message was copied."
+            : "Booked. Confirmation copied for WhatsApp.");
+        } catch {
+          toast("Booked. Copy the confirmation from the message below.");
+        }
       } else {
         toast(`Booked ✓ — confirmation emailed to ${res.clientName.split(" ")[0]}`);
       }
@@ -613,6 +668,17 @@ export function EnquiryFlow({
               </div>
             ))}
           </div>
+          {result.emailTextForClipboard && (
+            <details className="rounded-xl border border-line p-3 text-left">
+              <summary className="cursor-pointer text-[13px] font-semibold">Confirmation message</summary>
+              <textarea
+                aria-label="Confirmation message to copy"
+                className={`${inputClass} mt-2 min-h-[150px] resize-y`}
+                readOnly
+                value={result.emailTextForClipboard}
+              />
+            </details>
+          )}
           {(intakeSent || result.intakeDone) && (
             <div className="mt-3 rounded-xl border border-clay/25 bg-clay-tint/40 px-4 py-3.5 text-left">
               <div className="flex items-center gap-2 text-[13px] text-sage-text">
@@ -629,8 +695,7 @@ export function EnquiryFlow({
             <div className="mt-3 rounded-xl border border-clay/25 bg-clay-tint/40 px-4 py-3.5 text-left">
               <div className="text-[13px] font-semibold text-clay-text">One last thing — their intake form</div>
               <div className="mt-0.5 text-[12.5px] text-muted">
-                It&apos;s kept out of the welcome email on purpose, so the first message stays a warm hello.
-                Send it whenever feels right.
+                Send the intake link on its own if the client needs it again.
               </div>
               <div className="mt-2.5">
                 <PrimaryButton onClick={sendIntakeForm} disabled={sendingIntake}>
@@ -747,9 +812,11 @@ export function EnquiryFlow({
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
+                  setMatch(null);
                   setIgnoreMatch(false);
                 }}
                 disabled={!!saved}
+                aria-label="Client name"
                 placeholder="New client name"
                 className={`${inputClass} w-[220px] font-serif text-[16px] font-medium disabled:opacity-80`}
               />
@@ -775,10 +842,10 @@ export function EnquiryFlow({
                 <>
                   <PrimaryButton
                     onClick={saveNewClient}
-                    disabled={saving || !name.trim()}
+                    disabled={saving || checkingMatch || !name.trim() || !validEmail}
                     className="px-4 py-1.5 text-[12.5px]"
                   >
-                    {saving ? "Saving…" : "Save"}
+                    {saving ? "Saving…" : checkingMatch ? "Checking…" : activeClient ? "Link existing client" : "Save client"}
                   </PrimaryButton>
                   {activeClient && (
                     <span className="flex flex-wrap items-center gap-1.5">
@@ -802,12 +869,49 @@ export function EnquiryFlow({
                 </>
               )}
             </div>
-            {!saved && <ClientPicker onSelect={(c: ClientHit) => activateClient({ ...c, saved: true })} />}
-            <div className="text-[12.5px] text-muted">
-              {[analysis?.phone, analysis?.email].filter(Boolean).join(" · ") ||
-                (existingClient ? "Booking a returning client" : "No contact details found")}{" "}
-              · 60 min session
+            {!saved && <ClientPicker onSelect={(c: ClientHit) => activateClient({ ...c, saved: true }, !!enquiryId)} />}
+            <div className="flex flex-wrap items-end gap-2.5">
+              <label className="flex min-w-[180px] flex-1 flex-col gap-1 text-[12px] font-semibold text-ink-soft">
+                Email
+                <input
+                  type="email"
+                  autoComplete="off"
+                  value={email}
+                  aria-invalid={!validEmail}
+                  disabled={saving || savingContact || booking || sendingOffer || offering}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setMatch(null);
+                    setIgnoreMatch(false);
+                  }}
+                  placeholder="client@example.com"
+                  className={inputClass}
+                />
+              </label>
+              <label className="flex min-w-[150px] flex-1 flex-col gap-1 text-[12px] font-semibold text-ink-soft">
+                Phone
+                <input
+                  type="tel"
+                  autoComplete="off"
+                  value={phone}
+                  disabled={saving || savingContact || booking || sendingOffer || offering}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    setMatch(null);
+                    setIgnoreMatch(false);
+                  }}
+                  className={inputClass}
+                />
+              </label>
+              {contactChanged && (
+                <OutlineButton onClick={saveContact} disabled={savingContact || !validEmail}>
+                  {savingContact ? "Saving…" : "Save contact details"}
+                </OutlineButton>
+              )}
             </div>
+            {!validEmail && <p className="text-[12px] text-clay-text">Enter a complete email address.</p>}
+            {contactChanged && <p className="text-[12px] text-muted">Save the edited details before offering or booking a time.</p>}
+            {!saved && activeClient && <p className="text-[12px] text-muted">Check the matching client before offering or booking a time.</p>}
           </div>
           <div className="flex rounded-full border border-line bg-[oklch(0.955_0.012_82)] p-[3px]">
             {(["bethnal", "waterloo"] as const).map((c) => (
@@ -954,24 +1058,25 @@ export function EnquiryFlow({
           <div className="text-[12px] text-muted">
             Nothing is booked yet — these are just offered. When they reply, reopen this client and confirm one.
           </div>
-          {analysis && (
-            <>
-              <SectionLabel>MESSAGE</SectionLabel>
-              <textarea
-                value={emailBody}
-                onChange={(e) => {
-                  setEmailBody(e.target.value);
-                  setEmailDirty(true);
-                }}
-                className={`${inputClass} min-h-[150px] resize-y leading-[1.55]`}
-              />
-            </>
+          <label className="flex flex-col gap-1.5 text-[12px] font-semibold text-ink-soft">
+            Offer message
+            <textarea
+              value={emailBody}
+              onChange={(e) => {
+                setEmailBody(e.target.value);
+                setEmailDirty(true);
+              }}
+              className={`${inputClass} min-h-[150px] resize-y leading-[1.55]`}
+            />
+          </label>
+          {bookingHasEmail && !contactNeedsReview && (
+            <p className="text-[12px] text-muted">Email to {activeClient?.email || contact.email}</p>
           )}
           <div className="flex flex-wrap gap-2">
-            <PrimaryButton onClick={sendOfferEmail} disabled={sendingOffer || offering}>
+            <PrimaryButton onClick={sendOfferEmail} disabled={sendingOffer || offering || saving || contactNeedsReview || !validEmail || !bookingHasEmail || !name.trim()}>
               {sendingOffer ? "Sending…" : "Email these options"}
             </PrimaryButton>
-            <OutlineButton onClick={() => copyAndMarkOffered(false)} disabled={offering || sendingOffer}>
+            <OutlineButton onClick={() => copyAndMarkOffered(false)} disabled={offering || sendingOffer || saving || contactNeedsReview || !validEmail || !name.trim()}>
               {offering ? "Copying…" : "Copy for WhatsApp instead"}
             </OutlineButton>
           </div>
@@ -1036,7 +1141,7 @@ export function EnquiryFlow({
                 checked={sendConfirmEmail}
                 onChange={(e) => setSendConfirmEmail(e.target.checked)}
               />
-              Email the confirmation now — untick to copy it for WhatsApp instead
+              Email the confirmation to {activeClient?.email || contact.email}
             </label>
           ) : (
             <div className="text-[12.5px] text-muted">
@@ -1044,7 +1149,7 @@ export function EnquiryFlow({
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <PrimaryButton onClick={confirmBooking} disabled={booking}>
+            <PrimaryButton onClick={confirmBooking} disabled={booking || saving || contactNeedsReview || !validEmail || !name.trim()}>
               {booking
                 ? "Booking…"
                 : sendConfirmEmail && bookingHasEmail

@@ -11,15 +11,20 @@ import { PaymentMatching } from "./PaymentMatching";
 import { GoogleConnectionPanel } from "./GoogleConnectionPanel";
 import { TidyCalendarEventsButton } from "./TidyCalendarEventsButton";
 import { TestEmailPanel } from "./TestEmailPanel";
+import { AI_MODELS, getAIModelOption } from "@/lib/aiModels";
 import type { IntakeQuestion } from "@/lib/intakeQuestions";
 import type { ClientCopy } from "@/lib/clientCopy";
 import type { WeeklyHours } from "@/lib/booking/availability";
 
 export interface SettingsData {
   aiModel: string;
+  openAIConfigured: boolean;
+  claudeFallbackConfigured: boolean;
   accessNote: string;
   emailTemplate: string;
   emailTemplateReturning: string;
+  emailTemplateWaterloo: string;
+  emailTemplateBethnal: string;
   emailSignOff: string;
   paymentDetails: string;
   waterlooAddress: string;
@@ -567,12 +572,12 @@ export function SettingsView({
       {/* ───────────────── 3 · The messages clients receive ───────────────── */}
       <Stage
         n={3}
-        title="The messages clients receive"
-        blurb="Every word a client reads, in one place — the welcome email, offer, intake, booking pages, confirmations and the review request. Walk through them, check each one sounds like you, and edit anything."
+        title="Client messages"
+        blurb="Edit a message, preview the booking email, or send yourself a test."
       />
 
       <Dropdown
-        label="ALL CLIENT MESSAGES — REVIEW & EDIT EVERY WORD"
+        label="EDIT AND PREVIEW CLIENT MESSAGES"
         open={!!open.clientMessages}
         onToggle={() => toggle("clientMessages")}
       >
@@ -599,6 +604,12 @@ export function SettingsView({
             bethnalLocationUrl: settings.bethnalLocationUrl,
             waterlooFindIt: settings.waterlooFindIt,
             bethnalFindIt: settings.bethnalFindIt,
+            waterlooDirections: settings.waterlooDirections,
+            bethnalDirections: settings.bethnalDirections,
+            waterlooArrivalNote: settings.waterlooArrivalNote,
+            bethnalArrivalNote: settings.bethnalArrivalNote,
+            emailTemplateWaterloo: settings.emailTemplateWaterloo,
+            emailTemplateBethnal: settings.emailTemplateBethnal,
             bankAccountName: settings.bankAccountName,
             bankSortCode: settings.bankSortCode,
             bankAccountNumber: settings.bankAccountNumber,
@@ -637,24 +648,40 @@ export function SettingsView({
 
       <SectionLabel>AI — CASE NOTES, ENQUIRIES & IMPORT</SectionLabel>
       <Card className="flex flex-col gap-2.5 px-5 py-4">
+        <label className="flex max-w-sm flex-col gap-1.5 text-[12.5px] font-semibold text-ink">
+          AI model
+          <select
+            className={inputClass}
+            value={getAIModelOption(settings.aiModel)?.value ?? "sonnet"}
+            onChange={(event) => {
+              const option = getAIModelOption(event.target.value);
+              if (option) void save({ aiModel: option.value }, () => {}, `AI model set to ${option.label}`);
+            }}
+          >
+            {AI_MODELS.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={option.provider === "openai" && !settings.openAIConfigured}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <p className="text-[12.5px] leading-[1.6] text-muted">
-          Reads new enquiries, turns your dictated notes into bullets, and summarises sessions —
-          always called directly against Anthropic, never a third party. Sonnet reads more
-          carefully (recommended for case notes); Haiku is faster and a little cheaper.
+          GPT Automatic uses Luna for enquiries, reflections and live highlights, and Sol for case notes, session summaries
+          and imports. The selected provider receives the text needed for each task, which can include client details.
         </p>
-        <div className="flex gap-1.5 rounded-full bg-hoverbg/60 p-1 self-start">
-          {(["sonnet", "haiku"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => save({ aiModel: m }, () => {}, `AI model set to ${m === "sonnet" ? "Sonnet" : "Haiku"} ✓`)}
-              className={`cursor-pointer rounded-full px-3.5 py-[7px] text-[12.5px] font-semibold select-none ${
-                (settings.aiModel || "sonnet") === m ? "bg-clay text-cream" : "text-[oklch(0.45_0.02_60)]"
-              }`}
-            >
-              {m === "sonnet" ? "Sonnet — best quality" : "Haiku — fast & cheap"}
-            </button>
-          ))}
-        </div>
+        {settings.openAIConfigured ? (
+          <p className="text-[12.5px] text-muted">
+            {settings.claudeFallbackConfigured
+              ? "Claude backup is enabled for GPT rate limits and server errors."
+              : "Claude backup is off."}
+          </p>
+        ) : (
+          <p className="text-[12.5px] text-muted">Connect an OpenAI API key in your deployment settings to use GPT.</p>
+        )}
       </Card>
 
       <Dropdown label="GOOGLE — CALENDAR, DRIVE & GMAIL" open={!!open.google} onToggle={() => toggle("google")}>

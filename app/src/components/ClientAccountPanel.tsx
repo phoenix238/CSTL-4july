@@ -168,7 +168,7 @@ export function ClientAccountPanel({
 
   return (
     <>
-      <SectionLabel className="pt-2">PAYMENTS &amp; CLIENT PAGE</SectionLabel>
+      <SectionLabel className="pt-2">PAYMENTS, RECEIPTS &amp; CLIENT PAGE</SectionLabel>
       <div className="flex flex-col gap-2.5 rounded-2xl border border-line bg-card px-4 py-[13px]">
         <div className="flex flex-col gap-1 text-[12.5px]">
           <div className="flex justify-between gap-3">
@@ -231,7 +231,7 @@ export function ClientAccountPanel({
             }
             className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
           >
-            {sendingReceipt ? "Sending…" : "Email receipt"}
+            {sendingReceipt ? "Sending…" : "Email receipt for paid sessions"}
           </button>
           <button
             onClick={scanBank}
