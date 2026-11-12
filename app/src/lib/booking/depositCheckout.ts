@@ -7,7 +7,7 @@ import { SlotTakenError } from "./slotError";
 export const DEPOSIT_PENCE = 1500;
 const checkoutLifetimeSeconds = 35 * 60;
 
-function sandboxStripe() {
+export function sandboxStripe() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   if (!secretKey?.startsWith("sk_test_") || !publishableKey?.startsWith("pk_test_")) {

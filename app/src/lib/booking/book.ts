@@ -21,6 +21,8 @@ import { assertUnclaimedBookingTime, lockBookingTime } from "./depositHolds";
 export interface BookingRequest {
   /** existing client id — or absent with newClient set */
   clientId?: string;
+  /** A verified deposit already created this booking atomically. */
+  depositBookingId?: string;
   newClient?: { name: string; email?: string; phone?: string };
   clinic: Clinic;
   startISO: string;
@@ -177,12 +179,11 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     }
   }
 
-  const booking = await createBookingRow({
-    clientId,
-    clinic: req.clinic,
-    start,
-    bookedVia: req.bookedVia ?? "admin",
-  });
+  const booking = req.depositBookingId
+    ? await prisma.booking.findFirstOrThrow({ where: {
+        id: req.depositBookingId, clientId, clinic: req.clinic, startsAt: start, status: "confirmed",
+      } })
+    : await createBookingRow({ clientId, clinic: req.clinic, start, bookedVia: req.bookedVia ?? "admin" });
   await createBookingEvents(booking.id);
 
   const address = req.clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
@@ -207,7 +208,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // as an invited attendee, so no Google link is offered.
   const calendarIcsUrl = icsUrl(settings, portalToken, booking.id);
   const links = { intakeLink, portalLink, paymentRef, calendarIcsUrl };
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links, { depositPaid: !!req.depositBookingId });
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.
   const photo = parseDataUrl(resolveClinicPhoto(req.clinic, settings));

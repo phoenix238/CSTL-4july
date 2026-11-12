@@ -25,6 +25,7 @@ export async function assertUnclaimedBookingTime(
   tx: Prisma.TransactionClient,
   startsAt: Date,
   excludeBookingId?: string,
+  excludeDepositId?: string,
 ) {
   const overlap = {
     gt: new Date(startsAt.getTime() - sessionMs),
@@ -35,7 +36,7 @@ export async function assertUnclaimedBookingTime(
     select: { id: true },
   });
   const hold = await tx.bookingDeposit.findFirst({
-    where: { ...activeDepositHolds(), startsAt: overlap },
+    where: { ...activeDepositHolds(), startsAt: overlap, ...(excludeDepositId ? { id: { not: excludeDepositId } } : {}) },
     select: { id: true },
   });
   if (booking || hold) throw new SlotTakenError();

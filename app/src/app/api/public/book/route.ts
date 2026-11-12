@@ -1,3 +1,4 @@
+import { openDepositCheckout } from "@/lib/booking/depositCheckout";
 import { WATERLOO_CONTACT_MESSAGE } from "@/lib/booking/contact";
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
@@ -87,9 +88,17 @@ export async function POST(req: Request) {
       });
     }
 
+    if (!existing) {
+      if (!process.env.STRIPE_WEBHOOK_SECRET) {
+        return NextResponse.json({ error: "Online deposit checkout is unavailable. Please contact Phoenix to book." }, { status: 503 });
+      }
+      return NextResponse.json({
+        checkout: await openDepositCheckout({ start, name: cleanName, email: cleanEmail, phone: cleanPhone }),
+      });
+    }
+
     const result = await bookSession({
-      clientId: existing?.id,
-      newClient: existing ? undefined : { name: cleanName, email: cleanEmail, phone: cleanPhone },
+      clientId: existing.id,
       clinic: clinic as Clinic,
       startISO: start.toISOString(),
       sendEmail: true,

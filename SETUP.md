@@ -156,3 +156,9 @@ to the ledger automatically.
 
 Only money facts cross over: amount, date, how it was paid, the matching bank
 transaction and the client's payment reference. No names, notes or health information.
+
+### Bethnal Green deposit review
+
+Use a disposable database with the current Prisma schema and isolated Google Calendar and Gmail test accounts. Configure the Stripe sandbox secret and publishable keys as `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`. Put the signing secret for the same sandbox webhook in `STRIPE_WEBHOOK_SECRET`. Forward `checkout.session.completed` and `checkout.session.async_payment_succeeded` to `/api/public/deposit/webhook`. Keep these values in the review environment. The draft accepts sandbox keys only.
+
+Open `/book` and choose a Bethnal Green slot with an email that has no client record in the test database. Verify the £15 payment, the confirmed booking and matching diary entry, and the rendered welcome email. Use the email to open the booking portal and try the cancellation paths on each side of the 24-hour cutoff. For wallets, use a Stripe-registered test domain and a compatible browser and device with a configured wallet.

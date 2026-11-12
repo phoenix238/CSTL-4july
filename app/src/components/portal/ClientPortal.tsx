@@ -1,5 +1,6 @@
 "use client";
 
+import { depositCancellationText, type DepositCancellation } from "@/lib/booking/depositCancellationText";
 import { WaterlooContact } from "../WaterlooContact";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -124,11 +125,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const cancel = (bookingId: string) =>
     run(
       () =>
-        api<{ whenLabel: string }>(`/api/portal/${token}/cancel`, {
+        api<{ whenLabel: string; depositCancellation?: DepositCancellation }>(`/api/portal/${token}/cancel`, {
           method: "POST",
           body: JSON.stringify({ bookingId }),
         }),
-      () => toast("Your session has been cancelled"),
+      (result) => toast(result.depositCancellation ? `Session cancelled. ${depositCancellationText(result.depositCancellation)}` : "Your session has been cancelled"),
     );
 
   const receiptToast = (r: { sentTo?: string; pending?: boolean }) =>
@@ -386,6 +387,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   ×
                 </button>
               </div>
+              {cancelTarget.depositPaid && (
+                <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-sm text-clay-text">
+                  Cancel at least 24 hours before your appointment for a full £15 refund. Phoenix reviews shorter-notice cancellations.
+                </p>
+              )}
               {cancelTarget.cancelGoodwillPence > 0 && (
                 <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12.5px] leading-relaxed text-clay-text">
                   This is inside {view.noticeHours} hours, so the room is already paid for. If you&apos;re able to, a{" "}

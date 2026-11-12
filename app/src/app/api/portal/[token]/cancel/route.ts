@@ -1,3 +1,4 @@
+import { cancelDeposit } from "@/lib/booking/cancelDeposit";
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
@@ -38,7 +39,9 @@ export const POST = portalRoute(async (req, client) => {
     throw new PortalRuleError("You don't have a session booked to cancel.", 404);
   }
 
-  const goodwill = suggestedGoodwillPence(
+  const deposit = await prisma.bookingDeposit.findUnique({ where: { bookingId: booking.id } });
+  const cancelledAt = new Date();
+  const goodwill = deposit?.stripePaymentId ? 0 : suggestedGoodwillPence(
     booking.startsAt,
     settings.portalNoticeHours,
     settings.lateCancelGoodwillPence,
@@ -49,6 +52,9 @@ export const POST = portalRoute(async (req, client) => {
   // Frees the slot: deletes both Google events, marks the row cancelled, and
   // resyncs the Chalk Farm day block.
   await cancelBookingEvents(booking.id, "client");
+  const depositCancellation = deposit?.stripePaymentId
+    ? await cancelDeposit({ id: deposit.id, stripePaymentId: deposit.stripePaymentId }, booking, cancelledAt)
+    : undefined;
   if (goodwill) {
     await prisma.booking.update({
       where: { id: booking.id },
@@ -67,6 +73,7 @@ export const POST = portalRoute(async (req, client) => {
     clinic,
     whenLabel,
     goodwillPence: goodwill,
+    depositCancellation,
     paymentRef,
     portalLink: portalUrl(settings, client.portalToken),
   };
@@ -79,5 +86,5 @@ export const POST = portalRoute(async (req, client) => {
   }
   revalidateTag("shell");
 
-  return NextResponse.json({ whenLabel, goodwillPence: goodwill });
+  return NextResponse.json({ whenLabel, goodwillPence: goodwill, depositCancellation });
 });

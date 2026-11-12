@@ -1,3 +1,4 @@
+import { depositCancellationText, type DepositCancellation } from "@/lib/booking/depositCancellationText";
 import { getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
@@ -35,6 +36,7 @@ interface NotifyInput {
   previousWhenLabel?: string;
   /** goodwill contribution suggested on a short-notice cancellation, in pence */
   goodwillPence?: number;
+  depositCancellation?: DepositCancellation;
   /** their bank-transfer reference, so the goodwill note can say how to send it */
   paymentRef?: string;
   /** where they can pick a new time */
@@ -75,6 +77,7 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
       "Mark it given or waived from their profile.",
     );
   }
+  if (input.depositCancellation) lines.push("", depositCancellationText(input.depositCancellation));
   lines.push("", `Contact: ${input.clientEmail || "no email on record"}`);
 
   if (input.emailFailed) {
@@ -117,6 +120,7 @@ export async function confirmToClient(input: NotifyInput, bcc?: string): Promise
   if (input.action === "cancelled") {
     subject = "Your session has been cancelled";
     lines.push(`Your session on ${input.whenLabel} at ${clinic} has been cancelled.`);
+    if (input.depositCancellation) lines.push("", depositCancellationText(input.depositCancellation));
     if (input.goodwillPence) {
       lines.push(
         "",

@@ -1,5 +1,6 @@
 "use client";
 
+import { DepositCheckout, type DepositCheckoutSession } from "./DepositCheckout";
 import { WaterlooContact } from "./WaterlooContact";
 import { useState } from "react";
 import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
@@ -88,6 +89,7 @@ export function BookingFlow({
   const [phone, setPhone] = useState("");
   const [company, setCompany] = useState(""); // honeypot — real visitors never see or fill this
   const [submitting, setSubmitting] = useState(false);
+  const [checkout, setCheckout] = useState<DepositCheckoutSession | null>(null);
   // Set when the email they typed already has a record. We stop and ask rather
   // than booking, so the same person doesn't end up as two clients (and so we
   // never book into someone else's record off a mistyped address).
@@ -131,6 +133,7 @@ export function BookingFlow({
     /** the email is already on a record — confirm it's them before booking */
     needsConfirm?: boolean;
     needsEmailReview?: boolean;
+    checkout?: DepositCheckoutSession;
     prompt?: string;
   }
 
@@ -167,6 +170,10 @@ export function BookingFlow({
         } catch {
           // Private browsers can disallow storage. Booking still succeeds.
         }
+      }
+      if (result.checkout) {
+        setCheckout(result.checkout);
+        return;
       }
       notifyParentOfBooking(clinic);
       scrollEmbedToTop();
@@ -222,6 +229,7 @@ export function BookingFlow({
   function closeSheet() {
     if (submitting) return;
     setSheetOpen(false);
+    setCheckout(null);
     setRecognised(null);
     setEmailReview(null);
     setReturningOnly(false);
@@ -313,7 +321,13 @@ export function BookingFlow({
             {/* Recognised them: one tap to book into the record they already have,
                 one to back out if the address isn't theirs. Nothing is booked
                 either way until they answer, so a wrong guess here costs nothing. */}
-            {emailReview === "booked" ? (
+            {checkout ? (
+              <DepositCheckout session={checkout} onBooked={(result) => {
+                notifyParentOfBooking("bethnal");
+                scrollEmbedToTop();
+                setConfirmed({ ...result, email, returning: false, intakeDone: false });
+              }} />
+            ) : emailReview === "booked" ? (
               <div role="status" className="flex flex-col gap-2">
                 <p className="font-semibold text-sage-text">Your appointment is booked.</p>
                 <p className="text-sm text-ink-soft">Phoenix will check and update your contact details. If he needs anything else, he’ll email you. No deposit is due.</p>
@@ -469,7 +483,7 @@ export function BookingFlow({
                   className="absolute left-[-9999px] h-0 w-0 opacity-0"
                 />
                 <PrimaryButton type="submit" disabled={submitting} className="mt-1 py-3">
-                  {submitting ? "Booking…" : "Confirm booking"}
+                  {submitting ? "Checking…" : returningOnly ? "Confirm booking" : "Continue to booking"}
                 </PrimaryButton>
               </form>
             )}

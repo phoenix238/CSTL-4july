@@ -42,6 +42,7 @@ export interface PortalUpcoming extends PortalSession {
   canReschedule: boolean;
   /** goodwill suggested if they cancel right now, in pence (0 outside the window) */
   cancelGoodwillPence: number;
+  depositPaid: boolean;
   /** add this session to a non-Google calendar via .ics (Apple Calendar / Outlook /
    *  other). No Google link: a Google-account client already has it automatically. */
   icsUrl: string;
@@ -106,6 +107,11 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     .filter((b) => b.status === "confirmed" && b.startsAt.getTime() > now.getTime())
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   const upcomingIds = new Set(upcomingRows.map((b) => b.id));
+  const deposits = await prisma.bookingDeposit.findMany({
+    where: { bookingId: { in: [...upcomingIds] }, stripePaymentId: { not: null } },
+    select: { bookingId: true },
+  });
+  const paidDepositIds = new Set(deposits.map(({ bookingId }) => bookingId));
 
   const toSession = (b: (typeof bookings)[number]): PortalSession => ({
     id: b.id,
@@ -123,7 +129,8 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
   const upcoming: PortalUpcoming[] = upcomingRows.map((row) => ({
     ...toSession(row),
     canReschedule: canRescheduleSelf(row.startsAt, settings.portalNoticeHours, now),
-    cancelGoodwillPence: suggestedGoodwillPence(
+    depositPaid: paidDepositIds.has(row.id),
+    cancelGoodwillPence: paidDepositIds.has(row.id) ? 0 : suggestedGoodwillPence(
       row.startsAt,
       settings.portalNoticeHours,
       settings.lateCancelGoodwillPence,
