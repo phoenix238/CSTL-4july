@@ -163,6 +163,7 @@ model Booking {
   // £30–60 sliding scale, so it stays null until the actual amount is known (set
   // from the client profile after the session, or when they tell you what they paid).
   amountPence   Int?
+  depositPence  Int       @default(0)
   paid          Boolean   @default(false)
   paidAt        DateTime?
   // Free-text note on the payment — "cash on the day", "bank transfer 12 Aug", etc.

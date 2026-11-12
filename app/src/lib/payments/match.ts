@@ -1,3 +1,4 @@
+import { remainingSessionPence } from "@/lib/account";
 /**
  * Matching a bank payment to a client by their reference.
  *
@@ -177,6 +178,7 @@ export interface PayableBooking {
   startsAt: Date;
   paid: boolean;
   amountPence: number | null;
+  depositPence?: number;
   status: string;
 }
 
@@ -202,11 +204,11 @@ export const SETTLE_WINDOW_DAYS = 8;
  * happen is a goodwill contribution, and that's a judgement call, not something
  * to apply automatically.
  */
-export function chooseBookingToSettle(
-  bookings: PayableBooking[],
+export function chooseBookingToSettle<T extends PayableBooking>(
+  bookings: T[],
   asOf: Date = new Date(),
   windowDays: number = SETTLE_WINDOW_DAYS,
-): PayableBooking | null {
+): T | null {
   const open = bookings
     .filter((b) => !b.paid && b.status !== "cancelled")
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
@@ -276,10 +278,20 @@ export function matchNameAndAmount(
     const tokens = nameTokens(c.name).filter((t) => t.length > 1);
     if (tokens.length < 2 || !tokens.every((t) => payer.has(t))) continue;
     const target = chooseBookingToSettle(c.bookings, asOf);
-    if (target && target.amountPence === amountPence) hits.push({ clientId: c.clientId, bookingId: target.id });
+    if (target && remainingSessionPence(target) === amountPence) hits.push({ clientId: c.clientId, bookingId: target.id });
   }
 
   if (hits.length === 1) return { status: "matched", ...hits[0] };
   if (hits.length > 1) return { status: "ambiguous", clientIds: hits.map((h) => h.clientId) };
   return { status: "none" };
+}
+
+/** A deposit-backed session is settled only by the remaining balance. */
+export function matchesDepositBalance(booking: PayableBooking, transferPence: number): boolean {
+  const deposit = booking.depositPence ?? 0;
+  if (!deposit) return true;
+  const remaining = remainingSessionPence(booking);
+  if (remaining != null) return transferPence === remaining;
+  const total = transferPence + deposit;
+  return total >= 3000 && total <= 6000;
 }

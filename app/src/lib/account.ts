@@ -15,6 +15,7 @@ export interface AccountBooking {
   clinic: string;
   status: string; // confirmed | cancelled | done
   amountPence: number | null;
+  depositPence?: number;
   paid: boolean;
   goodwillPence: number;
   goodwillSettled: boolean;
@@ -54,7 +55,19 @@ export function goodwillOpenPence(b: AccountBooking): number {
 /** What's still owed on the session itself. */
 export function sessionOwedPence(b: AccountBooking, now: Date): number {
   if (!isCompleted(b, now) || b.paid) return 0;
-  return b.amountPence ?? 0; // sliding-scale amount not yet set — counted separately
+  return remainingSessionPence(b) ?? 0; // sliding-scale amount not yet set — counted separately
+}
+
+export function remainingSessionPence(b: Pick<AccountBooking, "amountPence" | "depositPence">): number | null {
+  return b.amountPence == null ? null : Math.max(0, b.amountPence - (b.depositPence ?? 0));
+}
+
+export function depositBalanceLabel(b: Pick<AccountBooking, "amountPence" | "depositPence">): string {
+  const deposit = b.depositPence ?? 0;
+  const remaining = remainingSessionPence(b);
+  return remaining == null
+    ? `${formatPence(3000 - deposit)}–${formatPence(6000 - deposit)} remaining by bank transfer`
+    : `${formatPence(remaining)} remaining by bank transfer`;
 }
 
 export interface AccountSummary {

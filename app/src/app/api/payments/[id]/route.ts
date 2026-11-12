@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
-import { chooseBookingToSettle, normalisePayerName, normaliseRef } from "@/lib/payments/match";
+import { chooseBookingToSettle, matchesDepositBalance, normalisePayerName, normaliseRef } from "@/lib/payments/match";
 import { sendPendingReceiptIfAny } from "@/lib/receipt";
 import { fmtDayLong } from "@/lib/time";
 
@@ -67,7 +67,7 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
 
   const bookings = await prisma.booking.findMany({
     where: { clientId },
-    select: { id: true, startsAt: true, paid: true, amountPence: true, status: true },
+    select: { id: true, startsAt: true, paid: true, amountPence: true, depositPence: true, status: true },
   });
   // A hand-assignment: the person has already decided this payment is theirs, so
   // don't apply the ±window that guards the automatic path — place it on the best
@@ -86,12 +86,16 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: true, status: "unmatched", note: "No unpaid session to put it against." });
   }
 
+  if (!matchesDepositBalance(target, tx.amountPence)) {
+    return NextResponse.json({ error: "This transfer does not match the remaining balance after the deposit." }, { status: 409 });
+  }
+
   await prisma.booking.update({
     where: { id: target.id },
     data: {
       paid: true,
       paidAt: tx.transactedAt,
-      amountPence: target.amountPence ?? tx.amountPence,
+      amountPence: target.amountPence ?? (tx.amountPence + target.depositPence),
       paymentNote: `Bank transfer ${fmtDayLong(tx.transactedAt)} · ref ${tx.reference || "—"}`,
     },
   });

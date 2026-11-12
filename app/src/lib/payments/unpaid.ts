@@ -1,3 +1,4 @@
+import { depositBalanceLabel, remainingSessionPence } from "@/lib/account";
 import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { fmtDayLong, fmtTime } from "@/lib/time";
@@ -45,7 +46,7 @@ export async function findUnpaidSessions(asOf: Date = new Date()): Promise<Unpai
     clientEmail: b.client.email,
     whenLabel: `${fmtDayLong(b.startsAt)} · ${fmtTime(b.startsAt)}`,
     startsAt: b.startsAt,
-    amountPence: b.amountPence,
+    amountPence: remainingSessionPence(b),
     clinic: b.clinic as Clinic,
     paymentReminderSentAt: b.paymentReminderSentAt,
   }));
@@ -82,7 +83,7 @@ export async function sweepUnpaidSessions({
     clientEmail: b.client.email,
     whenLabel: `${fmtDayLong(b.startsAt)} · ${fmtTime(b.startsAt)}`,
     startsAt: b.startsAt,
-    amountPence: b.amountPence,
+    amountPence: remainingSessionPence(b),
     clinic: b.clinic as Clinic,
     paymentReminderSentAt: b.paymentReminderSentAt,
   }));
@@ -132,7 +133,7 @@ export interface ReminderSettings {
  */
 export function composePaymentReminder(
   settings: ReminderSettings,
-  input: { clientName: string; whenLabel: string; clinic: Clinic; paymentRef?: string; portalLink?: string },
+  input: { clientName: string; whenLabel: string; clinic: Clinic; paymentRef?: string; portalLink?: string; deposit?: { amountPence: number | null; depositPence: number } },
 ): { subject: string; body: string } {
   const first = input.clientName.split(" ")[0] || "there";
   const lines = [
@@ -154,7 +155,9 @@ export function composePaymentReminder(
   const price = CLINIC_PRICE[input.clinic];
   lines.push(
     "",
-    input.clinic === "bethnal"
+    input.deposit
+      ? `Your £15 deposit has already been credited. You have ${depositBalanceLabel(input.deposit)}.`
+      : input.clinic === "bethnal"
       ? `This is a donation-based practice on a ${price}, so pay what feels fair. If you need more time to pay, just let me know when that'll be.`
       : `The session is ${price}. If you need more time to pay, just let me know when that'll be.`,
     "",
@@ -183,6 +186,7 @@ export async function sendPaymentReminder(bookingId: string): Promise<{ sentTo: 
     clinic: booking.clinic as Clinic,
     paymentRef,
     portalLink: portalUrl(settings, token),
+    deposit: booking.depositPence ? booking : undefined,
   });
 
   await sendEmail(booking.client.email, subject, body, undefined, undefined, {

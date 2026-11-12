@@ -3,6 +3,7 @@ import {
   chooseBookingToSettle,
   matchKnownPayer,
   matchNameAndAmount,
+  matchesDepositBalance,
   matchReference,
   normaliseRef,
   suggestClientByKnownReference,
@@ -283,4 +284,13 @@ describe("matchNameAndAmount", () => {
     const stale = { ...jono, bookings: [bk({ id: "j1", startsAt: day(-30), amountPence: 6000 })] };
     expect(matchNameAndAmount("JONO SMITH", 6000, NOW, [stale])).toEqual({ status: "none" });
   });
+});
+
+it("accepts only the net transfer for a priced deposit-backed session", () => {
+  const session = { id: "visit", startsAt: new Date(), paid: false, status: "confirmed", amountPence: 4500, depositPence: 1500 };
+  expect(matchesDepositBalance(session, 3000)).toBe(true);
+  expect(matchesDepositBalance(session, 4500)).toBe(false);
+  expect(matchesDepositBalance({ ...session, amountPence: null }, 1500)).toBe(true);
+  expect(matchesDepositBalance({ ...session, amountPence: null }, 4500)).toBe(true);
+  expect(matchesDepositBalance({ ...session, amountPence: null }, 4501)).toBe(false);
 });

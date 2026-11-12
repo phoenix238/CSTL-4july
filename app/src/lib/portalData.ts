@@ -30,6 +30,7 @@ export interface PortalSession {
   clinic: Clinic;
   paid: boolean;
   amountPence: number | null;
+  depositPence: number;
   goodwillPence: number;
   goodwillReason: string;
   goodwillSettled: boolean;
@@ -119,6 +120,7 @@ export async function buildPortalView(clientId: string, now = new Date()): Promi
     clinic: b.clinic as Clinic,
     paid: b.paid,
     amountPence: b.amountPence,
+    depositPence: b.depositPence,
     goodwillPence: b.goodwillPence,
     goodwillReason: b.goodwillReason,
     goodwillSettled: b.goodwillSettled,

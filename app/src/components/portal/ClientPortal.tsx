@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
-import { formatPence, sessionPriceLabel } from "@/lib/account";
+import { depositBalanceLabel, formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
 import type { PortalUpcoming, PortalView } from "@/lib/portalData";
@@ -308,6 +308,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   </div>
                 </div>
 
+                {!!u.depositPence && !u.paid && (
+                  <p className="text-sm text-muted">{formatPence(u.depositPence)} deposit paid · {depositBalanceLabel(u)}</p>
+                )}
                 {mode === "idle" && <AddToCalendar session={u} />}
 
                 {mode === "idle" && (
@@ -586,7 +589,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                       ? "Cancelled"
                       : s.paid
                         ? `Paid${s.amountPence != null ? ` · ${formatPence(s.amountPence)}` : ""}`
-                        : sessionPriceLabel(s.clinic, s.amountPence)}
+                        : s.depositPence ? depositBalanceLabel(s) : sessionPriceLabel(s.clinic, s.amountPence)}
                   </span>
                 </li>
               );

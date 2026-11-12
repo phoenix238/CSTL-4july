@@ -4,7 +4,7 @@ import { fmtDayLong, fmtTime } from "@/lib/time";
 import { ensureClientFolderAndDoc } from "@/lib/google/drive";
 import { sendEmail } from "@/lib/google/gmail";
 import { bookSession } from "./book";
-import { sandboxStripe, verifiedDepositPayment } from "./depositCheckout";
+import { DEPOSIT_PENCE, sandboxStripe, verifiedDepositPayment } from "./depositCheckout";
 import { assertUnclaimedBookingTime, lockBookingTime } from "./depositHolds";
 import { SlotTakenError } from "./slotError";
 
@@ -42,7 +42,7 @@ export async function completeDeposit(session: Stripe.Checkout.Session) {
       data: { name: hold.name, email: hold.email, phone: hold.phone, clinic: "bethnal" },
     });
     const created = await tx.booking.create({
-      data: { clientId: client.id, startsAt: hold.startsAt, clinic: "bethnal", bookedVia: "online" },
+      data: { clientId: client.id, startsAt: hold.startsAt, clinic: "bethnal", bookedVia: "online", depositPence: DEPOSIT_PENCE },
     });
     await tx.bookingDeposit.update({
       where: { id }, data: { state: "confirming", stripePaymentId: paymentId, bookingId: created.id },

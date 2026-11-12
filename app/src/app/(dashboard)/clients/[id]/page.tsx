@@ -144,6 +144,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         status: b.status,
         paid: b.paid,
         amountPence: b.amountPence,
+        depositPence: b.depositPence,
         goodwillPence: b.goodwillPence,
         goodwillReason: b.goodwillReason,
         goodwillSettled: b.goodwillSettled,

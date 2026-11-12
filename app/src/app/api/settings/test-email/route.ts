@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { getSettings } from "@/lib/db";
+import { parseDataUrl } from "@/lib/google/mime";
 import { sendEmail } from "@/lib/google/gmail";
-import { composeBookingEmail, resolveSignOff } from "@/lib/booking/email";
+import { composeBookingEmail, resolveClinicPhoto, resolveSignOff } from "@/lib/booking/email";
 import { composeReviewEmail } from "@/lib/booking/review";
 import { composePaymentReminder } from "@/lib/payments/unpaid";
 import { composeSessionReminder } from "@/lib/reminders/sessionReminders";
@@ -17,6 +18,10 @@ import { fmtDayLong, fmtTime, londonAddDays, londonTime, londonYMD } from "@/lib
 
 export type TestEmailType =
   | "first"
+  | "deposit-welcome"
+  | "deposit-refund"
+  | "deposit-late"
+  | "deposit-reminder"
   | "returning"
   | "cancellation"
   | "receipt"
@@ -37,7 +42,7 @@ export const POST = guarded(async (req: Request) => {
     type?: TestEmailType;
     clinic?: Clinic;
   };
-  const clinic: Clinic = clinicIn === "waterloo" ? "waterloo" : "bethnal";
+  const clinic: Clinic = clinicIn === "waterloo" && !type?.startsWith("deposit-") ? "waterloo" : "bethnal";
   const settings = await getSettings();
 
   const clientName = "Maya Sample";
@@ -63,6 +68,7 @@ export const POST = guarded(async (req: Request) => {
   };
 
   switch (type) {
+    case "deposit-welcome":
     case "first":
     case "returning": {
       const email = composeBookingEmail(
@@ -72,26 +78,39 @@ export const POST = guarded(async (req: Request) => {
         true,
         settings,
         links,
+        { depositPaid: type === "deposit-welcome" },
       );
-      await sendEmail(to, `[Test] ${email.subject}`, email.body);
+      const photo = parseDataUrl(resolveClinicPhoto(clinic, settings));
+      const attachments = photo
+        ? [{ filename: `${clinic === "waterloo" ? "waterloo" : "bethnal-green"}-entrance.jpg`, ...photo, inline: true }]
+        : undefined;
+      await sendEmail(to, `[Test] ${email.subject}`, email.body, undefined, attachments, { links: [
+        { url: links.portalLink, label: "Manage or cancel booking" },
+        { url: links.intakeLink, label: "Click here for your intake form" },
+        { url: links.calendarIcsUrl, label: "Add to calendar" },
+      ] });
       break;
     }
+    case "deposit-refund":
+    case "deposit-late":
     case "cancellation": {
       // The real portal cancellation email, addressed to you.
-      await confirmToClient({
+      const { sent } = await confirmToClient({
         action: "cancelled",
         clientName,
         clientEmail: to,
         clinic,
         whenLabel,
-        goodwillPence: settings.lateCancelGoodwillPence,
+        goodwillPence: type === "cancellation" ? settings.lateCancelGoodwillPence : undefined,
+        depositCancellation: type === "deposit-refund" ? "refund_requested" : type === "deposit-late" ? "late_review" : undefined,
         paymentRef,
         portalLink: links.portalLink,
       });
+      if (!sent) return NextResponse.json({ error: "The cancellation email could not be sent." }, { status: 502 });
       break;
     }
     case "receipt": {
-      await sendReceipt({
+      const { sent } = await sendReceipt({
         clientName,
         clientEmail: to,
         clientRef: paymentRef,
@@ -101,8 +120,10 @@ export const POST = guarded(async (req: Request) => {
         totalPence: 4000,
         unpricedCount: 0,
       });
+      if (!sent) return NextResponse.json({ error: "The receipt email could not be sent." }, { status: 502 });
       break;
     }
+    case "deposit-reminder":
     case "reminder": {
       const { subject, body } = composePaymentReminder(settings, {
         clientName,
@@ -110,8 +131,11 @@ export const POST = guarded(async (req: Request) => {
         clinic,
         paymentRef,
         portalLink: links.portalLink,
+        deposit: type === "deposit-reminder" ? { amountPence: 4500, depositPence: 1500 } : undefined,
       });
-      await sendEmail(to, `[Test] ${subject}`, body);
+      await sendEmail(to, `[Test] ${subject}`, body, undefined, undefined, {
+        links: [{ url: links.portalLink, label: "Click here for your booking page" }],
+      });
       break;
     }
     case "session-reminder": {

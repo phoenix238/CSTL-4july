@@ -70,7 +70,7 @@ describe("completeDeposit", () => {
   it("creates one booking and sends its welcome email once across repeated notifications", async () => {
     await completeDeposit(session);
     await completeDeposit(session);
-    expect(mocks.tx.booking.create).toHaveBeenCalledTimes(1);
+    expect(mocks.tx.booking.create).toHaveBeenCalledExactlyOnceWith({ data: expect.objectContaining({ depositPence: 1500 }) });
     expect(mocks.book).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ depositBookingId: "booking", sendEmail: true }));
     expect(mocks.deposit.update).toHaveBeenLastCalledWith({ where: { id: "hold" }, data: { state: "booked" } });
   });
