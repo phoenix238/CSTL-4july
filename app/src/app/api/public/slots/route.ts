@@ -1,3 +1,4 @@
+import { WATERLOO_CONTACT_MESSAGE } from "@/lib/booking/contact";
 import { NextResponse } from "next/server";
 import type { Clinic } from "@/lib/booking/rules";
 import { defaultSlotWindow, loadAvailableSlots } from "@/lib/booking/slots";
@@ -8,6 +9,9 @@ export async function GET(req: Request) {
   try {
     const params = new URL(req.url).searchParams;
     const clinic = params.get("clinic");
+    if (clinic === "waterloo") {
+      return NextResponse.json({ error: WATERLOO_CONTACT_MESSAGE }, { status: 403 });
+    }
     if (clinic !== "waterloo" && clinic !== "bethnal") {
       return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
     }

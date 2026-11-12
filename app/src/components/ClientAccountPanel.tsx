@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, SectionLabel, useToast } from "./ui";
-import { formatPence, sessionPriceLabel, summariseAccount, type AccountBooking } from "@/lib/account";
+import { depositBalanceLabel, formatPence, remainingSessionPence, summariseAccount, type AccountBooking } from "@/lib/account";
 import { CLINIC_LABEL, type Clinic } from "@/lib/booking/rules";
 import { fmtDate } from "@/lib/time";
 
@@ -14,6 +14,7 @@ export interface AccountRow {
   status: string;
   paid: boolean;
   amountPence: number | null;
+  depositPence?: number;
   goodwillPence: number;
   goodwillReason: string;
   goodwillSettled: boolean;
@@ -77,16 +78,19 @@ export function ClientAccountPanel({
   // what actually changed hands, recorded at the moment it's handed over,
   // with however it was paid (cash or card).
   async function takeInPersonPayment(bookingId: string) {
-    const raw = cashInput[bookingId] ?? "";
+    const booking = bookings.find((item) => item.id === bookingId);
+    const deposit = booking?.depositPence ?? 0;
+    const remaining = booking ? remainingSessionPence(booking) : null;
+    const raw = cashInput[bookingId] ?? (remaining == null ? "" : String(remaining / 100));
     const pounds = parseFloat(raw);
     if (!Number.isFinite(pounds) || pounds < 0) {
       toast("Enter how much they gave you first");
       return;
     }
-    const method = payMethod[bookingId] ?? "Cash";
+    const method = deposit ? "Bank transfer" : payMethod[bookingId] ?? "Cash";
     await patch(
       bookingId,
-      { paid: true, amountPence: Math.round(pounds * 100), paymentNote: method },
+      { paid: true, amountPence: Math.round(pounds * 100) + deposit, paymentNote: method },
       `Recorded £${pounds % 1 === 0 ? pounds : pounds.toFixed(2)} ${method.toLowerCase()} ✓`,
     );
     setCashInput((s) => {
@@ -168,7 +172,7 @@ export function ClientAccountPanel({
 
   return (
     <>
-      <SectionLabel className="pt-2">PAYMENTS &amp; CLIENT PAGE</SectionLabel>
+      <SectionLabel className="pt-2">PAYMENTS, RECEIPTS &amp; CLIENT PAGE</SectionLabel>
       <div className="flex flex-col gap-2.5 rounded-2xl border border-line bg-card px-4 py-[13px]">
         <div className="flex flex-col gap-1 text-[12.5px]">
           <div className="flex justify-between gap-3">
@@ -231,7 +235,7 @@ export function ClientAccountPanel({
             }
             className="cursor-pointer rounded-full border border-line bg-card px-3.5 py-1.5 text-[12px] font-semibold text-ink-soft hover:bg-hoverbg disabled:cursor-default disabled:opacity-50"
           >
-            {sendingReceipt ? "Sending…" : "Email receipt"}
+            {sendingReceipt ? "Sending…" : "Email receipt for paid sessions"}
           </button>
           <button
             onClick={scanBank}
@@ -249,6 +253,9 @@ export function ClientAccountPanel({
               const openGoodwill = b.goodwillPence > 0 && !b.goodwillSettled && !b.goodwillWaived;
               return (
                 <div key={b.id} className="flex flex-col gap-1">
+                  {!cancelled && !!b.depositPence && !b.paid && (
+                    <p className="text-xs text-muted">{formatPence(b.depositPence)} deposit paid · {depositBalanceLabel(b)}</p>
+                  )}
                   <div className="flex items-baseline justify-between gap-2 text-[12px]">
                     <span className={cancelled ? "text-muted line-through" : ""}>
                       {fmtDate(new Date(b.startsAtISO))}
@@ -265,7 +272,7 @@ export function ClientAccountPanel({
                     )}
                     {!cancelled && !b.paid && (
                       <div className="flex items-center gap-1">
-                        <div className="flex rounded-full border border-line bg-card p-[1px]">
+                        {b.depositPence ? <span className="text-muted">Bank transfer</span> : <div className="flex rounded-full border border-line bg-card p-[1px]">
                           {(["Cash", "Card"] as const).map((m) => (
                             <button
                               key={m}
@@ -278,7 +285,7 @@ export function ClientAccountPanel({
                               {m}
                             </button>
                           ))}
-                        </div>
+                        </div>}
                         <span className="text-muted">£</span>
                         <input
                           type="number"
@@ -286,7 +293,7 @@ export function ClientAccountPanel({
                           min="0"
                           step="0.01"
                           placeholder="amount"
-                          value={cashInput[b.id] ?? (b.amountPence != null ? String(b.amountPence / 100) : "")}
+                          value={cashInput[b.id] ?? (b.amountPence != null ? String((remainingSessionPence(b) ?? 0) / 100) : "")}
                           onChange={(e) => setCashInput((s) => ({ ...s, [b.id]: e.target.value }))}
                           onKeyDown={(e) => e.key === "Enter" && takeInPersonPayment(b.id)}
                           className="w-14 rounded-full border border-line bg-card px-2 py-0.5 text-[11px] text-ink outline-none focus:border-clay"

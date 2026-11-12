@@ -125,14 +125,18 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
           </label>
         </div>
         <label className="flex flex-col gap-1">
-          <span className="text-[11.5px] font-semibold text-ink-soft">Anything else to say about paying</span>
+          <span className="text-[11.5px] font-semibold text-ink-soft">Extra payment instructions</span>
           <textarea
             value={draft.bankPaymentNote}
             onChange={(e) => set("bankPaymentNote", e.target.value)}
             rows={2}
-            placeholder="Cash is fine too — whatever's easiest."
+            placeholder="Cash is fine too."
+            aria-describedby="bank-payment-note-help"
             className={inputClass}
           />
+          <span id="bank-payment-note-help" className="text-[11px] text-muted">
+            Shown with the bank details. Set your email sign-off under Client messages.
+          </span>
         </label>
       </Card>
 
@@ -216,7 +220,7 @@ export function PortalSettings({ initial }: { initial: PortalSettingsData }) {
         />
         <Toggle
           label="Clients can email themselves a receipt"
-          hint="Lists the sessions you've marked as paid, and tells you it went out."
+          hint="Switch off and save to hide the receipt button on client pages. You can still email a receipt from Payments on a client’s profile."
           checked={draft.portalReceipts}
           onChange={(v) => set("portalReceipts", v)}
         />

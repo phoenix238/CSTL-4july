@@ -1,3 +1,4 @@
+import { WaterlooContact } from "@/components/WaterlooContact";
 import { prisma, getSettings } from "@/lib/db";
 import { ToastProvider } from "@/components/ui";
 import { OfferPickFlow } from "@/components/OfferPickFlow";
@@ -37,6 +38,10 @@ export default async function OfferPage({ params }: { params: Promise<{ token: s
 
   if (enquiry.status !== "offered" || !enquiry.clientId || !enquiry.offeredTimes.length) {
     return <ExpiredCard />;
+  }
+
+  if (enquiry.clinic === "waterloo") {
+    return <main className="mx-auto max-w-[560px] px-5 py-10"><WaterlooContact /></main>;
   }
 
   const client = await prisma.client.findUnique({ where: { id: enquiry.clientId } });

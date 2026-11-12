@@ -184,6 +184,35 @@ async function deleteEvent(calendar: CalendarApi, calId: string, eventId: string
 // Google → App: fold calendar edits back into overrides (that date only)
 // ————————————————————————————————————————————————————————————————
 
+/** Remove only the overlapping portion of the date-specific rule. */
+async function retractOneOff(clinic: Clinic, date: string, kind: "open" | "block", startMin: number, endMin: number) {
+  await prisma.$transaction(async (tx) => {
+    const rows = await tx.availabilityOverride.findMany({
+      where: { clinic, date, kind, repeatWeekly: false, deletedAt: null, startMin: { lt: endMin }, endMin: { gt: startMin } },
+    });
+    for (const row of rows) {
+      if (row.exactStart && kind === "open") {
+        await tx.availabilityOverride.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+        continue;
+      }
+      const before = row.startMin < startMin;
+      const after = row.endMin > endMin;
+      if (before) {
+        await tx.availabilityOverride.update({ where: { id: row.id }, data: { endMin: startMin } });
+        if (after) {
+          await tx.availabilityOverride.create({
+            data: { clinic, date, kind, startMin: endMin, endMin: row.endMin, note: row.note },
+          });
+        }
+      } else if (after) {
+        await tx.availabilityOverride.update({ where: { id: row.id }, data: { startMin: endMin } });
+      } else {
+        await tx.availabilityOverride.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+      }
+    }
+  });
+}
+
 /**
  * Close a window on one date: retract any one-off open overrides that cover it,
  * then — if weekly hours or a repeating override still leave that window open —
@@ -192,13 +221,7 @@ async function deleteEvent(calendar: CalendarApi, calId: string, eventId: string
  * nothing to retract and the window already blocked).
  */
 async function closeWindowOnDate(clinic: Clinic, dateKey: string, startMin: number, endMin: number) {
-  const openOverrides = await prisma.availabilityOverride.findMany({
-    where: { clinic, date: dateKey, kind: "open", repeatWeekly: false },
-  });
-  const overlapping = openOverrides.filter((o) => o.startMin < endMin && o.endMin > startMin);
-  if (overlapping.length) {
-    await prisma.availabilityOverride.deleteMany({ where: { id: { in: overlapping.map((o) => o.id) } } });
-  }
+  await retractOneOff(clinic, dateKey, "open", startMin, endMin);
 
   const settings = await loadSettings();
   const weeklyHours = resolveWeeklyHours(settings.weeklyHours)[clinic];
@@ -218,13 +241,12 @@ async function closeWindowOnDate(clinic: Clinic, dateKey: string, startMin: numb
  * override. Returns the override id so the triggering event can be adopted to it.
  */
 async function openWindowOnDate(clinic: Clinic, dateKey: string, startMin: number, endMin: number): Promise<string> {
-  const blocks = await prisma.availabilityOverride.findMany({
-    where: { clinic, date: dateKey, kind: "block", repeatWeekly: false },
+  await retractOneOff(clinic, dateKey, "block", startMin, endMin);
+  const existing = await prisma.availabilityOverride.findFirst({
+    where: { clinic, date: dateKey, kind: "open", startMin, endMin, repeatWeekly: false, exactStart: false, deletedAt: null },
+    select: { id: true },
   });
-  const overlapping = blocks.filter((b) => b.startMin < endMin && b.endMin > startMin);
-  if (overlapping.length) {
-    await prisma.availabilityOverride.deleteMany({ where: { id: { in: overlapping.map((b) => b.id) } } });
-  }
+  if (existing) return existing.id;
   const created = await prisma.availabilityOverride.create({
     data: { clinic, date: dateKey, kind: "open", startMin, endMin, repeatWeekly: false, exactStart: false, note: "" },
   });
@@ -284,13 +306,13 @@ export async function pullAvailabilityFromCalendar(): Promise<{ imported: number
     if (!geom) continue; // all-day / malformed — ignored
 
     if (managed && row) {
-      const unchanged = row.dateKey === geom.dateKey && row.startMin === geom.startMin && row.endMin === geom.endMin;
+      const clinic = clinicFromTitle(ev.summary, row.clinic as Clinic);
+      const unchanged = row.clinic === clinic && row.dateKey === geom.dateKey && row.startMin === geom.startMin && row.endMin === geom.endMin;
       if (unchanged) continue; // our own write, or nothing changed — the loop guard
       // Moved / resized: close the old window, open the new one (that date only).
       await closeWindowOnDate(row.clinic as Clinic, row.dateKey, row.startMin, row.endMin);
-      const clinic = clinicFromTitle(ev.summary, row.clinic as Clinic);
-      await openWindowOnDate(clinic, geom.dateKey, geom.startMin, geom.endMin);
-      await prisma.availabilityEvent.delete({ where: { eventId: ev.id } }).catch(() => {});
+      const overrideId = await openWindowOnDate(clinic, geom.dateKey, geom.startMin, geom.endMin);
+      await adoptEvent(calendar, calId, ev.id, clinic, geom, overrideId);
       moved++;
       continue;
     }

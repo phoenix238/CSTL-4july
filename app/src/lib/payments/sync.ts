@@ -1,3 +1,4 @@
+import { remainingSessionPence } from "@/lib/account";
 import { prisma, getSettings } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
 import { formatPence } from "@/lib/account";
@@ -9,6 +10,7 @@ import {
   matchReference,
   matchKnownPayer,
   matchNameAndAmount,
+  matchesDepositBalance,
   suggestClientByName,
   type RefCandidate,
   type PayerCandidate,
@@ -55,7 +57,7 @@ type Placement =
   | { kind: "noSession"; clientId?: string }
   | { kind: "matched"; clientId: string; target: PayableBookingRow; matchedVia: MatchedVia };
 
-type PayableBookingRow = { id: string; startsAt: Date; paid: boolean; amountPence: number | null; status: string };
+type PayableBookingRow = { id: string; startsAt: Date; paid: boolean; amountPence: number | null; depositPence: number; status: string };
 
 interface MatchContext {
   candidates: RefCandidate[];
@@ -242,14 +244,15 @@ async function placePayment(payment: BankPayment, ctx: MatchContext, knownClient
 
   const bookings = await prisma.booking.findMany({
     where: { clientId: result.clientId },
-    select: { id: true, startsAt: true, paid: true, amountPence: true, status: true },
+    select: { id: true, startsAt: true, paid: true, amountPence: true, depositPence: true, status: true },
   });
   // Relative to when the money actually moved, and only sessions within the
   // window around it — a transfer shouldn't settle a session weeks away.
   const found = chooseBookingToSettle(bookings, payment.transactedAt);
   // A name match only ever stands on the amount agreeing — re-checked against
   // the fresh read, so an earlier payment in this same run can't shift it.
-  const target = matchedVia === "name" && found?.amountPence !== payment.amountPence ? null : found;
+  const target = found && matchesDepositBalance(found, payment.amountPence) &&
+    (matchedVia !== "name" || remainingSessionPence(found) === payment.amountPence) ? found : null;
 
   if (!target) {
     // A name match that didn't hold up isn't attribution — it goes to the queue
@@ -269,7 +272,7 @@ async function settleBooking(target: PayableBookingRow, payment: BankPayment, ma
       // actually sent is the honest figure, so fill it in. A session that
       // already has one keeps it: the amount agreed isn't ours to overwrite
       // from a transfer that might be part payment or cover something else.
-      amountPence: target.amountPence ?? payment.amountPence,
+      amountPence: target.amountPence ?? (payment.amountPence + target.depositPence),
       paymentNote:
         matchedVia === "payer"
           ? `Bank transfer ${fmtDayLong(payment.transactedAt)} · from remembered payer ${payment.counterParty || "—"}`
@@ -292,7 +295,7 @@ async function matchOnNameAndAmount(payment: BankPayment, clients: Array<{ id: s
   if (!fits.length) return { status: "none" as const };
   const bookings = await prisma.booking.findMany({
     where: { clientId: { in: fits.map((c) => c.id) } },
-    select: { id: true, clientId: true, startsAt: true, paid: true, amountPence: true, status: true },
+    select: { id: true, clientId: true, startsAt: true, paid: true, amountPence: true, depositPence: true, status: true },
   });
   return matchNameAndAmount(
     payment.counterParty,

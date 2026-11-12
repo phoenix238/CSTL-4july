@@ -48,7 +48,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     const questions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
 
     // Standard answers update the record; everything shows in the Doc too.
-    const columnUpdate: Record<string, string | boolean> = { name: finalName, intakeDone: true };
+    const columnUpdate: Parameters<typeof updateClientDetails>[1] & Record<string, unknown> = {
+      name: finalName,
+      intakeDone: true,
+      intakeSubmittedAt: new Date(),
+      intakeAnswers: questions.flatMap(({ key, label }) =>
+        typeof a[key] === "string" ? [{ key, label, answer: a[key] }] : [],
+      ),
+    };
     if (submittedEmail) columnUpdate.email = submittedEmail;
     if (typeof consent === "boolean") columnUpdate.consentGiven = consent;
     for (const q of questions) {

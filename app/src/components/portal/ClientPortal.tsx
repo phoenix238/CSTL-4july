@@ -1,11 +1,13 @@
 "use client";
 
+import { depositCancellationText, type DepositCancellation } from "@/lib/booking/depositCancellationText";
+import { WaterlooContact } from "../WaterlooContact";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
 import { BookSlotPicker } from "@/components/BookSlotPicker";
 import { CLINIC_BOOKING_LABEL, CLINIC_LABEL, CLINIC_PRICE, type Clinic } from "@/lib/booking/rules";
-import { formatPence, sessionPriceLabel } from "@/lib/account";
+import { depositBalanceLabel, formatPence, sessionPriceLabel } from "@/lib/account";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { REMINDER_LEAD_OPTIONS } from "@/lib/reminders/leadTimes";
 import type { PortalUpcoming, PortalView } from "@/lib/portalData";
@@ -123,11 +125,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
   const cancel = (bookingId: string) =>
     run(
       () =>
-        api<{ whenLabel: string }>(`/api/portal/${token}/cancel`, {
+        api<{ whenLabel: string; depositCancellation?: DepositCancellation }>(`/api/portal/${token}/cancel`, {
           method: "POST",
           body: JSON.stringify({ bookingId }),
         }),
-      () => toast("Your session has been cancelled"),
+      (result) => toast(result.depositCancellation ? `Session cancelled. ${depositCancellationText(result.depositCancellation)}` : "Your session has been cancelled"),
     );
 
   const receiptToast = (r: { sentTo?: string; pending?: boolean }) =>
@@ -203,7 +205,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         </div>
       )}
 
-      <BookSlotPicker
+      {mode === "book" && clinic === "waterloo" ? <WaterlooContact /> : <BookSlotPicker
         clinic={pickerClinic}
         selected={selected}
         onSelect={(iso) => {
@@ -214,7 +216,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           `/api/portal/${token}/slots?clinic=${c}${mode === "reschedule" ? "&moving=1" : ""}`
         }
         emptyMessage="No times free at the moment — please check back in a few days, or message Phoenix directly."
-      />
+      />}
 
       <div className="flex flex-wrap gap-2">
         <OutlineButton disabled={busy} onClick={reset}>
@@ -306,6 +308,9 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   </div>
                 </div>
 
+                {!!u.depositPence && !u.paid && (
+                  <p className="text-sm text-muted">{formatPence(u.depositPence)} deposit paid · {depositBalanceLabel(u)}</p>
+                )}
                 {mode === "idle" && <AddToCalendar session={u} />}
 
                 {mode === "idle" && (
@@ -385,6 +390,11 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                   ×
                 </button>
               </div>
+              {cancelTarget.depositPaid && (
+                <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-sm text-clay-text">
+                  Cancel at least 24 hours before your appointment for a full £15 refund. Phoenix reviews shorter-notice cancellations.
+                </p>
+              )}
               {cancelTarget.cancelGoodwillPence > 0 && (
                 <p className="rounded-lg bg-clay-tint px-3.5 py-3 text-[12.5px] leading-relaxed text-clay-text">
                   This is inside {view.noticeHours} hours, so the room is already paid for. If you&apos;re able to, a{" "}
@@ -445,24 +455,6 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
       <Card className="flex flex-col gap-3 px-5 py-5">
         <SectionLabel>Payment</SectionLabel>
 
-        <details className="group flex flex-col">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[13px] font-medium text-clay-text [&::-webkit-details-marker]:hidden">
-            <span>Payment details &amp; your reference</span>
-            <svg
-              aria-hidden
-              viewBox="0 0 20 20"
-              className="size-4 shrink-0 text-clay-text transition-transform group-open:rotate-180"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M5 7.5l5 5 5-5" />
-            </svg>
-          </summary>
-          <div className="mt-3 flex flex-col gap-3">
-
         <div className="rounded-lg bg-clay-tint px-3.5 py-3">
           <div className="text-[12px] font-semibold text-clay-text">Your payment reference</div>
           <div className="mt-1 flex items-center justify-between gap-2">
@@ -513,8 +505,6 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         {view.bank.note && (
           <p className="text-[12.5px] leading-relaxed whitespace-pre-line text-muted">{view.bank.note}</p>
         )}
-          </div>
-        </details>
 
         <div className="flex flex-col gap-1 border-t border-hairline pt-3 text-[13px]">
           <div className="flex justify-between gap-4">
@@ -599,7 +589,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
                       ? "Cancelled"
                       : s.paid
                         ? `Paid${s.amountPence != null ? ` · ${formatPence(s.amountPence)}` : ""}`
-                        : sessionPriceLabel(s.clinic, s.amountPence)}
+                        : s.depositPence ? depositBalanceLabel(s) : sessionPriceLabel(s.clinic, s.amountPence)}
                   </span>
                 </li>
               );

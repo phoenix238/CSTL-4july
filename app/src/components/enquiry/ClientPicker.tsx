@@ -8,6 +8,7 @@ export interface ClientHit {
   name: string;
   clinic: string;
   email: string;
+  phone: string;
   welcomeSent: boolean;
 }
 

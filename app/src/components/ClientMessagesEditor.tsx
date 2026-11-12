@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, PrimaryButton, useToast } from "./ui";
 import { CLIENT_COPY_DEFAULTS, CLIENT_COPY_KEYS, applyCopy, type ClientCopy } from "@/lib/clientCopy";
@@ -18,6 +18,12 @@ export interface PreviewContext {
   bethnalLocationUrl: string;
   waterlooFindIt: string;
   bethnalFindIt: string;
+  waterlooDirections: string;
+  bethnalDirections: string;
+  waterlooArrivalNote: string;
+  bethnalArrivalNote: string;
+  emailTemplateWaterloo: string;
+  emailTemplateBethnal: string;
   bankAccountName: string;
   bankSortCode: string;
   bankAccountNumber: string;
@@ -53,7 +59,7 @@ type Group =
 // ones worth reading through; the page wording below is set-and-forget.
 const EMAIL_GROUPS: Group[] = [
   {
-    title: "1 · The offer email — “here are some times”",
+    title: "Offer available times",
     blurb: "Sent when you offer a few times. The times you picked drop into {times}, and the link lets them book one themselves.",
     source: "copy",
     fields: [
@@ -63,9 +69,9 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "2 · The welcome email — a new client's first booking",
+    title: "First booking",
     blurb:
-      "Sent the moment you book someone for the first time. Write the words; the address, map pin, how to find the door, payment details, their booking page, the intake link and your sign-off are all placed around it for whichever clinic they booked.",
+      "Write your opening message. The preview includes the clinic details, intake link, booking page and your saved sign-off.",
     source: "settings",
     fields: [
       {
@@ -77,9 +83,9 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "3 · The returning confirmation — every booking after that",
+    title: "Returning booking",
     blurb:
-      "The short one, for someone who already has their booking page and knows how to pay. The address, map pin, how to find the door and your sign-off are added underneath, same as the welcome email.",
+      "Write a short confirmation for returning clients. The preview includes the clinic details, booking link and your saved sign-off.",
     source: "settings",
     fields: [
       {
@@ -91,7 +97,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "4 · The intake email — a resend, on its own",
+    title: "Resend intake form",
     blurb: "The intake link already rides along in the welcome email; this is the standalone resend.",
     source: "copy",
     fields: [
@@ -100,7 +106,7 @@ const EMAIL_GROUPS: Group[] = [
     ],
   },
   {
-    title: "5 · The review email — after a session",
+    title: "Request a review",
     blurb:
       "Asks for a Google review and offers a one-tap marketing opt-in. Written once for both clinics — only the review link differs, because each clinic is its own Google listing.",
     source: "settings",
@@ -116,7 +122,7 @@ const EMAIL_GROUPS: Group[] = [
 // Written once, dropped into the emails above — not messages in their own right.
 const BUILDING_BLOCK_GROUPS: Group[] = [
   {
-    title: "The access note",
+    title: "Accessibility note",
     blurb:
       "Slots into the welcome email wherever you put {accessNote} — stairs, access needs. Don't paste map links in here; the map pin is added for you from Settings › Where each clinic is.",
     source: "settings",
@@ -132,7 +138,7 @@ const BUILDING_BLOCK_GROUPS: Group[] = [
   {
     title: "Your sign-off",
     blurb:
-      "How every email ends. Written once here and added to the very end of each one — so you don't sign off inside the letters above, and no email ever ends twice.",
+      "This is the closing used in booking emails. Add your name here once.",
     source: "settings",
     fields: [{ key: "emailSignOff", label: "Sign-off", multiline: true }],
   },
@@ -143,7 +149,7 @@ const BUILDING_BLOCK_GROUPS: Group[] = [
 // doubling the length of the list you scroll through to reach the emails.
 const PAGE_GROUPS: Group[] = [
   {
-    title: "The intake form page",
+    title: "Intake form",
     blurb: "What a client sees when they open their intake link.",
     source: "copy",
     fields: [
@@ -155,7 +161,7 @@ const PAGE_GROUPS: Group[] = [
     ],
   },
   {
-    title: "Your booking page (/book)",
+    title: "Public booking page",
     blurb: "The public page you can link from Instagram or your website.",
     source: "copy",
     fields: [
@@ -243,11 +249,12 @@ function FieldEditor({
   onChange: (v: string) => void;
   onReset?: () => void;
 }) {
+  const id = useId();
   const preview = value.includes("{") ? applyCopy(value, SAMPLE) : null;
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-semibold text-ink-soft">{label}</span>
+        <label htmlFor={id} className="text-[12px] font-semibold text-ink-soft">{label}</label>
         {onReset && !isDefault && (
           <button
             onClick={onReset}
@@ -259,12 +266,14 @@ function FieldEditor({
       </div>
       {multiline ? (
         <textarea
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="min-h-[96px] w-full resize-y rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] leading-[1.55] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
         />
       ) : (
         <input
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="w-full rounded-lg border border-inputline bg-inputbg px-2.5 py-2 text-[13px] text-ink outline-none focus:border-[oklch(0.58_0.115_42_/_0.5)]"
@@ -289,9 +298,18 @@ function FieldEditor({
 // The exact welcome email, composed the same way the real send is, from the
 // live draft — so the duplication a client used to see (the same directions
 // twice, a second sign-off) is visible here before anyone gets it.
-function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSettings; start?: "first" | "returning" }) {
+function WelcomeEmailPreview({
+  settings,
+  start,
+  showPayment,
+}: {
+  settings: EmailSettings;
+  start: "first" | "returning";
+  showPayment: boolean;
+}) {
   const [clinic, setClinic] = useState<Clinic>("bethnal");
   const [which, setWhich] = useState<"first" | "returning">(start);
+  const [includePayment, setIncludePayment] = useState(showPayment);
   const links = {
     intakeLink: "https://your-site/intake/ab12cd",
     portalLink: "https://your-site/me/ab12cd",
@@ -302,7 +320,7 @@ function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSet
     { name: "Maya", welcomeSent: which === "returning" },
     clinic,
     "Fri 14 Aug · 12:15",
-    true,
+    includePayment,
     settings,
     links,
   );
@@ -313,23 +331,29 @@ function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSet
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[12px] font-semibold text-ink-soft">Preview the exact email</span>
+        <span className="text-[12px] font-semibold text-ink-soft">Email preview</span>
         <div className="flex gap-1.5">
-          <button className={tab(which === "first")} onClick={() => setWhich("first")}>
+          <button aria-pressed={which === "first"} className={tab(which === "first")} onClick={() => setWhich("first")}>
             First time
           </button>
-          <button className={tab(which === "returning")} onClick={() => setWhich("returning")}>
+          <button aria-pressed={which === "returning"} className={tab(which === "returning")} onClick={() => setWhich("returning")}>
             Returning
           </button>
         </div>
       </div>
       <div className="flex gap-1.5">
         {(["bethnal", "waterloo"] as Clinic[]).map((c) => (
-          <button key={c} className={tab(clinic === c)} onClick={() => setClinic(c)}>
+          <button key={c} aria-pressed={clinic === c} className={tab(clinic === c)} onClick={() => setClinic(c)}>
             {CLINIC_LABEL[c]}
           </button>
         ))}
       </div>
+      {which === "first" && (
+        <label className="flex items-center gap-2 text-[12px] text-muted">
+          <input type="checkbox" checked={includePayment} onChange={(e) => setIncludePayment(e.target.checked)} />
+          Include payment details
+        </label>
+      )}
       <div className="rounded-lg bg-[oklch(0.97_0.01_85)] px-3 py-2.5">
         <div className="border-b border-line pb-1.5 text-[12px] font-semibold text-ink">{email.subject}</div>
         <div className="whitespace-pre-line pt-2 text-[12px] leading-[1.55] text-[oklch(0.4_0.02_60)]">
@@ -337,25 +361,12 @@ function WelcomeEmailPreview({ settings, start = "first" }: { settings: EmailSet
         </div>
       </div>
       <p className="text-[10.5px] text-faint">
-        Sample data (Maya, a Bethnal Green session). {which === "first" ? "A new" : "A returning"} client sees this —
-        the address, map pin, how-to-find, payment and sign-off are placed once, in order.
+        Sample booking for Maya. The links use sample addresses.
       </p>
     </div>
   );
 }
 
-/** A quiet divider between the three kinds of thing in this list. */
-function SubHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-2 px-1 text-[10.5px] font-semibold tracking-[0.09em] text-faint uppercase first:mt-0">
-      {children}
-    </div>
-  );
-}
-
-// The two groups that get the live email preview under them, each opening on
-// the matching tab — so "what does a returning client actually get" is answered
-// in the same place you edit it.
 const WELCOME_TITLE = EMAIL_GROUPS[1].title;
 const RETURNING_TITLE = EMAIL_GROUPS[2].title;
 
@@ -372,8 +383,7 @@ export function ClientMessagesEditor({
   const toast = useToast();
   const [draft, setDraft] = useState<ClientCopy>(initial);
   const [sDraft, setSDraft] = useState<SettingsMessages>(settingsInitial);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [showPages, setShowPages] = useState(false);
+  const [openGroup, setOpenGroup] = useState(WELCOME_TITLE);
   const [saving, setSaving] = useState(false);
 
   const S_KEYS = Object.keys(settingsInitial) as (keyof SettingsMessages)[];
@@ -422,118 +432,97 @@ export function ClientMessagesEditor({
     }
   }
 
-  /** One collapsible group — header, its fields, and the preview where it belongs. */
-  function renderGroup(g: Group) {
-    const groupEdited =
-      g.source === "copy"
-        ? g.fields.some((f) => draft[f.key].trim() !== CLIENT_COPY_DEFAULTS[f.key].trim())
-        : g.fields.some((f) => sDraft[f.key] !== settingsInitial[f.key]);
-    const isOpen = openGroup === g.title;
-    return (
-      <div key={g.title} className="flex flex-col gap-2.5">
-        <button
-          onClick={() => setOpenGroup(isOpen ? null : g.title)}
-          className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-line bg-card px-4 py-3 text-left hover:bg-hoverbg"
-        >
-          <span className="flex items-center gap-2">
-            <span className="text-[13.5px] font-semibold">{g.title}</span>
-            {groupEdited && (
-              <span className="rounded-full bg-sage-tint px-2 py-[1px] text-[10.5px] font-semibold text-sage-text">
-                edited
-              </span>
-            )}
-          </span>
-          <span className="flex-none text-[11px] font-semibold text-clay-text">{isOpen ? "Hide ▾" : "Show ›"}</span>
-        </button>
+  const group = [...EMAIL_GROUPS, ...BUILDING_BLOCK_GROUPS, ...PAGE_GROUPS].find((g) => g.title === openGroup)!;
+  const showPreview = group.title === WELCOME_TITLE || group.title === RETURNING_TITLE || BUILDING_BLOCK_GROUPS.includes(group);
+  const emailMode = group.title === RETURNING_TITLE ? "returning" : "first";
 
-        {isOpen && (
-          <Card className="flex flex-col gap-4 px-4 py-4">
-            <p className="text-[12px] leading-relaxed text-muted">{g.blurb}</p>
-            {g.source === "copy"
-              ? g.fields.map((f) => (
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex max-w-sm flex-col gap-1 text-[13px] font-semibold text-ink">
+        Choose what to edit
+        <select
+          value={openGroup}
+          onChange={(e) => setOpenGroup(e.target.value)}
+          className="rounded-lg border border-inputline bg-card px-3 py-2 text-[13px]"
+        >
+          <optgroup label="Emails">
+            {[EMAIL_GROUPS[1], EMAIL_GROUPS[2], EMAIL_GROUPS[0], ...EMAIL_GROUPS.slice(3)].map((g) => (
+              <option key={g.title}>{g.title}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Shared email details">
+            {BUILDING_BLOCK_GROUPS.map((g) => <option key={g.title}>{g.title}</option>)}
+          </optgroup>
+          <optgroup label="Client pages">
+            {PAGE_GROUPS.map((g) => <option key={g.title}>{g.title}</option>)}
+          </optgroup>
+        </select>
+      </label>
+      <div className={showPreview ? "grid items-start gap-3 xl:grid-cols-2" : ""}>
+        <Card className="flex flex-col gap-3 px-4 py-4">
+          <p className="text-[12px] leading-relaxed text-muted">{group.blurb}</p>
+          {group.source === "copy"
+            ? group.fields.map((f) => (
+                <FieldEditor
+                  key={f.key}
+                  label={f.label}
+                  value={draft[f.key]}
+                  isDefault={draft[f.key].trim() === CLIENT_COPY_DEFAULTS[f.key].trim()}
+                  placeholders={f.placeholders}
+                  multiline={f.multiline}
+                  onChange={(v) => setCopy(f.key, v)}
+                  onReset={() => setCopy(f.key, CLIENT_COPY_DEFAULTS[f.key])}
+                />
+              ))
+            : group.fields.map((f) => {
+                const recommended = SETTINGS_MESSAGE_DEFAULTS[f.key];
+                return (
                   <FieldEditor
                     key={f.key}
                     label={f.label}
-                    value={draft[f.key]}
-                    isDefault={draft[f.key].trim() === CLIENT_COPY_DEFAULTS[f.key].trim()}
+                    value={sDraft[f.key]}
+                    isDefault={recommended !== undefined && sDraft[f.key].trim() === recommended.trim()}
                     placeholders={f.placeholders}
                     multiline={f.multiline}
-                    onChange={(v) => setCopy(f.key, v)}
-                    onReset={() => setCopy(f.key, CLIENT_COPY_DEFAULTS[f.key])}
+                    onChange={(v) => setSetting(f.key, v)}
+                    onReset={recommended !== undefined ? () => setSetting(f.key, recommended) : undefined}
                   />
-                ))
-              : g.fields.map((f) => {
-                  const recommended = SETTINGS_MESSAGE_DEFAULTS[f.key];
-                  return (
-                    <FieldEditor
-                      key={f.key}
-                      label={f.label}
-                      value={sDraft[f.key]}
-                      isDefault={recommended !== undefined && sDraft[f.key].trim() === recommended.trim()}
-                      placeholders={f.placeholders}
-                      multiline={f.multiline}
-                      onChange={(v) => setSetting(f.key, v)}
-                      onReset={recommended !== undefined ? () => setSetting(f.key, recommended) : undefined}
-                    />
-                  );
-                })}
-            {g.title === WELCOME_TITLE && <WelcomeEmailPreview settings={previewSettings} start="first" />}
-            {g.title === RETURNING_TITLE && <WelcomeEmailPreview settings={previewSettings} start="returning" />}
-          </Card>
+                );
+              })}
+          {(group.title === WELCOME_TITLE || group.title === RETURNING_TITLE) && (
+            <button
+              type="button"
+              onClick={() => setOpenGroup("Your sign-off")}
+              className="self-start text-[12px] font-semibold text-clay-text underline"
+            >
+              Edit your sign-off
+            </button>
+          )}
+        </Card>
+        {showPreview && (
+          <WelcomeEmailPreview
+            key={group.title}
+            settings={previewSettings}
+            start={emailMode}
+            showPayment={group.title === "Payment wording"}
+          />
         )}
       </div>
-    );
-  }
-
-  // Drop the recommended wording into the draft — clean, voice-only, one of
-  // everything. Doesn't save on its own: you review it in the preview and Save
-  // (or Discard). Your clinic links and bank details aren't touched.
-  function fillRecommended() {
-    setDraft({ ...CLIENT_COPY_DEFAULTS });
-    setSDraft((d) => ({ ...d, ...SETTINGS_MESSAGE_DEFAULTS }));
-    setOpenGroup(WELCOME_TITLE);
-    toast("Recommended wording filled in — review below, then Save");
-  }
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      <Card className="flex flex-col gap-3 px-4 py-3.5">
-        <div className="text-[12.5px] leading-relaxed text-muted">
-          Every word a client reads, in one place — from their welcome email to the review request. Open each
-          moment of their journey, check it reads the way you want, and edit anything. Placeholders in {"{ }"} fill
-          in automatically.
-        </div>
-        <div className="flex flex-col gap-1.5 border-t border-hairline pt-3">
-          <PrimaryButton onClick={fillRecommended} className="self-start px-4 py-1.5 text-[12.5px]">
-            Fill everything with recommended wording
-          </PrimaryButton>
-          <p className="text-[11.5px] text-muted">
-            Starts you from clean, up-to-date wording — one welcome letter in your voice, one sign-off, tidy payment
-            and review emails. Nothing is sent or saved until you press Save; your addresses, map pins and bank
-            details aren&apos;t changed. Edit anything afterwards.
-          </p>
-        </div>
-      </Card>
-
-      <SubHeading>The emails you send</SubHeading>
-      {EMAIL_GROUPS.map(renderGroup)}
-
-      <SubHeading>Written once, used in all of them</SubHeading>
-      {BUILDING_BLOCK_GROUPS.map(renderGroup)}
-
-      <button
-        onClick={() => setShowPages(!showPages)}
-        className="mt-1 flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-dashed border-line bg-transparent px-4 py-3 text-left hover:bg-hoverbg"
-      >
-        <span className="flex flex-col gap-0.5">
-          <span className="text-[13px] font-semibold text-ink-soft">Wording on the pages clients open</span>
-          <span className="text-[11.5px] text-muted">
-            The intake form, your booking page, the “you&apos;re booked” screen. Set once — you rarely need these.
-          </span>
-        </span>
-        <span className="flex-none text-[11px] font-semibold text-clay-text">{showPages ? "Hide ▾" : "Show ›"}</span>
-      </button>
-      {showPages && PAGE_GROUPS.map(renderGroup)}
+      <details className="text-[12px] text-muted">
+        <summary className="cursor-pointer">Reset all client wording</summary>
+        <button
+          type="button"
+          className="mt-2 cursor-pointer font-semibold text-clay-text underline"
+          onClick={() => {
+            setDraft({ ...CLIENT_COPY_DEFAULTS });
+            setSDraft((d) => ({ ...d, ...SETTINGS_MESSAGE_DEFAULTS }));
+            setOpenGroup(WELCOME_TITLE);
+            toast("Default wording loaded for review. Save changes to apply it.");
+          }}
+        >
+          Load default wording
+        </button>
+      </details>
 
       {dirty && (
         <div className="sticky bottom-3 z-10 flex items-center gap-2 rounded-full border border-line bg-card px-3 py-2 shadow-card">

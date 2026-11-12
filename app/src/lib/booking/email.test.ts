@@ -57,6 +57,29 @@ describe("composeBookingEmail", () => {
     expect(body).not.toContain("with gratitude");
   });
 
+  it("removes a duplicate signature from old payment settings and a single-line template ending", () => {
+    const { body } = compose({
+      emailTemplate: "Hi {name},\n\nYou're booked for {when}.\nWith gratitude Phoenix",
+      paymentDetails: "Card or transfer works.\n\nWith gratitude\nPhoenix",
+      bankPaymentNote: "Cash works too.\r\n\r\nwith gratitude\r\nPhoenix",
+    });
+    expect(body).toContain("Card or transfer works.");
+    expect(body).toContain("Cash works too.");
+    expect(body.match(/with gratitude/gi)).toHaveLength(1);
+    expect(body.endsWith("with gratitude\nPhoenix")).toBe(true);
+  });
+
+  it("keeps regular sentences mentioning Phoenix while removing a custom signature", () => {
+    const { body } = compose({
+      emailTemplate: "Your appointment is with Phoenix.\n\nSpeak soon, P.T.",
+      emailSignOff: "Speak soon,\nP.T.",
+      bankPaymentNote: "The payment account belongs to Phoenix",
+    });
+    expect(body).toContain("Your appointment is with Phoenix.");
+    expect(body).toContain("The payment account belongs to Phoenix");
+    expect(body.match(/Speak soon/g)).toHaveLength(1);
+  });
+
   it("uses the map pin from Settings rather than a generated Maps search link", () => {
     const body = compose().body;
     expect(body).toContain("https://maps.app.goo.gl/waterloo");
@@ -203,6 +226,25 @@ describe("composeBookingEmail", () => {
     // …and the numbers appear once, from the structured block only.
     expect(email.body.split("12345678").length - 1).toBe(1);
     expect(email.body).toContain("Account number: 12345678");
+  });
+
+  it("includes the deposit credit and bank transfer instructions in the existing welcome email", () => {
+    const email = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "bethnal",
+      "Thursday at 2 pm",
+      true,
+      { ...settings, bankSortCode: "12-34-56", bankAccountNumber: "12345678", paymentDetails: "Pay by card on the day." },
+      { intakeLink: INTAKE_LINK, portalLink: PORTAL_LINK, paymentRef: "EXAMPLE" },
+      { depositPaid: true },
+    );
+    expect(email.body).toContain("£15 deposit has been paid");
+    expect(email.body).toContain("£15–£45 to pay by bank transfer");
+    expect(email.body).toContain("Sort code: 12-34-56");
+    expect(email.body).toContain("Reference: EXAMPLE");
+    expect(email.body).toContain(PORTAL_LINK);
+    expect(email.body).toContain(INTAKE_LINK);
+    expect(email.body).not.toContain("Pay by card on the day");
   });
 
   it("puts everything a new client needs above one sign-off", () => {

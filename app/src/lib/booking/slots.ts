@@ -1,6 +1,8 @@
+import { SlotTakenError } from "./slotError";
+import { activeDepositHolds } from "./depositHolds";
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
-import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekStart } from "@/lib/time";
+import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonWeekStart } from "@/lib/time";
 import { chalkFarmCapMinutes, computeAvailability, computeAvailableSlots, resolveWeeklyHours, type AvailabilityParams, type DayTrace, type OverrideWindow } from "./availability";
 import { SESSION_MINUTES, type Clinic } from "./rules";
 
@@ -18,24 +20,32 @@ export async function loadBethnalWeeklyCap(
   windowStart: Date,
   windowEnd: Date,
   excludeBookingId?: string,
+  excludeDepositId?: string,
 ): Promise<AvailabilityParams["weeklyCap"]> {
   const settings = await getSettings();
   if (settings.chalkFarmWeeklyCapHours <= 0) return undefined;
-  const weekBookings = await prisma.booking.findMany({
-    where: {
-      clinic: "bethnal",
-      status: "confirmed",
-      startsAt: { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) },
-      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
-    },
-    select: { startsAt: true },
-  });
+  const range = { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) };
+  const [weekBookings, weekHolds] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        clinic: "bethnal",
+        status: "confirmed",
+        startsAt: range,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      },
+      select: { startsAt: true },
+    }),
+    prisma.bookingDeposit.findMany({
+      where: { ...activeDepositHolds(), startsAt: range, ...(excludeDepositId ? { id: { not: excludeDepositId } } : {}) },
+      select: { startsAt: true },
+    }),
+  ]);
 
   // Group confirmed sessions by London day (start times as minute-of-day), then
   // sum each day's session hours into its week — so the cap tracks the actual
   // Chalk Farm session time held, gaps between sessions excluded.
   const sessionMinsByDay: Record<string, number[]> = {};
-  for (const b of weekBookings) {
+  for (const b of [...weekBookings, ...weekHolds]) {
     const dateKey = londonDateKey(b.startsAt);
     (sessionMinsByDay[dateKey] ??= []).push(londonMinutes(b.startsAt));
   }
@@ -150,6 +160,7 @@ export async function loadOverridesForWindow(
   const rows = await prisma.availabilityOverride.findMany({
     where: {
       clinic,
+      deletedAt: null,
       OR: [
         { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
         { repeatWeekly: true, date: { lt: londonDateKey(windowEnd) } },
@@ -162,6 +173,7 @@ export async function loadOverridesForWindow(
     startMin: o.startMin,
     endMin: o.endMin,
     repeatWeekly: o.repeatWeekly,
+    excludedDates: o.excludedDates,
     exactStart: o.exactStart,
   }));
 }
@@ -172,17 +184,21 @@ async function availabilityParams({
   windowStart,
   windowEnd,
   excludeBookingId,
+  excludeDepositId,
+  requireCalendars = false,
 }: {
   clinic: Clinic;
   windowStart: Date;
   windowEnd: Date;
   excludeBookingId?: string;
+  excludeDepositId?: string;
+  requireCalendars?: boolean;
 }): Promise<AvailabilityParams> {
   const settings = await getSettings();
   const [overrides, busy, weeklyCap] = await Promise.all([
     loadOverridesForWindow(clinic, windowStart, windowEnd),
-    getBusySpans(windowStart, windowEnd),
-    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
+    getBusySpans(windowStart, windowEnd, { requireClinic: requireCalendars ? clinic : undefined, excludeDepositId }),
+    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId, excludeDepositId) : Promise.resolve(undefined),
   ]);
 
   return {
@@ -196,7 +212,7 @@ async function availabilityParams({
     // Waterloo and Bethnal Green don't need the same spacing between Phoenix's
     // own back-to-back sessions — kept as separate settings per clinic.
     bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
-    minNoticeMinutes: settings.bookingMinNoticeMins,
+    minNoticeMinutes: excludeDepositId ? 0 : settings.bookingMinNoticeMins,
     weeklyCap,
   };
 }
@@ -217,6 +233,40 @@ export async function loadAvailabilityWithTrace(args: {
   return computeAvailability(await availabilityParams(args));
 }
 
+/** Suggest one new one-hour slot per weekday within the visible booking window. */
+export async function loadAvailabilitySuggestions(clinic: Clinic, windowStart: Date, windowEnd: Date) {
+  const settings = await getSettings();
+  const horizonEnd = londonDayStart(settings.bookingHorizonDays);
+  const until = windowEnd < horizonEnd ? windowEnd : horizonEnd;
+  if (windowStart >= until) return [];
+
+  const params = await availabilityParams({ clinic, windowStart, windowEnd: until, requireCalendars: true });
+  const currentSlots = new Set(computeAvailableSlots(params).map((slot) => slot.getTime()));
+  const candidates: OverrideWindow[] = [];
+  for (let day = windowStart; day < until; day = londonAddDays(day, 1)) {
+    if (londonWeekdayIndex(day) >= 5) continue;
+    const date = londonDateKey(day);
+    for (let startMin = 9 * 60; startMin + SESSION_MINUTES <= 18 * 60; startMin += 30) {
+      candidates.push({ date, kind: "open", startMin, endMin: startMin + SESSION_MINUTES, exactStart: true });
+    }
+  }
+
+  const suggestions: string[] = [];
+  const suggestedDays = new Set<string>();
+  for (const slot of computeAvailableSlots({ ...params, overrides: [...params.overrides, ...candidates] })) {
+    const date = londonDateKey(slot);
+    if (suggestedDays.has(date) || currentSlots.has(slot.getTime())) continue;
+    const candidate = candidates.find((row) => row.date === date && row.startMin === londonMinutes(slot));
+    if (!candidate) continue;
+    // Check it as the only added rule so a neighbouring candidate can't make
+    // this one fit by expanding its effective availability window.
+    if (!computeAvailableSlots({ ...params, overrides: [...params.overrides, candidate] }).some((s) => s.getTime() === slot.getTime())) continue;
+    suggestions.push(slot.toISOString());
+    suggestedDays.add(date);
+  }
+  return suggestions;
+}
+
 /** The browsing window a client sees: today out to the booking horizon. */
 export async function defaultSlotWindow() {
   const settings = await getSettings();
@@ -234,28 +284,28 @@ export async function assertSlotAvailable({
   clinic,
   start,
   excludeBookingId,
+  requireCalendars,
+  excludeDepositId,
 }: {
   clinic: Clinic;
   start: Date;
   excludeBookingId?: string;
+  requireCalendars?: boolean;
+  excludeDepositId?: string;
 }): Promise<void> {
   // A day either side of the requested time is plenty to place it correctly
   // (day-boundary and buffer effects are local) and far cheaper than the full horizon.
-  const slots = await loadAvailableSlots({
+  const slots = computeAvailableSlots(await availabilityParams({
     clinic,
     windowStart: londonDayStart(-1, start),
     windowEnd: londonDayStart(2, start),
     excludeBookingId,
-  });
+    requireCalendars,
+    excludeDepositId,
+  }));
   if (!slots.some((s) => s.getTime() === start.getTime())) {
     throw new SlotTakenError();
   }
 }
 
-/** Thrown when a requested slot is no longer free — surfaced to the client as a 409. */
-export class SlotTakenError extends Error {
-  constructor() {
-    super("That time isn't available anymore — please pick another.");
-    this.name = "SlotTakenError";
-  }
-}
+export { SlotTakenError } from "./slotError";

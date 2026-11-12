@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
 
 export const GET = guarded(async () => {
-  const overrides = await prisma.availabilityOverride.findMany({ orderBy: { date: "asc" } });
+  const overrides = await prisma.availabilityOverride.findMany({ where: { deletedAt: null }, orderBy: { date: "asc" } });
   return NextResponse.json({ overrides });
 });
 

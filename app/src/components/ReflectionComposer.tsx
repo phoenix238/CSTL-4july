@@ -26,7 +26,7 @@ export function ReflectionComposer({
   const baseRef = useRef(""); // textarea content captured when the mic started
   const finalRef = useRef(""); // finalized dictation appended since then
 
-  const { listening: recording, start, stop } = useLiveTranscript({
+  const { listening: recording, finishing, start, stop } = useLiveTranscript({
     onFinal: (chunk) => {
       finalRef.current += chunk + " ";
       setText(baseRef.current + finalRef.current);
@@ -34,6 +34,7 @@ export function ReflectionComposer({
     onInterim: (interim) => setText(baseRef.current + finalRef.current + interim),
     onUnsupported: () => toast("Voice dictation needs Chrome or Safari — you can still type"),
     onBlocked: () => toast("Microphone blocked — allow it in your browser settings"),
+    onFailure: toast,
   });
 
   const toggleMic = () => {
@@ -89,6 +90,7 @@ export function ReflectionComposer({
   return (
     <div className="flex flex-col gap-3 rounded-2xl border-[1.5px] border-line bg-inputbg px-[18px] py-4">
       <textarea
+        disabled={!!busy || recording || finishing}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={placeholder ?? "Type, or press Dictate and just talk — for you, not the client's Doc…"}
@@ -96,6 +98,7 @@ export function ReflectionComposer({
       />
       <div className="flex flex-wrap items-center gap-2">
         <button
+          disabled={!!busy || finishing}
           onClick={toggleMic}
           className={`flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold ${
             recording ? "bg-[oklch(0.45_0.13_30)] text-cream" : "bg-clay-tint text-clay-text"
@@ -104,13 +107,13 @@ export function ReflectionComposer({
           <span
             className={`h-2 w-2 rounded-full ${recording ? "animate-ct-pulse bg-[oklch(0.9_0.05_30)]" : "bg-clay-text"}`}
           />
-          {recording ? "Listening…" : "Dictate"}
+          {finishing ? "Finishing dictation…" : recording ? "Listening…" : "Dictate"}
         </button>
-        <OutlineButton onClick={summarise} disabled={busy === "summarise"}>
+        <OutlineButton onClick={summarise} disabled={!!busy || recording || finishing}>
           {busy === "summarise" ? "Tidying…" : "Summarise"}
         </OutlineButton>
         <div className="flex-1" />
-        <PrimaryButton onClick={save} disabled={busy === "save"} className="px-5 py-2 text-[13px]">
+        <PrimaryButton onClick={save} disabled={!!busy || recording || finishing} className="px-5 py-2 text-[13px]">
           {busy === "save" ? "Saving…" : "Save to reflections doc"}
         </PrimaryButton>
       </div>

@@ -66,7 +66,7 @@ export const CLIENT_COPY_DEFAULTS: ClientCopy = {
 
   bookPageTitle: "Book a session",
   bookPageIntro:
-    "Craniosacral therapy with Phoenix Tanner — a gentle, hands-on session to help your nervous system settle. Pick a time below; you'll get a confirmation email straight after with everything you need, including a quick intake form to fill out beforehand.",
+    "Craniosacral therapy with Phoenix Tanner — a gentle, hands-on session to help your nervous system settle. Choose a time below for Bethnal Green, or contact Phoenix to arrange a Waterloo session.",
 
   confirmTitle: "You're booked",
   confirmBodySent:

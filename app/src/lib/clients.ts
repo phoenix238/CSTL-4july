@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ensureClientFolderAndDoc, renameClientDrive } from "@/lib/google/drive";
 import { upsertMarketingRow } from "@/lib/google/sheets";
@@ -58,6 +59,11 @@ export async function findExistingClient(name: string, email?: string, phone?: s
       where: { email: { equals: email, mode: "insensitive" } },
     });
     if (byEmail) return byEmail;
+    const alias = await prisma.clientEmailAlias.findUnique({
+      where: { email: email.trim().toLowerCase() },
+      include: { client: true },
+    });
+    if (alias) return alias.client;
   }
   if (phone) {
     const digits = phone.replace(/\D/g, "");
@@ -123,6 +129,8 @@ export async function updateClientDetails(
     emergency: string;
     referred: string;
     intakeDone: boolean;
+    intakeAnswers: Prisma.InputJsonValue;
+    intakeSubmittedAt: Date;
     consentGiven: boolean;
   }>,
 ) {

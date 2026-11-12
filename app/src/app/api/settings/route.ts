@@ -4,6 +4,7 @@ import { prisma, getSettings } from "@/lib/db";
 import { resolveWeeklyHours } from "@/lib/booking/availability";
 import { resolveClientCopy } from "@/lib/clientCopy";
 import { syncAvailabilityAfterChange } from "@/lib/google/availabilityHooks";
+import { getAIModelOption } from "@/lib/aiModels";
 
 /** The editable settings the UI needs (email preview etc.) — no Google secrets. */
 export const GET = guarded(async () => {
@@ -115,6 +116,15 @@ export const PATCH = guarded(async (req: Request) => {
   const rejected = Object.keys(body).filter((k) => !(k in data));
   if (rejected.length) {
     return NextResponse.json({ error: `Not a settable field: ${rejected.join(", ")}` }, { status: 400 });
+  }
+  if ("aiModel" in data) {
+    const model = getAIModelOption(data.aiModel);
+    if (!model) {
+      return NextResponse.json({ error: "Choose a supported AI model" }, { status: 400 });
+    }
+    if (model.provider === "openai" && !process.env.OPENAI_API_KEY?.trim()) {
+      return NextResponse.json({ error: "Add OPENAI_API_KEY to the deployment to use GPT models" }, { status: 400 });
+    }
   }
   const settings = await prisma.appSettings.upsert({
     where: { id: 1 },

@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "crm-workflow-improvements": false
+    }
+  },
   "crons": [
     {
       "path": "/api/payments/cron",

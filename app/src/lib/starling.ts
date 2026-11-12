@@ -91,7 +91,11 @@ export const MAX_SESSION_PAYMENT_PENCE = 100_000;
 /** Is this feed item plausibly a client paying for a session? */
 export function isSessionPayment(i: FeedItem): boolean {
   const pence = Math.round(i.amount?.minorUnits ?? 0);
+  const stripePayout = [i.counterPartyName, i.reference].some((value) =>
+    /^stripe(?:$|[\s*_-])/i.test(value?.trim() ?? ""),
+  );
   return (
+    !stripePayout &&
     i.status === "SETTLED" &&
     i.direction === "IN" &&
     // Moving money between your own Starling Spaces/accounts isn't a client.

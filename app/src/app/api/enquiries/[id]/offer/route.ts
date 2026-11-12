@@ -35,9 +35,9 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
     if (!clientId) {
       return NextResponse.json({ error: "Link this enquiry to a client before sending an offer email." }, { status: 400 });
     }
-    const link = offerUrl(settings, await getOrCreateOfferToken(id));
+    const link = clinic === "waterloo" ? undefined : offerUrl(settings, await getOrCreateOfferToken(id));
     body = emailBody?.trim()
-      ? `${emailBody.trim()}\n\n${link}`
+      ? `${emailBody.trim()}${link ? `\n\n${link}` : ""}`
       : composeOfferMessage(clientName || "", clinic as Clinic, dates, link, copy);
     // If this enquiry came in via the Gmail add-on, keep the offer reply in that thread.
     const enquiry = await prisma.enquiry.findUnique({
@@ -50,7 +50,7 @@ export const POST = guarded(async (req: Request, ctx: { params: Promise<{ id: st
       body,
       enquiry?.gmailThreadId ? { threadId: enquiry.gmailThreadId, inReplyTo: enquiry.gmailMessageId } : undefined,
       undefined,
-      { links: [{ url: link, label: "Click here to choose your time" }] },
+      link ? { links: [{ url: link, label: "Click here to choose your time" }] } : undefined,
     );
   }
   revalidateTag("shell");

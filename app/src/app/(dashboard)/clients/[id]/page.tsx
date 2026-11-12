@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { getSettings, prisma } from "@/lib/db";
-import { fmtDate, fmtDayLong, fmtTime } from "@/lib/time";
+import { fmtDate, fmtDayLong, fmtTime, londonDayStart } from "@/lib/time";
 import { resolveIntakeQuestions } from "@/lib/intakeQuestions";
-import { resolveClientCopy } from "@/lib/clientCopy";
+import { readIntakeAnswers, readLegacyIntakeReason } from "@/lib/intakeProfile";
+import { DOC_MIME, getDriveFileText } from "@/lib/google/drive";
 import { ClientProfile, type ProfileNote, type ProfileRecording } from "@/components/ClientProfile";
 
 export default async function ClientProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -10,6 +11,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   const client = await prisma.client.findUnique({
     where: { id },
     include: {
+      alternateEmails: { orderBy: { email: "asc" }, select: { email: true } },
       notes: { orderBy: { date: "desc" } },
       recordings: { orderBy: { date: "desc" } },
     },
@@ -17,6 +19,25 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   if (!client) notFound();
 
   const settings = await getSettings();
+  let intakeAnswers = readIntakeAnswers(client.intakeAnswers);
+  if (!client.intakeSubmittedAt && client.intakeDone && client.docId) {
+    const text = await getDriveFileText(client.docId, "", DOC_MIME).catch(() => null);
+    if (text) intakeAnswers = readLegacyIntakeReason(text);
+  }
+  const today = new Date();
+  const todayBookings = await prisma.booking.findMany({
+    where: { status: "confirmed", startsAt: { gte: londonDayStart(0, today), lt: londonDayStart(1, today) } },
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+    select: { client: { select: { id: true, name: true } }, startsAt: true },
+  });
+  const queue = todayBookings.filter(({ client }, index) =>
+    client && todayBookings.findIndex((booking) => booking.client?.id === client.id) === index,
+  );
+  const queueIndex = queue.findIndex((booking) => booking.client?.id === id);
+  const neighbour = (offset: number) => {
+    const booking = queueIndex < 0 ? undefined : queue[queueIndex + offset];
+    return booking?.client ? { ...booking.client, time: fmtTime(booking.startsAt) } : null;
+  };
   const { reflectionsDocId } = settings;
   const isWaterloo = client.clinic === "waterloo";
   const location = {
@@ -73,12 +94,18 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
   }));
 
   const intakeQuestions = resolveIntakeQuestions(settings.intakeQuestions).filter((q) => q.enabled);
-  const clientCopy = resolveClientCopy(settings.clientCopy);
 
   return (
     <ClientProfile
+      key={id}
+      intakeAnswers={intakeAnswers}
+      intakeSubmitted={client.intakeSubmittedAt ? fmtDate(client.intakeSubmittedAt) : null}
+      firstSessionIntake={(client.firstSessionIntake ?? {}) as Record<string, string>}
+      historyDocs={client.historyDocIds}
+      alternateEmails={client.alternateEmails.map(({ email }) => email)}
+      previousClient={neighbour(-1)}
+      nextClient={neighbour(1)}
       intakeQuestions={intakeQuestions}
-      clientCopy={clientCopy}
       client={{
         id: client.id,
         name: client.name,
@@ -117,6 +144,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
         status: b.status,
         paid: b.paid,
         amountPence: b.amountPence,
+        depositPence: b.depositPence,
         goodwillPence: b.goodwillPence,
         goodwillReason: b.goodwillReason,
         goodwillSettled: b.goodwillSettled,

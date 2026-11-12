@@ -1,3 +1,5 @@
+import { openDepositCheckout } from "@/lib/booking/depositCheckout";
+import { WATERLOO_CONTACT_MESSAGE } from "@/lib/booking/contact";
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
@@ -15,7 +17,7 @@ import { sendEmail } from "@/lib/google/gmail";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { clinic, startISO, name, email, phone, company, confirmReturning } = body as {
+    const { clinic, startISO, name, email, phone, company, confirmReturning, returningOnly } = body as {
       clinic?: string;
       startISO?: string;
       name?: string;
@@ -24,11 +26,15 @@ export async function POST(req: Request) {
       company?: string; // honeypot
       /** the visitor has answered "yes, that's me" to the returning-client prompt */
       confirmReturning?: boolean;
+      returningOnly?: boolean;
     };
 
     if (company?.trim()) {
       // Bot filled the hidden field — reject quietly, no booking attempted.
       return NextResponse.json({ error: "Something went wrong" }, { status: 400 });
+    }
+    if (clinic === "waterloo") {
+      return NextResponse.json({ error: WATERLOO_CONTACT_MESSAGE }, { status: 403 });
     }
     if (clinic !== "waterloo" && clinic !== "bethnal") {
       return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
@@ -38,7 +44,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid time" }, { status: 400 });
     }
     const cleanName = name?.trim() ?? "";
-    if (!cleanName || cleanName.length > 200) {
+    if ((!returningOnly && !cleanName) || cleanName.length > 200) {
       return NextResponse.json({ error: "Please add your name" }, { status: 400 });
     }
     const cleanEmail = email?.trim() ?? "";
@@ -51,7 +57,7 @@ export async function POST(req: Request) {
     // email all follow from here, so the ceiling is checked first, not after.
     // A confirming second pass is the same booking continuing, so it's checked
     // against the ceiling but doesn't add to it.
-    await assertBookingAllowed(req, cleanEmail, { record: !confirmReturning });
+    await assertBookingAllowed(req, cleanEmail, { record: returningOnly || !confirmReturning });
 
     // Re-verify: recompute today's real availability and only proceed if the
     // requested slot is genuinely in it — never trust the client's startISO.
@@ -65,7 +71,10 @@ export async function POST(req: Request) {
     // into someone else's record on a shared or mistyped address is worse than
     // one extra tap, and the alternative — creating a second record for the
     // same person — is what scatters one client's history across several.
-    if (existing && !confirmReturning) {
+    if (returningOnly && !existing) {
+      return NextResponse.json({ needsEmailReview: true });
+    }
+    if (existing && !returningOnly && !confirmReturning) {
       const { knownName, nameMatches } = describeReturningClient(existing.name, cleanName);
       return NextResponse.json({
         needsConfirm: true,
@@ -79,9 +88,17 @@ export async function POST(req: Request) {
       });
     }
 
+    if (!existing) {
+      if (!process.env.STRIPE_WEBHOOK_SECRET) {
+        return NextResponse.json({ error: "Online deposit checkout is unavailable. Please contact Phoenix to book." }, { status: 503 });
+      }
+      return NextResponse.json({
+        checkout: await openDepositCheckout({ start, name: cleanName, email: cleanEmail, phone: cleanPhone }),
+      });
+    }
+
     const result = await bookSession({
-      clientId: existing?.id,
-      newClient: existing ? undefined : { name: cleanName, email: cleanEmail, phone: cleanPhone },
+      clientId: existing.id,
       clinic: clinic as Clinic,
       startISO: start.toISOString(),
       sendEmail: true,
@@ -141,9 +158,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       whenLabel: result.whenLabel,
-      clientName: result.clientName,
       emailSent: result.emailSent,
-      intakeUrl: result.intakeUrl,
+      intakeUrl: returningOnly ? "" : result.intakeUrl,
       // A returning client who has already filled the form in is not asked for
       // it again — the confirmation screen uses these to decide.
       returning: result.returning,

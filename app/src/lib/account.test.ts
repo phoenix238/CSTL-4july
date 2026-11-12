@@ -180,3 +180,11 @@ describe("formatPence", () => {
     expect(formatPence(1250)).toBe("£12.50");
   });
 });
+
+it("credits a Bethnal Green deposit once without settling the session", () => {
+  const session = booking({ clinic: "bethnal", amountPence: 4500, depositPence: 1500 });
+  expect(summariseAccount([session], NOW)).toMatchObject({ unpaidCount: 1, balancePence: 3000 });
+  expect(summariseAccount([{ ...session, paid: true }], NOW).balancePence).toBe(0);
+  expect(summariseAccount([{ ...session, status: "cancelled" }], NOW).balancePence).toBe(0);
+  expect(summariseAccount([{ ...session, amountPence: null }], NOW).unpricedCount).toBe(1);
+});

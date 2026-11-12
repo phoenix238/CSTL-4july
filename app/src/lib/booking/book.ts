@@ -1,3 +1,4 @@
+import { SlotTakenError } from "./slotError";
 import { prisma, getSettings } from "@/lib/db";
 import { createClientWithDrive } from "@/lib/clients";
 import {
@@ -15,16 +16,19 @@ import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
-import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
-import { SlotTakenError } from "./slots";
+import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
+import { assertUnclaimedBookingTime, lockBookingTime } from "./depositHolds";
 
 export interface BookingRequest {
   /** existing client id — or absent with newClient set */
   clientId?: string;
+  /** A verified deposit already created this booking atomically. */
+  depositBookingId?: string;
   newClient?: { name: string; email?: string; phone?: string };
   clinic: Clinic;
   startISO: string;
   sendEmail: boolean;
+  prepareEmailForClipboard?: boolean;
   sendPayment: boolean;
   /** the (possibly hand-edited) email body from the preview box */
   emailBody?: string;
@@ -118,19 +122,9 @@ async function createBookingRow({
   start: Date;
   bookedVia: string;
 }) {
-  const end = new Date(start.getTime() + SESSION_MINUTES * 60_000);
   return prisma.$transaction(async (tx) => {
-    // $executeRaw, not $queryRaw: pg_advisory_xact_lock() returns void, which
-    // $queryRaw tries to deserialize as a result column and fails on — this is
-    // called purely for its side effect (holding the lock for the transaction).
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${londonDateKey(start)}`}))`;
-    const clash = await tx.booking.findFirst({
-      where: {
-        status: "confirmed",
-        startsAt: { gt: new Date(start.getTime() - SESSION_MINUTES * 60_000), lt: end },
-      },
-    });
-    if (clash) throw new SlotTakenError();
+    await lockBookingTime(tx, start);
+    await assertUnclaimedBookingTime(tx, start);
     return tx.booking.create({
       data: {
         clientId,
@@ -187,12 +181,11 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     }
   }
 
-  const booking = await createBookingRow({
-    clientId,
-    clinic: req.clinic,
-    start,
-    bookedVia: req.bookedVia ?? "admin",
-  });
+  const booking = req.depositBookingId
+    ? await prisma.booking.findFirstOrThrow({ where: {
+        id: req.depositBookingId, clientId, clinic: req.clinic, startsAt: start, status: "confirmed",
+      } })
+    : await createBookingRow({ clientId, clinic: req.clinic, start, bookedVia: req.bookedVia ?? "admin" });
   await createBookingEvents(booking.id);
 
   const address = req.clinic === "waterloo" ? settings.waterlooAddress : settings.bethnalAddress;
@@ -217,7 +210,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // as an invited attendee, so no Google link is offered.
   const calendarIcsUrl = icsUrl(settings, portalToken, booking.id);
   const links = { intakeLink, portalLink, paymentRef, calendarIcsUrl };
-  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links);
+  const email = composeBookingEmail(client, req.clinic, whenLabel, req.sendPayment, settings, links, { depositPaid: !!req.depositBookingId });
   // The photo of the entrance, sent inline under the text so the client can see
   // the door they're looking for without following a link.
   const photo = parseDataUrl(resolveClinicPhoto(req.clinic, settings));
@@ -232,7 +225,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // URL, in any inbox that renders HTML — whichever of these actually made it
   // into `body` (a hand-edited version might have dropped one).
   const emailLinks = [
-    { url: portalLink, label: "Click here for your booking page" },
+    { url: portalLink, label: "Manage or cancel booking" },
     { url: intakeLink, label: "Click here for your intake form" },
     { url: calendarIcsUrl, label: "Add to calendar" },
   ].filter((l) => l.url);
@@ -295,7 +288,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     emailTextForClipboard = body;
     firstContactMade = true;
     items.push("No email address on record yet — email text copied to your clipboard instead");
-  } else {
+  } else if (req.prepareEmailForClipboard !== false) {
     emailTextForClipboard = body;
     firstContactMade = true;
     items.push("Email text copied to your clipboard — no email was sent");
@@ -346,22 +339,29 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
   if (Number.isNaN(start.getTime())) throw new Error("Invalid new start time.");
   const oldDateKey = londonDateKey(booking.startsAt);
 
-  await deleteBookingGoogleEvents(booking);
-  await prisma.booking.update({
-    where: { id: bookingId },
-    // The booking row survives the move, so its payment state travels with it —
-    // a client who has already paid and then reshuffles the time doesn't get
-    // silently marked unpaid.
-    data: {
-      startsAt: start,
-      personalEventId: "",
-      secondaryEventId: "",
-      rescheduleCount: { increment: 1 },
-      // A moved session earns its reminders afresh against the new date — clear
-      // what was already sent so the day-before / morning-of nudge fires again.
-      remindersSentLead: [],
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    await lockBookingTime(tx, start);
+    await assertUnclaimedBookingTime(tx, start, bookingId);
+    // Claim the destination before touching Calendar. If another request moved
+    // or cancelled this row after we read it, leave its calendar events alone.
+    const { count } = await tx.booking.updateMany({
+      where: {
+        id: bookingId,
+        status: "confirmed",
+        startsAt: booking.startsAt,
+        rescheduleCount: booking.rescheduleCount,
+      },
+      data: {
+        startsAt: start,
+        personalEventId: "",
+        secondaryEventId: "",
+        rescheduleCount: { increment: 1 },
+        remindersSentLead: [],
+      },
+    });
+    if (!count) throw new SlotTakenError();
+    await deleteBookingGoogleEvents(booking);
+  }, { timeout: 15_000 });
   await createBookingEvents(bookingId); // re-syncs the new day's Chalk Farm block (Bethnal)
 
   // Moved to a different day — the old day's shared block needs recomputing

@@ -28,7 +28,7 @@ export const GET = guarded(async (req: Request) => {
           ],
         }
       : undefined,
-    select: { id: true, name: true, clinic: true, email: true, welcomeSent: true },
+    select: { id: true, name: true, clinic: true, email: true, phone: true, welcomeSent: true },
     orderBy: { name: "asc" },
     take: query ? 8 : 500,
   });

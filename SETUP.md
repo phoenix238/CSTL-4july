@@ -74,15 +74,23 @@ else can use it.
 
 ## 4. Anthropic API key (3 min)
 
-Powers the "reads the enquiry message", "summarise my note" and session-summary features — called
-directly against Anthropic, not through a third party, since these prompts can carry a client's
-case history. You can pick Sonnet (more careful, recommended) or Haiku (faster/cheaper) per
-feature later in Settings.
+Claude powers enquiry reading, note summaries and session summaries by default. Choose Sonnet or
+Haiku in Settings.
 
 1. Go to **https://console.anthropic.com** → sign up / sign in.
 2. Add credit under **Settings → Billing** (a few pounds covers a long time — usage is pennies per
    month even on Sonnet).
 3. **Settings → API Keys → Create Key**, name it `cstl`. Copy it — **value 6: `ANTHROPIC_API_KEY`** ✅
+
+### Optional OpenAI API
+
+Add `OPENAI_API_KEY` to the Vercel deployment environment and redeploy. Choose GPT Automatic,
+GPT-6 Luna or GPT-6.1 Sol in the CRM’s AI settings. GPT Automatic uses Luna for enquiries, reflections
+and live highlights and Sol for case notes, session summaries and imports.
+
+These requests go to the selected API provider and can include client details. To enable Claude as
+backup for GPT rate limits and server errors, configure `ANTHROPIC_API_KEY` and
+`AI_FALLBACK_TO_ANTHROPIC=true` on the deployment.
 
 ## 5. Put the code on GitHub (if it isn't already)
 
@@ -148,3 +156,9 @@ to the ledger automatically.
 
 Only money facts cross over: amount, date, how it was paid, the matching bank
 transaction and the client's payment reference. No names, notes or health information.
+
+### Bethnal Green deposit review
+
+Use a disposable database with the current Prisma schema and isolated Google Calendar and Gmail test accounts. Configure the Stripe sandbox secret and publishable keys as `STRIPE_SECRET_KEY` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`. Put the signing secret for the same sandbox webhook in `STRIPE_WEBHOOK_SECRET`. Forward `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `checkout.session.expired` to `/api/public/deposit/webhook`. Keep these values in the review environment. Sandbox mode is the default. Leave `STRIPE_ENABLE_LIVE_DEPOSITS` unset in every review environment. After approval and deployment, configure matching live keys and the live webhook secret in production before setting `STRIPE_ENABLE_LIVE_DEPOSITS=true`.
+
+Open `/book` and choose a Bethnal Green slot with an email that has no client record in the test database. Verify the £15 payment, the confirmed booking and matching diary entry, and the rendered welcome email. Use the email to open the booking portal and try the cancellation paths on each side of the 24-hour cutoff. For wallets, use a Stripe-registered test domain and a compatible browser and device with a configured wallet.

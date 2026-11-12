@@ -14,6 +14,7 @@ export interface AvailabilityOverrideDTO {
   kind: string;
   startMin: number;
   endMin: number;
+  repeatWeekly?: boolean;
   note: string;
 }
 
@@ -180,6 +181,8 @@ export function AvailabilitySettings({
     note: "",
   });
   const [addingOverride, setAddingOverride] = useState(false);
+  const [removedOverride, setRemovedOverride] = useState<AvailabilityOverrideDTO | null>(null);
+  const [changingOverride, setChangingOverride] = useState(false);
 
   async function addOverride() {
     if (!newOverride.date) {
@@ -209,12 +212,31 @@ export function AvailabilitySettings({
     }
   }
 
-  async function removeOverride(id: string) {
+  async function removeOverride(override: AvailabilityOverrideDTO) {
+    if (override.repeatWeekly && !window.confirm("Remove this entire repeating window? To skip one date, open it in Calendar.")) return;
+    setChangingOverride(true);
     try {
-      await api(`/api/availability-overrides/${id}`, { method: "DELETE" });
-      setOverrides((prev) => prev.filter((o) => o.id !== id));
+      await api(`/api/availability-overrides/${override.id}`, { method: "DELETE" });
+      setOverrides((prev) => prev.filter((o) => o.id !== override.id));
+      setRemovedOverride(override);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't remove that");
+    } finally {
+      setChangingOverride(false);
+    }
+  }
+
+  async function undoOverrideRemoval() {
+    if (!removedOverride) return;
+    setChangingOverride(true);
+    try {
+      await api(`/api/availability-overrides/${removedOverride.id}`, { method: "POST" });
+      setOverrides((prev) => [...prev, removedOverride].sort((a, b) => a.date.localeCompare(b.date)));
+      setRemovedOverride(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Couldn't restore availability");
+    } finally {
+      setChangingOverride(false);
     }
   }
 
@@ -362,6 +384,12 @@ export function AvailabilitySettings({
 
       <Card className="flex flex-col gap-3 px-[18px] py-4">
         <div className="text-[12px] font-semibold text-ink-soft">Date overrides — close a day, or open an extra one</div>
+        {removedOverride && (
+          <div role="status" className="flex flex-wrap items-center gap-2 text-[12px]">
+            <span>Availability removed</span>
+            <OutlineButton onClick={undoOverrideRemoval} disabled={changingOverride}>Undo</OutlineButton>
+          </div>
+        )}
         {overrides.length > 0 && (
           <div className="flex flex-col gap-1.5">
             {overrides.map((o) => (
@@ -369,14 +397,15 @@ export function AvailabilitySettings({
                 <span className={`font-semibold ${o.kind === "block" ? "text-[oklch(0.55_0.15_25)]" : "text-sage-text"}`}>
                   {o.kind === "block" ? "Blocked" : "Open"}
                 </span>
-                <span>{o.date}</span>
+                <span>{o.date}{o.repeatWeekly ? " · repeats weekly" : ""}</span>
                 <span className="text-muted">{o.clinic === "waterloo" ? "Waterloo" : "Bethnal Green"}</span>
                 <span className="text-muted">
                   {o.startMin === 0 && o.endMin === 1440 ? "all day" : `${minToTime(o.startMin)}–${minToTime(o.endMin)}`}
                 </span>
                 {o.note && <span className="text-faint">{o.note}</span>}
                 <button
-                  onClick={() => removeOverride(o.id)}
+                  onClick={() => removeOverride(o)}
+                  disabled={changingOverride}
                   className="ml-auto cursor-pointer text-[12px] font-semibold text-muted hover:text-[oklch(0.55_0.15_25)]"
                 >
                   Remove

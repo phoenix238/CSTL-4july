@@ -36,6 +36,7 @@ export function AvailabilityComposer({
   id,
   onClose,
   onSaved,
+  onRemoved,
 }: {
   mode: "create" | "edit";
   clinic: AvailClinic;
@@ -48,12 +49,13 @@ export function AvailabilityComposer({
   id?: string;
   onClose: () => void;
   onSaved: () => void;
+  onRemoved: (url: string, label: string) => void;
 }) {
   const toast = useToast();
   useEscapeKey(onClose);
   const [kind, setKind] = useState<"open" | "block">(initialKind);
   const [startTime, setStartTime] = useState(minToTime(startMin));
-  const [endTime, setEndTime] = useState(minToTime(endMin));
+  const [endTime, setEndTime] = useState(minToTime(endMin % 1440));
   const [repeatWeekly, setRepeatWeekly] = useState(initialRepeat);
   // "block" = an open stretch the booking grid fills with start times.
   // "slot"  = one exact pickable start time (exactStart on the override).
@@ -65,8 +67,8 @@ export function AvailabilityComposer({
 
   async function save() {
     const s = timeToMin(startTime);
-    const e = timeToMin(endTime);
-    if (e <= s) {
+    const e = endTime === "00:00" ? 1440 : timeToMin(endTime);
+    if (!startTime || !endTime || e <= s) {
       toast("End time must be after the start");
       return;
     }
@@ -93,18 +95,14 @@ export function AvailabilityComposer({
     }
   }
 
-  async function remove() {
+  async function remove(scope: "occurrence" | "series") {
     if (!id) return;
-    // A repeating window is a series — deleting the row clears every future week,
-    // so say so plainly rather than have a whole recurring day vanish on one tap.
-    if (initialRepeat && !window.confirm(`Remove this repeating ${weekdayName} time from every week? To close just this one day, mark it Unavailable instead.`)) {
-      return;
-    }
+    if (scope === "series" && initialRepeat && !window.confirm(`Remove this repeating ${weekdayName} window from every week?`)) return;
+    const url = `/api/availability-overrides/${id}${scope === "occurrence" ? `?date=${londonDateKey(day)}` : ""}`;
     setDeleting(true);
     try {
-      await api(`/api/availability-overrides/${id}`, { method: "DELETE" });
-      toast(initialRepeat ? "Repeating time removed" : "Removed");
-      onSaved();
+      await api(url, { method: "DELETE" });
+      onRemoved(url, scope === "occurrence" ? `Removed for ${fmtDayLong(day)}` : initialRepeat ? "Repeating window removed" : "Availability removed");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't remove that");
       setDeleting(false);
@@ -207,23 +205,37 @@ export function AvailabilityComposer({
               <span className="font-semibold text-ink">Repeat every {weekdayName}</span>
               <span className="block text-[11.5px] text-muted">
                 {repeatWeekly
-                  ? `Applies to every ${weekdayName} from ${fmtDayLong(day)} onward, until you remove it.`
-                  : "Just this one day."}
+                  ? mode === "edit"
+                    ? "Updating changes the entire series."
+                    : `Applies to every ${weekdayName} from ${fmtDayLong(day)} onward.`
+                  : mode === "edit" && initialRepeat
+                    ? "Stops repeating and keeps the original date."
+                    : "Just this one day."}
               </span>
             </span>
           </label>
 
           <div className="flex items-center gap-2">
             <OutlineButton onClick={onClose}>Close</OutlineButton>
-            <PrimaryButton onClick={save} disabled={saving}>
+            <PrimaryButton onClick={save} disabled={saving || deleting}>
               {saving ? "Saving…" : mode === "create" ? "Save" : "Update"}
             </PrimaryButton>
-            {mode === "edit" && (
-              <TintButton className="ml-auto text-[12.5px]" onClick={remove} disabled={deleting}>
+            {mode === "edit" && !initialRepeat && (
+              <TintButton className="ml-auto text-[12.5px]" onClick={() => remove("series")} disabled={saving || deleting}>
                 {deleting ? "Removing…" : "Remove"}
               </TintButton>
             )}
           </div>
+          {mode === "edit" && initialRepeat && (
+            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              <OutlineButton onClick={() => remove("occurrence")} disabled={saving || deleting}>
+                Skip this date
+              </OutlineButton>
+              <TintButton onClick={() => remove("series")} disabled={saving || deleting}>
+                Remove entire series
+              </TintButton>
+            </div>
+          )}
         </Card>
       </div>
     </>

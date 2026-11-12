@@ -6,7 +6,7 @@ import { resolveClientCopy } from "@/lib/clientCopy";
 
 export default async function SettingsPage() {
   const settings = await getSettings();
-  const overrides = await prisma.availabilityOverride.findMany({ orderBy: { date: "asc" } });
+  const overrides = await prisma.availabilityOverride.findMany({ where: { deletedAt: null }, orderBy: { date: "asc" } });
   // For assigning a payment the matcher couldn't place.
   const clients = await prisma.client.findMany({
     orderBy: { name: "asc" },
@@ -19,9 +19,13 @@ export default async function SettingsPage() {
       clients={clients}
       settings={{
         aiModel: settings.aiModel,
+        openAIConfigured: Boolean(process.env.OPENAI_API_KEY?.trim()),
+        claudeFallbackConfigured: process.env.AI_FALLBACK_TO_ANTHROPIC === "true" && Boolean(process.env.ANTHROPIC_API_KEY?.trim()),
         accessNote: settings.accessNote,
         emailTemplate: settings.emailTemplate,
         emailTemplateReturning: settings.emailTemplateReturning,
+        emailTemplateWaterloo: settings.emailTemplateWaterloo,
+        emailTemplateBethnal: settings.emailTemplateBethnal,
         emailSignOff: settings.emailSignOff,
         paymentDetails: settings.paymentDetails,
         waterlooAddress: settings.waterlooAddress,

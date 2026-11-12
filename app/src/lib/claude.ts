@@ -1,21 +1,23 @@
 import { z } from "zod";
 import { HIGHLIGHT_RUBRIC } from "./cleanLanguage";
 import { getSettings } from "./db";
+import { getAIModelOption } from "./aiModels";
 
-// Called directly against Anthropic (api.anthropic.com) — not routed through a
-// third party — since every prompt here can carry a client's case history.
-// Which of these two Claude actually runs is Phoenix's own call, made in
-// Settings ("aiModel": "sonnet" | "haiku") and read fresh on every request.
 const MODEL_SONNET = "claude-sonnet-5";
 const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+const MODEL_GPT_CAPABLE = "gpt-6.1-sol";
+const MODEL_GPT_FAST = "gpt-6-luna";
+type ModelTier = "fast" | "capable";
 
-async function resolveModel(): Promise<string> {
-  const settings = await getSettings();
-  return settings.aiModel === "haiku" ? MODEL_HAIKU : MODEL_SONNET;
+class ProviderHttpError extends Error {
+  constructor(provider: string, readonly status: number) {
+    // Provider error bodies can echo the prompt.
+    super(`${provider} request failed (${status})`);
+  }
 }
 
-async function chat(system: string, user: string, maxTokens: number): Promise<string> {
-  const model = await resolveModel();
+async function chatAnthropic(system: string, user: string, maxTokens: number, tier: ModelTier): Promise<string> {
+  const model = tier === "fast" ? MODEL_HAIKU : MODEL_SONNET;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -35,9 +37,7 @@ async function chat(system: string, user: string, maxTokens: number): Promise<st
       messages: [{ role: "user", content: user }],
     }),
   });
-  if (!res.ok) {
-    throw new Error(`Anthropic request failed (${res.status}): ${await res.text()}`);
-  }
+  if (!res.ok) throw new ProviderHttpError("Anthropic", res.status);
   const data = (await res.json()) as {
     content?: Array<{ type: string; text?: string }>;
     stop_reason?: string;
@@ -49,15 +49,76 @@ async function chat(system: string, user: string, maxTokens: number): Promise<st
     .join("");
 }
 
-/** Pull the JSON object/array out of Claude's reply, with a readable error when there isn't one. */
+async function chatOpenAI(system: string, user: string, maxTokens: number, tier: ModelTier): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("Configure OPENAI_API_KEY to use a GPT model");
+  const capable = tier === "capable";
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: capable ? MODEL_GPT_CAPABLE : MODEL_GPT_FAST,
+      instructions: system,
+      input: user,
+      reasoning: { effort: capable ? "low" : "none" },
+      // The output limit also covers reasoning tokens.
+      max_output_tokens: maxTokens + (capable ? 1024 : 0),
+      store: false,
+    }),
+  });
+  if (!res.ok) throw new ProviderHttpError("OpenAI", res.status);
+  const data = (await res.json()) as {
+    status?: string;
+    output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }>;
+  };
+  const blocks = (data.output ?? [])
+    .filter((item) => item.type === "message")
+    .flatMap((item) => item.content ?? []);
+  if (blocks.some((block) => block.type === "refusal")) {
+    throw new Error("The GPT model declined to process this text");
+  }
+  const answer = blocks.filter((block) => block.type === "output_text").map((block) => block.text ?? "").join("");
+  if (data.status !== "completed" || !answer.trim()) {
+    throw new Error("The GPT model didn't return a complete answer — please try again");
+  }
+  return answer;
+}
+
+async function chat(system: string, user: string, maxTokens: number, autoTier: ModelTier = "capable"): Promise<string> {
+  const { aiModel } = await getSettings();
+  const model = getAIModelOption(aiModel);
+  if (model?.provider !== "openai") {
+    return chatAnthropic(system, user, maxTokens, aiModel === "haiku" ? "fast" : "capable");
+  }
+  const tier = aiModel === "openai-auto" ? autoTier : aiModel === "openai-fast" ? "fast" : "capable";
+  try {
+    return await chatOpenAI(system, user, maxTokens, tier);
+  } catch (error) {
+    if (
+      process.env.AI_FALLBACK_TO_ANTHROPIC !== "true" ||
+      !process.env.ANTHROPIC_API_KEY?.trim() ||
+      !(error instanceof ProviderHttpError) ||
+      (error.status !== 429 && error.status < 500)
+    ) {
+      throw error;
+    }
+    return chatAnthropic(system, user, maxTokens, tier);
+  }
+}
+
+/** Pull the JSON object/array out of the model's reply. */
 function parseJsonFrom(text: string, open: "{" | "["): unknown {
   const close = open === "{" ? "}" : "]";
   const start = text.indexOf(open);
   const end = text.lastIndexOf(close);
-  if (start === -1 || end < start) {
-    throw new Error("Claude didn't return a usable answer — please try again");
+  if (start !== -1 && end >= start) {
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      // Avoid exposing an excerpt of the model response in the JSON error.
+    }
   }
-  return JSON.parse(text.slice(start, end + 1));
+  throw new Error("The AI model didn't return a usable answer — please try again");
 }
 
 const enquirySchema = z.object({
@@ -96,6 +157,7 @@ Extract from the message and reply with ONLY a JSON object, no other text:
 }`,
     message,
     500,
+    "fast",
   );
   const json = parseJsonFrom(text, "{");
   return enquirySchema.parse(json);
@@ -111,6 +173,7 @@ export async function summariseReflection(raw: string): Promise<string> {
     `You clean up a craniosacral therapist's own private, often-dictated reflection for his personal notes doc. Keep his voice and first person — cut filler, false starts and repetition, tighten rambling into clear prose, but never add ideas or turn it into clinical/bulleted language. Reply with ONLY the cleaned reflection text, no preamble, no quotes around it.`,
     raw,
     600,
+    "fast",
   );
   return text.trim();
 }
@@ -173,6 +236,7 @@ export async function extractHighlights(recent: string, existing: string[]): Pro
     `${HIGHLIGHT_RUBRIC}\n\nOnly return phrases not already surfaced. Reply with ONLY a JSON array of strings — an empty array [] when this chunk has nothing worth highlighting. No other text.`,
     user,
     250,
+    "fast",
   );
   const open = text.indexOf("[");
   if (open === -1) return [];

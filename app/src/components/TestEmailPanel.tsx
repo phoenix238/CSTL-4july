@@ -3,10 +3,14 @@
 import { useState } from "react";
 import { api, Card, OutlineButton, useToast } from "./ui";
 
-type TestType = "first" | "returning" | "cancellation" | "receipt" | "reminder" | "session-reminder" | "review";
+import type { TestEmailType as TestType } from "@/app/api/settings/test-email/route";
 
 const TYPES: { key: TestType; label: string }[] = [
   { key: "first", label: "First booking" },
+  { key: "deposit-welcome", label: "Welcome after deposit" },
+  { key: "deposit-refund", label: "Cancellation with refund" },
+  { key: "deposit-late", label: "Late cancellation with deposit" },
+  { key: "deposit-reminder", label: "Balance reminder after deposit" },
   { key: "returning", label: "Rebooking" },
   { key: "cancellation", label: "Cancellation" },
   { key: "receipt", label: "Receipt" },
@@ -62,7 +66,7 @@ export function TestEmailPanel() {
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        {TYPES.map((t) => (
+        {TYPES.filter((t) => clinic === "bethnal" || !t.key.startsWith("deposit-")).map((t) => (
           <OutlineButton key={t.key} disabled={busy !== null} onClick={() => send(t.key)}>
             {busy === t.key ? "Sending…" : t.label}
           </OutlineButton>

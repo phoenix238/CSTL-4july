@@ -1,3 +1,4 @@
+import { reviewInterruptedDeposits } from "@/lib/booking/reviewInterruptedDeposits";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { syncBankPayments } from "@/lib/payments/sync";
@@ -89,6 +90,7 @@ export async function GET(req: Request) {
       return { issues: [], newIssues: [] };
     });
 
+    const depositReviews = await reviewInterruptedDeposits(asOf);
     const sync = await syncBankPayments();
     const unpaid = await sweepUnpaidSessions({ asOf });
     // Calendar reconcile needs Google; never let it fail the whole run.
@@ -127,6 +129,7 @@ export async function GET(req: Request) {
       availabilitySync: availability,
       remindersSent: reminders.sent,
       capacityIssues: capacity.newIssues.length,
+      depositReviews,
     });
   } catch (err) {
     console.error("Scheduled sync failed", err);

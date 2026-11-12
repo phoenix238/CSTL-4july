@@ -37,6 +37,8 @@ const LONG_PRESS_SLOP_PX = 10;
 const DEFAULT_DRAFT_MIN = 60;
 /** Horizontal travel that counts as a swipe to the next page. */
 const SWIPE_PX = 55;
+const EDGE_SCROLL_PX = 56;
+const MAX_SCROLL_PER_FRAME = 16;
 
 export interface TimeGridProps {
   /** First day shown, at 00:00 London. */
@@ -222,7 +224,7 @@ export function TimeGrid({
 
   // Availability windows split per visible day (by London date key), clamped to
   // the visible hour window — drawn as a background layer behind events.
-  const dayAvail: AvailWindowDTO[][] = useMemo(() => {
+  const dayAvail = useMemo(() => {
     if (!availWindows?.length) return days.map(() => []);
     const lo = startHour * 60;
     const hi = endHour * 60;
@@ -230,7 +232,7 @@ export function TimeGrid({
       const key = londonDateKey(day);
       return availWindows
         .filter((w) => w.date === key)
-        .map((w) => ({ ...w, startMin: Math.max(w.startMin, lo), endMin: Math.min(w.endMin, hi) }))
+        .map((w) => ({ ...w, original: w, startMin: Math.max(w.startMin, lo), endMin: Math.min(w.endMin, hi) }))
         .filter((w) => w.endMin > w.startMin);
     });
   }, [availWindows, days, startHour, endHour]);
@@ -318,16 +320,63 @@ export function TimeGrid({
   const teardown = useRef<(() => void) | null>(null);
   useEffect(() => () => teardown.current?.(), []);
 
+  const createEdgeScroll = (onScroll: (ev: PointerEvent) => void) => {
+    let pointer: PointerEvent | null = null;
+    let frame = 0;
+
+    const tick = () => {
+      frame = 0;
+      if (!pointer) return;
+      const inner = vScrollRef.current;
+      const scroller = inner ?? document.scrollingElement;
+      if (!scroller) return;
+      const bounds = inner?.getBoundingClientRect();
+      const top = Math.max(0, bounds?.top ?? 0);
+      const bottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight);
+      const fromTop = pointer.clientY - top;
+      const fromBottom = bottom - pointer.clientY;
+      const distance = Math.min(fromTop, fromBottom);
+      if (distance >= EDGE_SCROLL_PX) return;
+      const direction = fromTop < fromBottom ? -1 : 1;
+      const speed = Math.min(1, (EDGE_SCROLL_PX - distance) / EDGE_SCROLL_PX) * MAX_SCROLL_PER_FRAME;
+      const before = scroller.scrollTop;
+      scroller.scrollTop += direction * Math.max(1, speed);
+      if (scroller.scrollTop === before) return;
+      onScroll(pointer);
+      frame = requestAnimationFrame(tick);
+    };
+
+    return {
+      move(ev: PointerEvent) {
+        pointer = ev;
+        if (!frame) frame = requestAnimationFrame(tick);
+      },
+      stop() {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        pointer = null;
+      },
+    };
+  };
+
   /** Run a pointer-driven draft gesture until the finger lifts. */
   const runDraftGesture = (
     onMove: (ev: PointerEvent, geo: { top: number; left: number; colWidth: number }) => void,
     onEnd?: () => void,
   ) => {
-    const geo = columnGeometry();
-    if (!geo) return;
+    if (!columnGeometry()) return;
     scrollLock.current = true;
-    const move = (ev: PointerEvent) => onMove(ev, geo);
+    const update = (ev: PointerEvent) => {
+      const geo = columnGeometry();
+      if (geo) onMove(ev, geo);
+    };
+    const edge = createEdgeScroll(update);
+    const move = (ev: PointerEvent) => {
+      update(ev);
+      edge.move(ev);
+    };
     const end = () => {
+      edge.stop();
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
@@ -415,7 +464,6 @@ export function TimeGrid({
   const pressRef = useRef<{
     di: number;
     day: Date;
-    rectTop: number;
     startMin: number;
     x: number;
     y: number;
@@ -476,7 +524,6 @@ export function TimeGrid({
     const p = {
       di,
       day,
-      rectTop: rect.top,
       startMin: snapMinFromY(e.clientY - rect.top),
       x: e.clientX,
       y: e.clientY,
@@ -501,9 +548,20 @@ export function TimeGrid({
       }, LONG_PRESS_MS);
     }
 
-    const move = (ev: PointerEvent) => {
+    const column = e.currentTarget;
+    const pointerId = e.pointerId;
+    const updateSelection = (ev: PointerEvent) => {
       const d = pressRef.current;
       if (!d) return;
+      const { startHour: sh, endHour: eh } = cfgRef.current;
+      const cur = clampMin(minFromY(ev.clientY - column.getBoundingClientRect().top, sh), sh, eh);
+      setDragSel({ di: d.di, a: Math.min(d.startMin, cur), b: Math.max(d.startMin, cur) });
+    };
+    const edge = createEdgeScroll(updateSelection);
+
+    const move = (ev: PointerEvent) => {
+      const d = pressRef.current;
+      if (!d || ev.pointerId !== pointerId) return;
       const dx = ev.clientX - d.x;
       const dy = ev.clientY - d.y;
       // Any real travel before the timer means this is a scroll or a swipe.
@@ -511,14 +569,14 @@ export function TimeGrid({
         clearTimeout(d.timer);
         d.timer = null;
       }
-      // Mouse only: sweep out a range, exactly as before.
-      if (!d.touch && slotSelectable) {
-        const { startHour: sh, endHour: eh } = cfgRef.current;
-        const cur = clampMin(minFromY(ev.clientY - d.rectTop, sh), sh, eh);
-        setDragSel({ di: d.di, a: Math.min(d.startMin, cur), b: Math.max(d.startMin, cur) });
+      if (!d.touch && cfgRef.current.onRangeSelect && Math.hypot(dx, dy) > 3) {
+        updateSelection(ev);
+        edge.move(ev);
       }
     };
     const cleanup = () => {
+      edge.stop();
+      teardown.current = null;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", cancel);
@@ -529,7 +587,7 @@ export function TimeGrid({
     };
     const up = (ev: PointerEvent) => {
       const d = pressRef.current;
-      if (!d) return;
+      if (!d || ev.pointerId !== pointerId) return;
       const dx = ev.clientX - d.x;
       const dy = ev.clientY - d.y;
       cleanup();
@@ -541,7 +599,7 @@ export function TimeGrid({
 
       const { startHour: sh, endHour: eh, onSlotClick: click, onRangeSelect: range } = cfgRef.current;
       if (!d.touch) {
-        const cur = clampMin(minFromY(ev.clientY - d.rectTop, sh), sh, eh);
+        const cur = clampMin(minFromY(ev.clientY - column.getBoundingClientRect().top, sh), sh, eh);
         const a = Math.min(d.startMin, cur);
         const b = Math.max(d.startMin, cur);
         if (b - a >= SNAP_MIN && range) {
@@ -552,7 +610,10 @@ export function TimeGrid({
       // A tap — on either device — books the slot directly.
       if (Math.hypot(dx, dy) <= LONG_PRESS_SLOP_PX && click) click(slotAt(d.day, d.startMin));
     };
-    const cancel = () => cleanup();
+    const cancel = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) cleanup();
+    };
+    teardown.current = cleanup;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", cancel);
@@ -770,60 +831,44 @@ export function TimeGrid({
                     their own side-by-side column instead of overlapping, so both stay
                     readable at once; within a clinic's column, its own weekly/bookable
                     layers still deliberately overlay each other. */}
-                {(() => {
-                  const clinicsPresent = Array.from(new Set(dayAvail[di].map((w) => w.clinic)));
-                  const multi = clinicsPresent.length > 1;
-                  return dayAvail[di].map((w, wi) => {
-                    const c = AVAIL_COLORS[w.clinic][w.kind];
-                    const editable = w.kind !== "weekly" && !!w.id;
-                    const top = toY(w.startMin);
-                    const height = Math.max(((w.endMin - w.startMin) / 60) * hourPx, 12);
-                    const kindLabel =
-                      (w.kind === "block"
-                        ? "Unavailable"
-                        : w.kind === "weekly"
-                          ? "Usual hours"
-                          : w.kind === "bookable"
-                            ? "Bookable"
-                            : w.exactStart
-                              ? "Slot"
-                              : "Available") + (w.repeatWeekly ? " ↻" : "");
-                    const label = multi ? `${CLINIC_LABEL[w.clinic]} · ${kindLabel}` : kindLabel;
-                    const laneIndex = multi ? clinicsPresent.indexOf(w.clinic) : 0;
-                    const laneCount = multi ? clinicsPresent.length : 1;
+                {Array.from(new Set(dayAvail[di].map((w) => w.clinic))).flatMap((clinic, laneIndex, clinics) =>
+                  layoutDayEvents(dayAvail[di].filter((w) => w.clinic === clinic)).map(({ event: w, lane, lanes }, index) => {
+                    const colors = AVAIL_COLORS[w.clinic][w.kind];
+                    const editable = availabilityMode && !!onAvailabilityClick && (w.kind === "weekly" || !!w.id);
+                    const kindLabel = w.kind === "block" ? "Unavailable"
+                      : w.kind === "weekly" ? "Usual hours"
+                      : w.kind === "bookable" ? "Bookable"
+                      : w.exactStart ? "One slot" : "Available";
+                    const time = `${fmtTime(slotAt(day, w.startMin))}–${fmtTime(slotAt(day, w.endMin))}`;
+                    const label = `${CLINIC_LABEL[w.clinic]} · ${kindLabel} · ${time}${w.repeatWeekly ? " · Repeats weekly" : ""}`;
+                    const laneWidth = 100 / (clinics.length * lanes);
+                    const Block = editable ? "button" : "div";
+
                     return (
-                      <div
-                        key={`${w.clinic}-${w.kind}-${w.id ?? wi}`}
-                        onClick={
-                          editable
-                            ? (e) => {
-                                e.stopPropagation();
-                                onAvailabilityClick?.(w);
-                              }
-                            : undefined
-                        }
-                        className={`absolute overflow-hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight ${
-                          editable ? "cursor-pointer hover:brightness-[0.97]" : "pointer-events-none"
-                        } ${multi ? "" : "right-[3px] left-[3px]"}`}
+                      <Block
+                        key={w.id ?? `${w.clinic}-${w.kind}-${index}`}
+                        type={editable ? "button" : undefined}
+                        title={label}
+                        aria-label={editable ? label : undefined}
+                        onClick={editable ? () => onAvailabilityClick?.(w.original) : undefined}
+                        className={`absolute overflow-hidden rounded-md px-1 py-0.5 text-left text-[10px] font-semibold leading-tight ${editable ? "cursor-pointer hover:brightness-[0.97]" : "pointer-events-none"}`}
                         style={{
-                          top,
-                          height,
-                          ...(multi
-                            ? { left: `calc(${(laneIndex / laneCount) * 100}% + 3px)`, width: `calc(${100 / laneCount}% - 6px)` }
-                            : {}),
-                          background: c.bg,
-                          border: `1px ${w.kind === "block" ? "solid" : "dashed"} ${c.border}`,
-                          color: c.text,
+                          top: toY(w.startMin),
+                          height: ((w.endMin - w.startMin) / 60) * hourPx,
+                          left: `calc(${(laneIndex * lanes + lane) * laneWidth}% + 2px)`,
+                          width: `calc(${laneWidth}% - 4px)`,
+                          background: colors.bg,
+                          border: `1px ${w.kind === "bookable" || w.kind === "block" ? "solid" : "dashed"} ${colors.border}`,
+                          color: colors.text,
                           zIndex: 1,
                         }}
                       >
-                        <span className="tabular-nums">
-                          {compact ? kindLabel : `${label} · ${fmtTime(slotAt(day, w.startMin))}–${fmtTime(slotAt(day, w.endMin))}`}
-                        </span>
-                      </div>
+                        <span className="block truncate">{clinics.length > 1 ? `${CLINIC_LABEL[w.clinic]} · ` : ""}{kindLabel}{w.repeatWeekly ? " ↻" : ""}</span>
+                        <span className="block truncate tabular-nums">{time}</span>
+                      </Block>
                     );
-                  });
-                })()}
+                  }),
+                )}
 
                 {/* drag-to-create selection — the range you're sweeping out (mouse) */}
                 {dragSel?.di === di && dragSel.b > dragSel.a && (

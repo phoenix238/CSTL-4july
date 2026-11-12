@@ -1,5 +1,7 @@
 "use client";
 
+import { DepositCheckout, type DepositCheckoutSession } from "./DepositCheckout";
+import { WaterlooContact } from "./WaterlooContact";
 import { useState } from "react";
 import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
@@ -18,6 +20,19 @@ import type { ClientCopy } from "@/lib/clientCopy";
  * silently skips delivery to the ones that don't, so it's safe to try all
  * three the site is ever embedded from.
  */
+const REMEMBERED_BOOKING_DETAILS = "cstl-booking-details";
+
+function readRememberedEmail(): string | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(REMEMBERED_BOOKING_DETAILS) ?? "null");
+    if (typeof value?.email !== "string") return null;
+    if ("name" in value) localStorage.setItem(REMEMBERED_BOOKING_DETAILS, JSON.stringify({ email: value.email }));
+    return value.email;
+  } catch {
+    return null;
+  }
+}
+
 const SITE_ORIGINS = [
   "https://craniosacraltherapylondon.com",
   "https://phoenix238.github.io",
@@ -74,10 +89,15 @@ export function BookingFlow({
   const [phone, setPhone] = useState("");
   const [company, setCompany] = useState(""); // honeypot — real visitors never see or fill this
   const [submitting, setSubmitting] = useState(false);
+  const [checkout, setCheckout] = useState<DepositCheckoutSession | null>(null);
   // Set when the email they typed already has a record. We stop and ask rather
   // than booking, so the same person doesn't end up as two clients (and so we
   // never book into someone else's record off a mistyped address).
   const [recognised, setRecognised] = useState<{ prompt: string; intakeDone: boolean } | null>(null);
+  const [rememberDetails, setRememberDetails] = useState(false);
+  const [hasRememberedDetails, setHasRememberedDetails] = useState(false);
+  const [returningOnly, setReturningOnly] = useState(false);
+  const [emailReview, setEmailReview] = useState<"editing" | "sent" | "booked" | null>(null);
   const [linkSending, setLinkSending] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
 
@@ -106,13 +126,14 @@ export function BookingFlow({
 
   interface BookResponse {
     whenLabel: string;
-    clientName: string;
     emailSent: boolean;
     intakeUrl: string;
     returning: boolean;
     intakeDone: boolean;
     /** the email is already on a record — confirm it's them before booking */
     needsConfirm?: boolean;
+    needsEmailReview?: boolean;
+    checkout?: DepositCheckoutSession;
     prompt?: string;
   }
 
@@ -121,7 +142,7 @@ export function BookingFlow({
       toast("Pick a time first");
       return;
     }
-    if (!name.trim()) {
+    if (!returningOnly && !name.trim()) {
       toast("Please add your name");
       return;
     }
@@ -133,10 +154,25 @@ export function BookingFlow({
     try {
       const result = await api<BookResponse>("/api/public/book", {
         method: "POST",
-        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning }),
+        body: JSON.stringify({ clinic, startISO: selected, name, email, phone, company, confirmReturning, returningOnly }),
       });
+      if (result.needsEmailReview) {
+        setEmailReview("editing");
+        return;
+      }
       if (result.needsConfirm) {
         setRecognised({ prompt: result.prompt ?? "Is this you?", intakeDone: result.intakeDone });
+        return;
+      }
+      if (rememberDetails) {
+        try {
+          localStorage.setItem(REMEMBERED_BOOKING_DETAILS, JSON.stringify({ email: email.trim() }));
+        } catch {
+          // Private browsers can disallow storage. Booking still succeeds.
+        }
+      }
+      if (result.checkout) {
+        setCheckout(result.checkout);
         return;
       }
       notifyParentOfBooking(clinic);
@@ -151,6 +187,23 @@ export function BookingFlow({
       });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Couldn't book that — please try again");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function requestEmailUpdate() {
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const result = await api<{ booked: boolean }>("/api/public/returning-client", {
+        method: "POST",
+        body: JSON.stringify({ name, email, phone, company, clinic, startISO: selected }),
+      });
+      if (result.booked) notifyParentOfBooking(clinic);
+      setEmailReview(result.booked ? "booked" : "sent");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Couldn’t send your request.");
     } finally {
       setSubmitting(false);
     }
@@ -173,10 +226,30 @@ export function BookingFlow({
   // Backing out mid-way shouldn't strand them: the box closes, the time stays
   // highlighted in the list behind it, and tapping any time re-opens it with
   // whatever they'd already typed still in the fields.
-  function closeSheet() {
+  async function closeSheet() {
     if (submitting) return;
+    if (checkout) {
+      setSubmitting(true);
+      try {
+        const { released } = await api<{ released: boolean }>("/api/public/deposit/abandon", {
+          method: "POST", body: JSON.stringify({ id: checkout.id }),
+        });
+        if (!released) {
+          toast("Please check your payment and booking before closing checkout.");
+          return;
+        }
+      } catch {
+        toast("We couldn’t close checkout safely. Please check your payment and booking.");
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
     setSheetOpen(false);
+    setCheckout(null);
     setRecognised(null);
+    setEmailReview(null);
+    setReturningOnly(false);
     setLinkSent(false);
   }
 
@@ -218,10 +291,16 @@ export function BookingFlow({
           {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
         </div>
 
-        <BookSlotPicker
+        {clinic === "waterloo" ? <WaterlooContact /> : <BookSlotPicker
           clinic={clinic}
           selected={selected}
           onSelect={(iso) => {
+            const remembered = readRememberedEmail();
+            if (remembered) {
+              setEmail((current) => current || remembered);
+              setRememberDetails(true);
+              setHasRememberedDetails(true);
+            }
             setSelected(iso);
             setRecognised(null);
             setSheetOpen(true);
@@ -231,7 +310,7 @@ export function BookingFlow({
           }}
           boxed={false}
           layout="responsive"
-        />
+        />}
       </Card>
 
       <Sheet open={sheetOpen} onClose={closeSheet} label="Your details">
@@ -259,7 +338,45 @@ export function BookingFlow({
             {/* Recognised them: one tap to book into the record they already have,
                 one to back out if the address isn't theirs. Nothing is booked
                 either way until they answer, so a wrong guess here costs nothing. */}
-            {recognised ? (
+            {checkout ? (
+              <DepositCheckout session={checkout} onBooked={(result) => {
+                notifyParentOfBooking("bethnal");
+                scrollEmbedToTop();
+                setConfirmed({ ...result, email, returning: false, intakeDone: false });
+              }} />
+            ) : emailReview === "booked" ? (
+              <div role="status" className="flex flex-col gap-2">
+                <p className="font-semibold text-sage-text">Your appointment is booked.</p>
+                <p className="text-sm text-ink-soft">Phoenix will check and update your contact details. If he needs anything else, he’ll email you. No deposit is due.</p>
+              </div>
+            ) : emailReview === "sent" ? (
+              <p role="status" className="text-sm text-sage-text">
+                Request sent. I’ll check your details and get back to you. Your appointment hasn’t been booked yet.
+              </p>
+            ) : emailReview === "editing" ? (
+              <form className="flex flex-col gap-3" onSubmit={(event) => {
+                event.preventDefault();
+                void requestEmailUpdate();
+              }}>
+                <p className="text-sm text-ink-soft">
+                  This email doesn’t match the details I have. Enter the phone number you used last time and I’ll check your record and add your new email.
+                </p>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  Current email
+                  <input className={inputClass} type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  Full name
+                  <input className={inputClass} autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  Phone number you used last time
+                  <input className={inputClass} type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} required />
+                </label>
+                <PrimaryButton type="submit" disabled={submitting}>{submitting ? "Checking…" : "Check my number and book"}</PrimaryButton>
+                <button type="button" className="text-sm text-clay-text underline" onClick={() => setEmailReview(null)} disabled={submitting}>Try my previous email</button>
+              </form>
+            ) : recognised ? (
               <div key="recognised" className="ct-swap flex flex-col gap-3">
                 <p className="text-[13.5px] leading-relaxed text-muted">
                   {recognised.intakeDone
@@ -309,21 +426,29 @@ export function BookingFlow({
                 key="details"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submit();
+                  submit(returningOnly);
                 }}
                 className="ct-swap flex flex-col gap-3"
               >
+                {!returningOnly && (
+                  <button type="button" onClick={() => setReturningOnly(true)}
+                    className="rounded-xl border border-line bg-card px-4 py-3 text-left text-sm font-semibold text-clay-text hover:bg-hoverbg">
+                    Seen Phoenix before? <span className="underline underline-offset-2">Click here</span>
+                  </button>
+                )}
+                {!returningOnly && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      autoComplete="name"
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-ink-soft">Full name</span>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                    className={inputClass}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-ink-soft">Email</span>
+                  <span className="text-[12.5px] font-semibold text-ink-soft">{returningOnly ? "Email you booked with last time" : "Email"}</span>
                   <input
                     type="email"
                     value={email}
@@ -333,16 +458,39 @@ export function BookingFlow({
                     className={inputClass}
                   />
                 </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                    inputMode="tel"
-                    className={inputClass}
-                  />
-                </label>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={rememberDetails} onChange={(event) => {
+                      setRememberDetails(event.target.checked);
+                      if (!event.target.checked) {
+                        try { localStorage.removeItem(REMEMBERED_BOOKING_DETAILS); } catch { /* Storage unavailable. */ }
+                        setHasRememberedDetails(false);
+                      }
+                    }} />
+                    Remember my email on this device
+                  </label>
+                  {hasRememberedDetails && (
+                    <button type="button" className="text-clay-text underline" onClick={() => {
+                      const remembered = readRememberedEmail();
+                      try { localStorage.removeItem(REMEMBERED_BOOKING_DETAILS); } catch { /* Storage unavailable. */ }
+                      if (email === remembered) setEmail("");
+                      setHasRememberedDetails(false);
+                      setRememberDetails(false);
+                    }}>Forget saved email</button>
+                  )}
+                </div>
+                {!returningOnly && (
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[12.5px] font-semibold text-ink-soft">Phone (optional)</span>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      autoComplete="tel"
+                      inputMode="tel"
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <input
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
@@ -352,7 +500,7 @@ export function BookingFlow({
                   className="absolute left-[-9999px] h-0 w-0 opacity-0"
                 />
                 <PrimaryButton type="submit" disabled={submitting} className="mt-1 py-3">
-                  {submitting ? "Booking…" : "Confirm booking"}
+                  {submitting ? "Checking…" : returningOnly ? "Confirm booking" : "Continue to booking"}
                 </PrimaryButton>
               </form>
             )}

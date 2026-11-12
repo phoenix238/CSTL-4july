@@ -1,5 +1,5 @@
 // The intake form is configurable in Settings. Standard questions map to Client
-// columns; custom ones (added by Phoenix) are saved into the client's Doc only.
+// columns; all responses are kept in the intake snapshot and client’s Doc.
 
 export type IntakeQuestionType = "short" | "long" | "date";
 
@@ -8,7 +8,7 @@ export interface IntakeQuestion {
   label: string;
   type: IntakeQuestionType;
   enabled: boolean;
-  /** true = user-added; answer goes to the Doc, not a record column */
+  /** true = user-added; answer has no dedicated Client column */
   custom?: boolean;
 }
 

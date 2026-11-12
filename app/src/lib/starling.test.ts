@@ -21,6 +21,11 @@ describe("isSessionPayment", () => {
   it("ignores transfers between your own accounts", () => {
     expect(isSessionPayment(item({ source: "INTERNAL_TRANSFER" }))).toBe(false);
   });
+  it("keeps Stripe-labelled payouts out of client payment matching", () => {
+    expect(isSessionPayment(item({ counterPartyName: "Stripe Payments UK Ltd" }))).toBe(false);
+    expect(isSessionPayment(item({ reference: "STRIPE*PAYOUT" }))).toBe(false);
+    expect(isSessionPayment(item({ counterPartyName: "Stripewell" }))).toBe(true);
+  });
   it("ignores pending, outgoing and zero-value items", () => {
     expect(isSessionPayment(item({ status: "PENDING" }))).toBe(false);
     expect(isSessionPayment(item({ direction: "OUT" }))).toBe(false);
