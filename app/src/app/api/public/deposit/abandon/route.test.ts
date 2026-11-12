@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/db", () => ({ prisma: { bookingDeposit: { findUnique: mocks.findUnique } } }));
 vi.mock("@/lib/booking/depositCheckout", () => ({
-  sandboxStripe: () => ({ stripe: { checkout: { sessions: { expire: mocks.expire, retrieve: mocks.retrieve } } } }),
+  depositStripe: () => ({ stripe: { checkout: { sessions: { expire: mocks.expire, retrieve: mocks.retrieve } } } }),
   releaseExpiredDeposit: mocks.release,
 }));
 

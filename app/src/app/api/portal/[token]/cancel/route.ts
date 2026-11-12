@@ -53,7 +53,7 @@ export const POST = portalRoute(async (req, client) => {
   // resyncs the Chalk Farm day block.
   await cancelBookingEvents(booking.id, "client");
   const depositCancellation = deposit?.stripePaymentId
-    ? await cancelDeposit({ id: deposit.id, stripePaymentId: deposit.stripePaymentId }, booking, cancelledAt)
+    ? await cancelDeposit({ id: deposit.id, stripePaymentId: deposit.stripePaymentId, liveMode: deposit.liveMode }, booking, cancelledAt)
     : undefined;
   if (goodwill) {
     await prisma.booking.update({

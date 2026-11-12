@@ -5,7 +5,7 @@ import { completeDeposit } from "./completeDeposit";
 
 const mocks = vi.hoisted(() => {
   const hold = {
-    id: "hold", stripeSessionId: "session", state: "holding",
+    id: "hold", stripeSessionId: "session", liveMode: false, state: "holding",
     name: "Maya", email: "maya@example.test", phone: "", startsAt: new Date("2099-01-01T12:00:00Z"),
   };
   const deposit = {
@@ -38,7 +38,7 @@ vi.mock("./book", () => ({ bookSession: mocks.book }));
 vi.mock("./depositHolds", () => ({ lockBookingTime: mocks.lock, assertUnclaimedBookingTime: mocks.assertTime }));
 vi.mock("./depositCheckout", async (original) => ({
   ...await original<typeof import("./depositCheckout")>(),
-  sandboxStripe: () => ({ stripe: { refunds: { create: mocks.refund } } }),
+  depositStripe: () => ({ stripe: { refunds: { create: mocks.refund } } }),
 }));
 
 const session = {

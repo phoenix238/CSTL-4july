@@ -4,7 +4,7 @@ import { getSettings, prisma } from "@/lib/db";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { completeDeposit } from "@/lib/booking/completeDeposit";
-import { releaseExpiredDeposit, sandboxStripe } from "@/lib/booking/depositCheckout";
+import { releaseExpiredDeposit, depositStripe } from "@/lib/booking/depositCheckout";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   let hold = await prisma.bookingDeposit.findUnique({ where: { id } });
   if (!hold?.stripeSessionId) return NextResponse.json({ error: "Checkout not found." }, { status: 404 });
   if (hold.state === "holding" || hold.state === "refund_required") {
-    const { stripe } = sandboxStripe();
+    const { stripe } = depositStripe(hold.liveMode);
     const session = await stripe.checkout.sessions.retrieve(hold.stripeSessionId);
     if (session.status === "expired") await releaseExpiredDeposit(session);
     else await completeDeposit(session);

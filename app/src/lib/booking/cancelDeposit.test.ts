@@ -9,12 +9,12 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/google/gmail", () => ({ sendEmail: async () => null }));
 vi.mock("./depositCheckout", () => ({
-  sandboxStripe: () => ({ stripe: { refunds: { create: mocks.refund } } }),
+  depositStripe: () => ({ stripe: { refunds: { create: mocks.refund } } }),
 }));
 
 const startsAt = new Date("2099-01-02T12:00:00Z");
 const booking = { id: "booking", startsAt, clientId: "client" };
-const deposit = { id: "hold", stripePaymentId: "payment" };
+const deposit = { id: "hold", stripePaymentId: "payment", liveMode: false };
 
 describe("cancelDeposit", () => {
   beforeEach(() => {

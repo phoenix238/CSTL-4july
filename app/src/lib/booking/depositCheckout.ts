@@ -7,13 +7,17 @@ import { SlotTakenError } from "./slotError";
 export const DEPOSIT_PENCE = 1500;
 const checkoutLifetimeSeconds = 35 * 60;
 
-export function sandboxStripe() {
+export function depositStripe(expectedMode?: boolean) {
+  const liveMode = process.env.STRIPE_ENABLE_LIVE_DEPOSITS === "true";
+  if (expectedMode !== undefined && liveMode !== expectedMode) throw new Error("Stripe deposit mode mismatch.");
+
+  const mode = liveMode ? "live" : "test";
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-  if (!secretKey?.startsWith("sk_test_") || !publishableKey?.startsWith("pk_test_")) {
-    throw new Error("Stripe sandbox checkout is not configured.");
+  if (!secretKey?.startsWith(`sk_${mode}_`) || !publishableKey?.startsWith(`pk_${mode}_`)) {
+    throw new Error("Stripe deposit checkout is not configured for this mode.");
   }
-  return { stripe: new Stripe(secretKey, { timeout: 10_000, maxNetworkRetries: 1 }), publishableKey };
+  return { stripe: new Stripe(secretKey, { timeout: 10_000, maxNetworkRetries: 1 }), publishableKey, liveMode };
 }
 
 export async function openDepositCheckout(input: {
@@ -22,7 +26,7 @@ export async function openDepositCheckout(input: {
   email: string;
   phone: string;
 }) {
-  const { stripe, publishableKey } = sandboxStripe();
+  const { stripe, publishableKey, liveMode } = depositStripe();
   await assertSlotAvailable({ clinic: "bethnal", start: input.start, requireCalendars: true });
 
   const expirySeconds = Math.floor(Date.now() / 1000) + checkoutLifetimeSeconds;
@@ -35,6 +39,7 @@ export async function openDepositCheckout(input: {
     return tx.bookingDeposit.create({
       data: {
         startsAt: input.start,
+        liveMode,
         expiresAt,
         name: input.name,
         email: input.email,
@@ -63,7 +68,7 @@ export async function openDepositCheckout(input: {
     }],
   }, { idempotencyKey: `booking-deposit-${hold.id}` });
 
-  if (checkout.livemode || !checkout.client_secret) throw new Error("Invalid Stripe sandbox checkout.");
+  if (checkout.livemode !== liveMode || !checkout.client_secret) throw new Error("Invalid Stripe deposit checkout.");
   await prisma.bookingDeposit.update({
     where: { id: hold.id },
     data: { stripeSessionId: checkout.id },
@@ -75,12 +80,12 @@ export async function openDepositCheckout(input: {
 /** The Stripe session must match both the stored session and the hold it was created for. */
 export function verifiedDepositPayment(
   session: Stripe.Checkout.Session,
-  hold: { id: string; stripeSessionId: string | null },
+  hold: { id: string; stripeSessionId: string | null; liveMode: boolean },
 ) {
   if (
     session.id !== hold.stripeSessionId ||
     session.client_reference_id !== hold.id ||
-    session.livemode !== false ||
+    session.livemode !== hold.liveMode ||
     session.mode !== "payment" ||
     session.status !== "complete" ||
     session.payment_status !== "paid" ||
@@ -93,9 +98,9 @@ export function verifiedDepositPayment(
 
 /** Only release a reservation early once Stripe confirms it can no longer take payment. */
 export async function releaseExpiredDeposit(session: Stripe.Checkout.Session) {
-  if (session.livemode !== false || session.status !== "expired" || !session.client_reference_id) return;
+  if (session.status !== "expired" || !session.client_reference_id) return;
   await prisma.bookingDeposit.updateMany({
-    where: { id: session.client_reference_id, stripeSessionId: session.id, state: "holding" },
+    where: { id: session.client_reference_id, stripeSessionId: session.id, liveMode: session.livemode, state: "holding" },
     data: { state: "expired" },
   });
 }

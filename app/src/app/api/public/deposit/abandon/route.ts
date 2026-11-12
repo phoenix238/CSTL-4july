@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { releaseExpiredDeposit, sandboxStripe } from "@/lib/booking/depositCheckout";
+import { releaseExpiredDeposit, depositStripe } from "@/lib/booking/depositCheckout";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   if (hold.state === "expired" || hold.state === "refund_requested") return NextResponse.json({ released: true });
   if (hold.state !== "holding") return NextResponse.json({ released: false });
 
-  const { stripe } = sandboxStripe();
+  const { stripe } = depositStripe(hold.liveMode);
   let session;
   try {
     session = await stripe.checkout.sessions.expire(hold.stripeSessionId);

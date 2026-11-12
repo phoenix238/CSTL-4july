@@ -1,18 +1,18 @@
 import { prisma } from "@/lib/db";
 import { sendEmail } from "@/lib/google/gmail";
-import { sandboxStripe } from "./depositCheckout";
+import { depositStripe } from "./depositCheckout";
 
 import { depositCancellationText, type DepositCancellation } from "./depositCancellationText";
 
 export async function cancelDeposit(
-  deposit: { id: string; stripePaymentId: string },
+  deposit: { id: string; stripePaymentId: string; liveMode: boolean },
   booking: { id: string; startsAt: Date; clientId: string },
   cancelledAt: Date,
 ): Promise<DepositCancellation> {
   let outcome: DepositCancellation = "late_review";
   if (booking.startsAt.getTime() - cancelledAt.getTime() >= 24 * 60 * 60_000) {
     try {
-      const { stripe } = sandboxStripe();
+      const { stripe } = depositStripe(deposit.liveMode);
       const refund = await stripe.refunds.create(
         { payment_intent: deposit.stripePaymentId },
         { idempotencyKey: `client-cancel-deposit-${deposit.id}` },

@@ -616,6 +616,7 @@ model BookingDeposit {
   name              String
   email             String
   phone             String    @default("")
+  liveMode          Boolean   @default(false)
   stripeSessionId   String?   @unique
   stripePaymentId   String?   @unique
   bookingId         String?   @unique

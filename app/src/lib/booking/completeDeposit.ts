@@ -5,7 +5,7 @@ import { fmtDayLong, fmtTime } from "@/lib/time";
 import { ensureClientFolderAndDoc } from "@/lib/google/drive";
 import { sendEmail } from "@/lib/google/gmail";
 import { bookSession } from "./book";
-import { DEPOSIT_PENCE, sandboxStripe, verifiedDepositPayment } from "./depositCheckout";
+import { DEPOSIT_PENCE, depositStripe, verifiedDepositPayment } from "./depositCheckout";
 import { assertUnclaimedBookingTime, lockBookingTime } from "./depositHolds";
 import { SlotTakenError } from "./slotError";
 
@@ -64,7 +64,7 @@ export async function completeDeposit(session: Stripe.Checkout.Session) {
   if (!booking) {
     const current = await prisma.bookingDeposit.findUniqueOrThrow({ where: { id } });
     if (current.state === "refund_required") {
-      const { stripe } = sandboxStripe();
+      const { stripe } = depositStripe(hold.liveMode);
       const refund = await stripe.refunds.create(
         { payment_intent: paymentId },
         { idempotencyKey: `unbooked-deposit-${id}` },

@@ -1,8 +1,8 @@
 import type Stripe from "stripe";
-import { describe, expect, it } from "vitest";
-import { verifiedDepositPayment } from "./depositCheckout";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { depositStripe, verifiedDepositPayment } from "./depositCheckout";
 
-const hold = { id: "hold", stripeSessionId: "session" };
+const hold = { id: "hold", stripeSessionId: "session", liveMode: false };
 const session = {
   id: "session",
   client_reference_id: "hold",
@@ -32,5 +32,25 @@ describe("verifiedDepositPayment", () => {
     { payment_intent: null },
   ])("rejects mismatched or unpaid checkout data (%j)", (change) => {
     expect(verifiedDepositPayment({ ...session, ...change } as Stripe.Checkout.Session, hold)).toBeNull();
+  });
+});
+
+describe("depositStripe", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("rejects live keys unless live deposits were explicitly enabled", () => {
+    vi.stubEnv("STRIPE_ENABLE_LIVE_DEPOSITS", undefined);
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_live_sample");
+    vi.stubEnv("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY", "pk_live_sample");
+    expect(() => depositStripe()).toThrow("not configured for this mode");
+    vi.stubEnv("STRIPE_ENABLE_LIVE_DEPOSITS", "true");
+    expect(depositStripe().liveMode).toBe(true);
+    expect(() => depositStripe(false)).toThrow("mode mismatch");
+  });
+
+  it("never verifies a deposit using a session from the other mode", () => {
+    const liveSession = { ...session, livemode: true } as Stripe.Checkout.Session;
+    expect(verifiedDepositPayment(liveSession, { ...hold, liveMode: true })).toBe("pi_test");
+    expect(verifiedDepositPayment(liveSession, hold)).toBeNull();
   });
 });

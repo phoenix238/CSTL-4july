@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({ completeDeposit: vi.fn(), releaseExpiredDeposi
 const stripe = new Stripe("sk_test_sample");
 vi.mock("@/lib/booking/completeDeposit", () => ({ completeDeposit: mocks.completeDeposit }));
 vi.mock("@/lib/booking/depositCheckout", () => ({
-  sandboxStripe: () => ({ stripe }),
+  depositStripe: () => ({ stripe, liveMode: false }),
   releaseExpiredDeposit: mocks.releaseExpiredDeposit,
 }));
 
