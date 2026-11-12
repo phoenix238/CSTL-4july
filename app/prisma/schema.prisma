@@ -607,3 +607,19 @@ model ImprovementNote {
   createdAt DateTime  @default(now())
   doneAt    DateTime?
 }
+
+model BookingDeposit {
+  id                String    @id @default(uuid())
+  startsAt          DateTime
+  expiresAt         DateTime
+  name              String
+  email             String
+  phone             String    @default("")
+  stripeSessionId   String?   @unique
+  stripePaymentId   String?   @unique
+  bookingId         String?   @unique
+  state             String    @default("holding")
+  createdAt         DateTime  @default(now())
+
+  @@index([startsAt, expiresAt])
+}

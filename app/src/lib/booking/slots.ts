@@ -1,3 +1,5 @@
+import { SlotTakenError } from "./slotError";
+import { activeDepositHolds } from "./depositHolds";
 import { prisma, getSettings } from "@/lib/db";
 import { getBusySpans, type BusySpan } from "@/lib/google/calendar";
 import { londonAddDays, londonDayStart, londonDateKey, londonMinutes, londonTime, londonWeekdayIndex, londonWeekStart } from "@/lib/time";
@@ -21,21 +23,28 @@ export async function loadBethnalWeeklyCap(
 ): Promise<AvailabilityParams["weeklyCap"]> {
   const settings = await getSettings();
   if (settings.chalkFarmWeeklyCapHours <= 0) return undefined;
-  const weekBookings = await prisma.booking.findMany({
-    where: {
-      clinic: "bethnal",
-      status: "confirmed",
-      startsAt: { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) },
-      ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
-    },
-    select: { startsAt: true },
-  });
+  const range = { gte: londonAddDays(windowStart, -7), lt: londonAddDays(windowEnd, 7) };
+  const [weekBookings, weekHolds] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        clinic: "bethnal",
+        status: "confirmed",
+        startsAt: range,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
+      },
+      select: { startsAt: true },
+    }),
+    prisma.bookingDeposit.findMany({
+      where: { ...activeDepositHolds(), startsAt: range },
+      select: { startsAt: true },
+    }),
+  ]);
 
   // Group confirmed sessions by London day (start times as minute-of-day), then
   // sum each day's session hours into its week — so the cap tracks the actual
   // Chalk Farm session time held, gaps between sessions excluded.
   const sessionMinsByDay: Record<string, number[]> = {};
-  for (const b of weekBookings) {
+  for (const b of [...weekBookings, ...weekHolds]) {
     const dateKey = londonDateKey(b.startsAt);
     (sessionMinsByDay[dateKey] ??= []).push(londonMinutes(b.startsAt));
   }
@@ -272,28 +281,25 @@ export async function assertSlotAvailable({
   clinic,
   start,
   excludeBookingId,
+  requireCalendars,
 }: {
   clinic: Clinic;
   start: Date;
   excludeBookingId?: string;
+  requireCalendars?: boolean;
 }): Promise<void> {
   // A day either side of the requested time is plenty to place it correctly
   // (day-boundary and buffer effects are local) and far cheaper than the full horizon.
-  const slots = await loadAvailableSlots({
+  const slots = computeAvailableSlots(await availabilityParams({
     clinic,
     windowStart: londonDayStart(-1, start),
     windowEnd: londonDayStart(2, start),
     excludeBookingId,
-  });
+    requireCalendars,
+  }));
   if (!slots.some((s) => s.getTime() === start.getTime())) {
     throw new SlotTakenError();
   }
 }
 
-/** Thrown when a requested slot is no longer free — surfaced to the client as a 409. */
-export class SlotTakenError extends Error {
-  constructor() {
-    super("That time isn't available anymore — please pick another.");
-    this.name = "SlotTakenError";
-  }
-}
+export { SlotTakenError } from "./slotError";

@@ -204,7 +204,7 @@ export function stripBookingSignOff(body: string, settings: Pick<EmailSettings, 
  * sent at different times, and the half with the reference in it was the half
  * that was easy to miss.
  */
-function paymentBlock(s: EmailSettings, paymentRef?: string): string {
+function paymentBlock(s: EmailSettings, paymentRef?: string, includePaymentNote = true): string {
   const bank = [
     s.bankAccountName?.trim() && `  Account name: ${s.bankAccountName.trim()}`,
     s.bankSortCode?.trim() && `  Sort code: ${s.bankSortCode.trim()}`,
@@ -220,7 +220,7 @@ function paymentBlock(s: EmailSettings, paymentRef?: string): string {
   const digits = (x?: string) => (x ?? "").replace(/\D/g, "");
   const acct = digits(s.bankAccountNumber);
   const sort = digits(s.bankSortCode);
-  const paymentDetails = stripBookingSignOff(s.paymentDetails, s);
+  const paymentDetails = includePaymentNote ? stripBookingSignOff(s.paymentDetails, s) : "";
   const freeText =
     bank.length && paymentDetails
       ? paymentDetails
@@ -276,6 +276,7 @@ export function composeBookingEmail(
   sendPayment: boolean,
   settings: EmailSettings,
   links: ClientLinks = PREVIEW_PLACEHOLDERS,
+  { depositPaid = false }: { depositPaid?: boolean } = {},
 ): ComposedEmail {
   const isFirstEmail = !client.welcomeSent;
   const subject = `Your craniosacral session — ${whenLabel} · ${CLINIC_LABEL[clinic]}`;
@@ -347,7 +348,11 @@ export function composeBookingEmail(
   // repeating it as a "Payment (£30–60 sliding scale):" heading said the same
   // thing twice. Only the details that aren't already in the letter go here.
   if (sendPayment) {
-    const payment = paymentBlock(settings, paymentRef);
+    if (depositPaid) {
+      sections.push("Your £15 deposit has been paid. It comes off the £30–£60 sliding scale, leaving £15–£45 to pay by bank transfer. Please also pay for later sessions by bank transfer.");
+    }
+    const hasBankDetails = !!settings.bankSortCode?.trim() && !!settings.bankAccountNumber?.trim();
+    const payment = paymentBlock(settings, paymentRef, !depositPaid || !hasBankDetails);
     if (payment) {
       sections.push(payment);
       includes.push(
@@ -363,7 +368,7 @@ export function composeBookingEmail(
   if (portalLink && !template.includes("{portalLink}")) {
     sections.push(
       [
-        "This is your own page for everything after today:",
+        "Manage or cancel booking:",
         portalLink,
         "Book your next session from there whenever you're ready, move or cancel this one, and find my payment details and your reference any time. No login — just keep the link, it's worth bookmarking.",
       ].join("\n"),

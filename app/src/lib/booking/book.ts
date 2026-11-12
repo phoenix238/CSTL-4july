@@ -15,8 +15,8 @@ import { getPortalIdentity, portalUrl } from "@/lib/portal";
 import { icsUrl } from "@/lib/reminders/sessionReminders";
 import { googleErrorMessage } from "@/lib/google/health";
 import { defaultAmountPence } from "@/lib/account";
-import { CLINIC_LABEL, planBookingEvents, SESSION_MINUTES, type Clinic } from "./rules";
-import { SlotTakenError } from "./slots";
+import { CLINIC_LABEL, planBookingEvents, type Clinic } from "./rules";
+import { assertUnclaimedBookingTime, lockBookingTime } from "./depositHolds";
 
 export interface BookingRequest {
   /** existing client id — or absent with newClient set */
@@ -118,19 +118,9 @@ async function createBookingRow({
   start: Date;
   bookedVia: string;
 }) {
-  const end = new Date(start.getTime() + SESSION_MINUTES * 60_000);
   return prisma.$transaction(async (tx) => {
-    // $executeRaw, not $queryRaw: pg_advisory_xact_lock() returns void, which
-    // $queryRaw tries to deserialize as a result column and fails on — this is
-    // called purely for its side effect (holding the lock for the transaction).
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${londonDateKey(start)}`}))`;
-    const clash = await tx.booking.findFirst({
-      where: {
-        status: "confirmed",
-        startsAt: { gt: new Date(start.getTime() - SESSION_MINUTES * 60_000), lt: end },
-      },
-    });
-    if (clash) throw new SlotTakenError();
+    await lockBookingTime(tx, start);
+    await assertUnclaimedBookingTime(tx, start);
     return tx.booking.create({
       data: {
         clientId,
@@ -232,7 +222,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
   // URL, in any inbox that renders HTML — whichever of these actually made it
   // into `body` (a hand-edited version might have dropped one).
   const emailLinks = [
-    { url: portalLink, label: "Click here for your booking page" },
+    { url: portalLink, label: "Manage or cancel booking" },
     { url: intakeLink, label: "Click here for your intake form" },
     { url: calendarIcsUrl, label: "Add to calendar" },
   ].filter((l) => l.url);

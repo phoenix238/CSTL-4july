@@ -1,8 +1,10 @@
+import { activeDepositHolds } from "@/lib/booking/depositHolds";
 import { prisma, getSettings } from "@/lib/db";
 import {
   CLINIC_EVENT_COLOR,
   EVENT_REMINDERS,
   NO_REMINDERS,
+  SESSION_MINUTES,
   SESSION_EVENT_TITLE,
   personalEventReminders,
   planBookingEvents,
@@ -377,7 +379,7 @@ export async function getBusySpans(
 ): Promise<BusySpan[]> {
   // These three are independent — fetch our confirmed bookings, the Chalk Farm
   // day blocks, and the Google client together rather than back to back.
-  const [rawBookings, chalkFarmBlocks, calendar] = await Promise.all([
+  const [rawBookings, chalkFarmBlocks, calendar, holds] = await Promise.all([
     prisma.booking.findMany({
       where: { status: "confirmed", startsAt: { gte: new Date(windowStart.getTime() - 2 * 3600_000), lt: windowEnd } },
       include: { client: true },
@@ -386,6 +388,13 @@ export async function getBusySpans(
       where: { date: { gte: londonDateKey(windowStart), lt: londonDateKey(windowEnd) } },
     }),
     getCalendarApi(),
+    prisma.bookingDeposit.findMany({
+      where: {
+        ...activeDepositHolds(),
+        startsAt: { gte: new Date(windowStart.getTime() - SESSION_MINUTES * 60_000), lt: windowEnd },
+      },
+      select: { startsAt: true },
+    }),
   ]);
 
   const personalCalId = await calendarId("personal");
@@ -545,5 +554,13 @@ export async function getBusySpans(
   }
 
   const google = [...personalSpans, ...perSource.flat()];
-  return [...known, ...google].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const held: BusySpan[] = holds.map(({ startsAt }) => ({
+    start: startsAt,
+    end: new Date(startsAt.getTime() + SESSION_MINUTES * 60_000),
+    title: "Checkout hold",
+    known: false,
+    source: "booking",
+    clinic: "bethnal",
+  }));
+  return [...known, ...held, ...google].sort((a, b) => a.start.getTime() - b.start.getTime());
 }

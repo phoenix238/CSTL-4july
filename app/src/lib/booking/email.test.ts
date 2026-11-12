@@ -228,6 +228,26 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("Account number: 12345678");
   });
 
+  it("includes the deposit credit and bank transfer instructions in the existing welcome email", () => {
+    const email = composeBookingEmail(
+      { name: "Maya", welcomeSent: false },
+      "bethnal",
+      "Thursday at 2 pm",
+      true,
+      { ...settings, bankSortCode: "12-34-56", bankAccountNumber: "12345678", paymentDetails: "Pay by card on the day." },
+      { intakeLink: INTAKE_LINK, portalLink: PORTAL_LINK, paymentRef: "EXAMPLE" },
+      { depositPaid: true },
+    );
+    expect(email.body).toContain("£15 deposit has been paid");
+    expect(email.body).toContain("£15–£45 to pay by bank transfer");
+    expect(email.body).toContain("Sort code: 12-34-56");
+    expect(email.body).toContain("Reference: EXAMPLE");
+    expect(email.body).toContain("Manage or cancel booking:");
+    expect(email.body).toContain(PORTAL_LINK);
+    expect(email.body).toContain(INTAKE_LINK);
+    expect(email.body).not.toContain("Pay by card on the day");
+  });
+
   it("puts everything a new client needs above one sign-off", () => {
     // The whole point of folding the welcome, the booking-page email and the
     // intake email into one message: all of it in a single letter, signed once.
