@@ -99,18 +99,7 @@ export async function notifyPhoenix(input: NotifyInput): Promise<void> {
   }
 }
 
-/**
- * Confirm to the client, so they have it in writing.
- *
- * `bcc` blind-copies Phoenix on this same email — one message about one
- * action, in place of that email plus a separately-worded "they just
- * rescheduled/cancelled" summary landing beside it. Returns whether the
- * client's copy actually sent, so the caller can fall back to a direct
- * notification when it didn't (their only record of what happened).
- */
-export async function confirmToClient(input: NotifyInput, bcc?: string): Promise<{ sent: boolean }> {
-  if (!input.clientEmail) return { sent: false };
-  const settings = await getSettings();
+export function composePortalConfirmation(input: NotifyInput, signOff: string) {
   const clinic = CLINIC_LABEL[input.clinic];
   const first = input.clientName.split(" ")[0] || "there";
 
@@ -152,12 +141,28 @@ export async function confirmToClient(input: NotifyInput, bcc?: string): Promise
   if (input.portalLink && input.action !== "cancelled") {
     lines.push("", "You can change or cancel this any time from your page:", input.portalLink);
   }
-  lines.push("", ...resolveSignOff(settings).split("\n"));
+  lines.push("", ...signOff.split("\n"));
 
   const links = input.portalLink ? [{ url: input.portalLink, label: "Click here for your booking page" }] : undefined;
 
+  return { subject, body: lines.join("\n"), links };
+}
+
+/**
+ * Confirm to the client, so they have it in writing.
+ *
+ * `bcc` blind-copies Phoenix on this same email — one message about one
+ * action, in place of that email plus a separately-worded "they just
+ * rescheduled/cancelled" summary landing beside it. Returns whether the
+ * client's copy actually sent, so the caller can fall back to a direct
+ * notification when it didn't (their only record of what happened).
+ */
+export async function confirmToClient(input: NotifyInput, bcc?: string): Promise<{ sent: boolean }> {
+  if (!input.clientEmail) return { sent: false };
+  const { subject, body, links } = composePortalConfirmation(input, resolveSignOff(await getSettings()));
+
   try {
-    await sendEmail(input.clientEmail, subject, lines.join("\n"), undefined, undefined, { bcc, links });
+    await sendEmail(input.clientEmail, subject, body, undefined, undefined, { bcc, links });
     return { sent: true };
   } catch (err) {
     console.error("Couldn't send the portal confirmation email to the client", err);

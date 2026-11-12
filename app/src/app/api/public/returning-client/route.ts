@@ -5,7 +5,6 @@ import { prisma, getSettings } from "@/lib/db";
 import { assertBookingAllowed, RateLimitedError } from "@/lib/booking/rateLimit";
 import { appBaseUrl } from "@/lib/appUrl";
 import { sendEmail } from "@/lib/google/gmail";
-import { CLINIC_LABEL } from "@/lib/booking/rules";
 import { bookSession } from "@/lib/booking/book";
 import { assertSlotAvailable, SlotTakenError } from "@/lib/booking/slots";
 
@@ -49,17 +48,18 @@ export async function POST(req: Request) {
       clientId: match?.id,
       newClient: match ? undefined : { name, email, phone },
       clinic, startISO, bookedVia: "online",
-      sendEmail: false, sendPayment: false,
+      sendEmail: false, sendPayment: false, prepareEmailForClipboard: false,
     });
 
+    const profileUrl = `${appBaseUrl(settings)}/clients/${result.clientId}`;
     const details = [
       `From: ${name} <${email}>`,
       `Phone used last time: ${phone}`,
-      `Appointment booked: ${result.whenLabel} · ${CLINIC_LABEL[clinic]}`,
+      `Appointment booked: ${result.whenLabel}`,
       "",
       match
-        ? "Returning client — verify and update the email on the linked client record."
-        : "Returning client — no unique name and phone match. The appointment is booked under a separate client record. Review it before linking it to any existing record.",
+        ? "Returning client — verify the new address, then update the primary email on the linked profile."
+        : "Returning client — no unique name and phone match. The appointment is booked under a separate client record. Open the linked profile and use Review a possible duplicate to compare it with the original before changing either record.",
     ].join("\n");
     try {
       const enquiry = await prisma.enquiry.create({
@@ -71,7 +71,7 @@ export async function POST(req: Request) {
           await sendEmail(
             process.env.ALLOWED_EMAIL,
             "Returning client booked — email needs review",
-            `${details}\n\nReview in Enquiries: ${appBaseUrl(settings)}/enquiries?open=${enquiry.id}`,
+            `${details}\n\nReview in Enquiries: ${appBaseUrl(settings)}/enquiries?open=${enquiry.id}\nOpen the booked client profile: ${profileUrl}`,
             undefined, undefined, { replyTo: email },
           );
         } catch {

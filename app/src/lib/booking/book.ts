@@ -27,6 +27,7 @@ export interface BookingRequest {
   clinic: Clinic;
   startISO: string;
   sendEmail: boolean;
+  prepareEmailForClipboard?: boolean;
   sendPayment: boolean;
   /** the (possibly hand-edited) email body from the preview box */
   emailBody?: string;
@@ -286,7 +287,7 @@ export async function bookSession(req: BookingRequest): Promise<BookingResult> {
     emailTextForClipboard = body;
     firstContactMade = true;
     items.push("No email address on record yet — email text copied to your clipboard instead");
-  } else {
+  } else if (req.prepareEmailForClipboard !== false) {
     emailTextForClipboard = body;
     firstContactMade = true;
     items.push("Email text copied to your clipboard — no email was sent");

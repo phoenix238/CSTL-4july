@@ -242,7 +242,6 @@ describe("composeBookingEmail", () => {
     expect(email.body).toContain("£15–£45 to pay by bank transfer");
     expect(email.body).toContain("Sort code: 12-34-56");
     expect(email.body).toContain("Reference: EXAMPLE");
-    expect(email.body).toContain("Manage or cancel booking:");
     expect(email.body).toContain(PORTAL_LINK);
     expect(email.body).toContain(INTAKE_LINK);
     expect(email.body).not.toContain("Pay by card on the day");

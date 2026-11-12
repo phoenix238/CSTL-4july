@@ -154,7 +154,8 @@ function fillTemplate(template: string, vars: Record<string, string>): string {
 export function resolveTemplate(clinic: Clinic, s: EmailSettings): string {
   const shared = s.emailTemplate?.trim();
   if (shared) return shared;
-  return (clinic === "waterloo" ? s.emailTemplateWaterloo : s.emailTemplateBethnal) ?? "";
+  return (clinic === "waterloo" ? s.emailTemplateWaterloo : s.emailTemplateBethnal)?.trim()
+    || "Hi {name},\n\nYour session is confirmed for {when} at {clinic}.";
 }
 
 /** The returning-client confirmation, with the old hardcoded wording as the floor. */
@@ -368,7 +369,6 @@ export function composeBookingEmail(
   if (portalLink && !template.includes("{portalLink}")) {
     sections.push(
       [
-        "Manage or cancel booking:",
         portalLink,
         "Book your next session from there whenever you're ready, move or cancel this one, and find my payment details and your reference any time. No login — just keep the link, it's worth bookmarking.",
       ].join("\n"),
