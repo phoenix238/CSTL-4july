@@ -20,6 +20,7 @@ export async function loadBethnalWeeklyCap(
   windowStart: Date,
   windowEnd: Date,
   excludeBookingId?: string,
+  excludeDepositId?: string,
 ): Promise<AvailabilityParams["weeklyCap"]> {
   const settings = await getSettings();
   if (settings.chalkFarmWeeklyCapHours <= 0) return undefined;
@@ -35,7 +36,7 @@ export async function loadBethnalWeeklyCap(
       select: { startsAt: true },
     }),
     prisma.bookingDeposit.findMany({
-      where: { ...activeDepositHolds(), startsAt: range },
+      where: { ...activeDepositHolds(), startsAt: range, ...(excludeDepositId ? { id: { not: excludeDepositId } } : {}) },
       select: { startsAt: true },
     }),
   ]);
@@ -183,19 +184,21 @@ async function availabilityParams({
   windowStart,
   windowEnd,
   excludeBookingId,
+  excludeDepositId,
   requireCalendars = false,
 }: {
   clinic: Clinic;
   windowStart: Date;
   windowEnd: Date;
   excludeBookingId?: string;
+  excludeDepositId?: string;
   requireCalendars?: boolean;
 }): Promise<AvailabilityParams> {
   const settings = await getSettings();
   const [overrides, busy, weeklyCap] = await Promise.all([
     loadOverridesForWindow(clinic, windowStart, windowEnd),
-    getBusySpans(windowStart, windowEnd, { requireClinic: requireCalendars ? clinic : undefined }),
-    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId) : Promise.resolve(undefined),
+    getBusySpans(windowStart, windowEnd, { requireClinic: requireCalendars ? clinic : undefined, excludeDepositId }),
+    clinic === "bethnal" ? loadBethnalWeeklyCap(windowStart, windowEnd, excludeBookingId, excludeDepositId) : Promise.resolve(undefined),
   ]);
 
   return {
@@ -209,7 +212,7 @@ async function availabilityParams({
     // Waterloo and Bethnal Green don't need the same spacing between Phoenix's
     // own back-to-back sessions — kept as separate settings per clinic.
     bufferMinutes: clinic === "bethnal" ? settings.bethnalBufferMinutes : settings.bookingBufferMinutes,
-    minNoticeMinutes: settings.bookingMinNoticeMins,
+    minNoticeMinutes: excludeDepositId ? 0 : settings.bookingMinNoticeMins,
     weeklyCap,
   };
 }
@@ -282,11 +285,13 @@ export async function assertSlotAvailable({
   start,
   excludeBookingId,
   requireCalendars,
+  excludeDepositId,
 }: {
   clinic: Clinic;
   start: Date;
   excludeBookingId?: string;
   requireCalendars?: boolean;
+  excludeDepositId?: string;
 }): Promise<void> {
   // A day either side of the requested time is plenty to place it correctly
   // (day-boundary and buffer effects are local) and far cheaper than the full horizon.
@@ -296,6 +301,7 @@ export async function assertSlotAvailable({
     windowEnd: londonDayStart(2, start),
     excludeBookingId,
     requireCalendars,
+    excludeDepositId,
   }));
   if (!slots.some((s) => s.getTime() === start.getTime())) {
     throw new SlotTakenError();

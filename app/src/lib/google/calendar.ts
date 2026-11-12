@@ -375,7 +375,7 @@ export interface BusySpan {
 export async function getBusySpans(
   windowStart: Date,
   windowEnd: Date,
-  { requireClinic }: { requireClinic?: Clinic } = {},
+  { requireClinic, excludeDepositId }: { requireClinic?: Clinic; excludeDepositId?: string } = {},
 ): Promise<BusySpan[]> {
   // These three are independent — fetch our confirmed bookings, the Chalk Farm
   // day blocks, and the Google client together rather than back to back.
@@ -391,6 +391,7 @@ export async function getBusySpans(
     prisma.bookingDeposit.findMany({
       where: {
         ...activeDepositHolds(),
+        ...(excludeDepositId ? { id: { not: excludeDepositId } } : {}),
         startsAt: { gte: new Date(windowStart.getTime() - SESSION_MINUTES * 60_000), lt: windowEnd },
       },
       select: { startsAt: true },

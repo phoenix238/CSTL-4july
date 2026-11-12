@@ -1,3 +1,4 @@
+import { assertSlotAvailable } from "./slots";
 import type Stripe from "stripe";
 import { prisma, getSettings } from "@/lib/db";
 import { fmtDayLong, fmtTime } from "@/lib/time";
@@ -16,6 +17,16 @@ export async function completeDeposit(session: Stripe.Checkout.Session) {
   const paymentId = verifiedDepositPayment(session, hold);
   if (!paymentId) return;
 
+  let unavailable = false;
+  if (hold.state === "holding") {
+    try {
+      await assertSlotAvailable({ clinic: "bethnal", start: hold.startsAt, requireCalendars: true, excludeDepositId: id });
+    } catch (error) {
+      if (!(error instanceof SlotTakenError)) throw error;
+      unavailable = true;
+    }
+  }
+
   const booking = await prisma.$transaction(async (tx) => {
     await lockBookingTime(tx, hold.startsAt);
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking-email:${hold.email.toLowerCase()}`}))`;
@@ -23,7 +34,7 @@ export async function completeDeposit(session: Stripe.Checkout.Session) {
     if (current.state !== "holding") return null;
 
     try {
-      if (hold.startsAt <= new Date()) throw new SlotTakenError();
+      if (unavailable || hold.startsAt <= new Date()) throw new SlotTakenError();
       await assertUnclaimedBookingTime(tx, hold.startsAt, undefined, id);
       const existing = await tx.client.findFirst({
         where: { email: { equals: hold.email, mode: "insensitive" } },

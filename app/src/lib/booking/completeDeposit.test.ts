@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     hold, deposit, tx,
-    lock: vi.fn(), assertTime: vi.fn(), book: vi.fn(), refund: vi.fn(),
+    lock: vi.fn(), assertCalendar: vi.fn(), assertTime: vi.fn(), book: vi.fn(), refund: vi.fn(),
     transaction: vi.fn(),
   };
 });
@@ -33,6 +33,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/google/drive", () => ({ ensureClientFolderAndDoc: async () => null }));
 vi.mock("@/lib/google/gmail", () => ({ sendEmail: vi.fn().mockResolvedValue(null) }));
+vi.mock("./slots", () => ({ assertSlotAvailable: mocks.assertCalendar }));
 vi.mock("./book", () => ({ bookSession: mocks.book }));
 vi.mock("./depositHolds", () => ({ lockBookingTime: mocks.lock, assertUnclaimedBookingTime: mocks.assertTime }));
 vi.mock("./depositCheckout", async (original) => ({
@@ -83,5 +84,15 @@ describe("completeDeposit", () => {
     await completeDeposit(session);
     expect(mocks.tx.booking.create).not.toHaveBeenCalled();
     expect(mocks.refund).toHaveBeenCalledExactlyOnceWith({ payment_intent: "payment" }, { idempotencyKey: "unbooked-deposit-hold" });
+  });
+
+  it("refunds when a calendar conflict appeared during checkout", async () => {
+    mocks.assertCalendar.mockRejectedValueOnce(new SlotTakenError());
+    await completeDeposit(session);
+    expect(mocks.assertCalendar).toHaveBeenCalledWith(expect.objectContaining({
+      requireCalendars: true, excludeDepositId: "hold",
+    }));
+    expect(mocks.tx.booking.create).not.toHaveBeenCalled();
+    expect(mocks.refund).toHaveBeenCalledOnce();
   });
 });
