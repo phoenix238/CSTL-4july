@@ -619,6 +619,7 @@ model BookingDeposit {
   stripeSessionId   String?   @unique
   stripePaymentId   String?   @unique
   bookingId         String?   @unique
+  confirmingAt      DateTime?
   state             String    @default("holding")
   createdAt         DateTime  @default(now())
 

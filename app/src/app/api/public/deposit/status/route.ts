@@ -1,3 +1,4 @@
+import { reviewInterruptedDeposits } from "@/lib/booking/reviewInterruptedDeposits";
 import { NextResponse } from "next/server";
 import { getSettings, prisma } from "@/lib/db";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
@@ -22,6 +23,9 @@ export async function POST(req: Request) {
     if (hold.state === "holding" && session.status === "expired") {
       return NextResponse.json({ state: "expired" });
     }
+  }
+  if (hold.state === "confirming" && await reviewInterruptedDeposits(new Date(), hold.id)) {
+    return NextResponse.json({ state: "booking_review" });
   }
   if (hold.state !== "booked" || !hold.bookingId) return NextResponse.json({ state: hold.state });
 

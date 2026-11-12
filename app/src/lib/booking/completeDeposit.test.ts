@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     findUnique: vi.fn(),
     findUniqueOrThrow: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   };
   const tx = {
     $executeRaw: vi.fn(),
@@ -51,10 +52,12 @@ describe("completeDeposit", () => {
     mocks.deposit.findUnique.mockResolvedValue(mocks.hold);
     let current = { ...mocks.hold };
     mocks.deposit.findUniqueOrThrow.mockImplementation(async () => current);
-    mocks.deposit.update.mockImplementation(async ({ data }) => {
+    const update = async ({ data }: { data: Partial<typeof current> }) => {
       current = { ...current, ...data };
       return current;
-    });
+    };
+    mocks.deposit.update.mockImplementation(update);
+    mocks.deposit.updateMany.mockImplementation(update);
     mocks.tx.client.findFirst.mockResolvedValue(null);
     mocks.tx.client.create.mockResolvedValue({ id: "client" });
     mocks.tx.booking.create.mockResolvedValue({ id: "booking", clientId: "client" });
@@ -72,7 +75,7 @@ describe("completeDeposit", () => {
     await completeDeposit(session);
     expect(mocks.tx.booking.create).toHaveBeenCalledExactlyOnceWith({ data: expect.objectContaining({ depositPence: 1500 }) });
     expect(mocks.book).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ depositBookingId: "booking", sendEmail: true }));
-    expect(mocks.deposit.update).toHaveBeenLastCalledWith({ where: { id: "hold" }, data: { state: "booked" } });
+    expect(mocks.deposit.updateMany).toHaveBeenLastCalledWith({ where: { id: "hold", state: "confirming" }, data: { state: "booked" } });
   });
 
   it("requests a full refund when a paid appointment cannot be booked", async () => {

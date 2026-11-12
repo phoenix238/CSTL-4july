@@ -45,7 +45,7 @@ export async function completeDeposit(session: Stripe.Checkout.Session) {
       data: { clientId: client.id, startsAt: hold.startsAt, clinic: "bethnal", bookedVia: "online", depositPence: DEPOSIT_PENCE },
     });
     await tx.bookingDeposit.update({
-      where: { id }, data: { state: "confirming", stripePaymentId: paymentId, bookingId: created.id },
+      where: { id }, data: { state: "confirming", confirmingAt: new Date(), stripePaymentId: paymentId, bookingId: created.id },
     });
     return created;
   });
@@ -77,11 +77,11 @@ export async function completeDeposit(session: Stripe.Checkout.Session) {
       sendPayment: true,
       notifyOwner: settings.bookingNotifyEmail,
     });
-    await prisma.bookingDeposit.update({ where: { id }, data: { state: "booked" } });
+    await prisma.bookingDeposit.updateMany({ where: { id, state: "confirming" }, data: { state: "booked" } });
     if (!result.emailSent) await alertPhoenix(hold, "Booking confirmed, but the welcome email could not be sent.");
   } catch {
-    await prisma.bookingDeposit.update({ where: { id }, data: { state: "booking_review" } });
-    await alertPhoenix(hold, "The deposit was paid and the slot is in the CRM. Check the diary and finish confirming the booking.");
+    const { count } = await prisma.bookingDeposit.updateMany({ where: { id, state: "confirming" }, data: { state: "booking_review" } });
+    if (count) await alertPhoenix(hold, "The deposit was paid and the slot is in the CRM. Check the diary and finish confirming the booking.");
   }
 
   await ensureClientFolderAndDoc(booking.clientId).catch(() => {
