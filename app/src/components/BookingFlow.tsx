@@ -226,8 +226,25 @@ export function BookingFlow({
   // Backing out mid-way shouldn't strand them: the box closes, the time stays
   // highlighted in the list behind it, and tapping any time re-opens it with
   // whatever they'd already typed still in the fields.
-  function closeSheet() {
+  async function closeSheet() {
     if (submitting) return;
+    if (checkout) {
+      setSubmitting(true);
+      try {
+        const { released } = await api<{ released: boolean }>("/api/public/deposit/abandon", {
+          method: "POST", body: JSON.stringify({ id: checkout.id }),
+        });
+        if (!released) {
+          toast("Please check your payment and booking before closing checkout.");
+          return;
+        }
+      } catch {
+        toast("We couldn’t close checkout safely. Please check your payment and booking.");
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
     setSheetOpen(false);
     setCheckout(null);
     setRecognised(null);

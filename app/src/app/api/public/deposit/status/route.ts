@@ -3,7 +3,7 @@ import { getSettings, prisma } from "@/lib/db";
 import { getOrCreateIntakeToken, intakeUrl } from "@/lib/intake";
 import { fmtDayLong, fmtTime } from "@/lib/time";
 import { completeDeposit } from "@/lib/booking/completeDeposit";
-import { sandboxStripe } from "@/lib/booking/depositCheckout";
+import { releaseExpiredDeposit, sandboxStripe } from "@/lib/booking/depositCheckout";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -16,7 +16,8 @@ export async function POST(req: Request) {
   if (hold.state === "holding" || hold.state === "refund_required") {
     const { stripe } = sandboxStripe();
     const session = await stripe.checkout.sessions.retrieve(hold.stripeSessionId);
-    await completeDeposit(session);
+    if (session.status === "expired") await releaseExpiredDeposit(session);
+    else await completeDeposit(session);
     hold = await prisma.bookingDeposit.findUniqueOrThrow({ where: { id } });
     if (hold.state === "holding" && session.status === "expired") {
       return NextResponse.json({ state: "expired" });

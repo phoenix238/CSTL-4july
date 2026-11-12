@@ -89,3 +89,13 @@ export function verifiedDepositPayment(
   ) return null;
   return typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
 }
+
+
+/** Only release a reservation early once Stripe confirms it can no longer take payment. */
+export async function releaseExpiredDeposit(session: Stripe.Checkout.Session) {
+  if (session.livemode !== false || session.status !== "expired" || !session.client_reference_id) return;
+  await prisma.bookingDeposit.updateMany({
+    where: { id: session.client_reference_id, stripeSessionId: session.id, state: "holding" },
+    data: { state: "expired" },
+  });
+}

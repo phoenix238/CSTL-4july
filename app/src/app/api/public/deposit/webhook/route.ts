@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { completeDeposit } from "@/lib/booking/completeDeposit";
-import { sandboxStripe } from "@/lib/booking/depositCheckout";
+import { releaseExpiredDeposit, sandboxStripe } from "@/lib/booking/depositCheckout";
 
 export async function POST(req: Request) {
   const signature = req.headers.get("stripe-signature");
@@ -16,6 +16,8 @@ export async function POST(req: Request) {
   if (event.livemode) return new NextResponse(null, { status: 400 });
   if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     await completeDeposit(event.data.object);
+  } else if (event.type === "checkout.session.expired") {
+    await releaseExpiredDeposit(event.data.object);
   }
   return NextResponse.json({ received: true });
 }
