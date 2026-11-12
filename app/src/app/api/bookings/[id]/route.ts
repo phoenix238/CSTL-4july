@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guarded } from "@/lib/api";
 import { prisma } from "@/lib/db";
+import { SlotTakenError } from "@/lib/booking/slotError";
 import { rescheduleBooking } from "@/lib/booking/book";
 import { cancelBookingEvents } from "@/lib/google/calendar";
 
@@ -26,6 +27,10 @@ export const PATCH = guarded(async (req: Request, ctx: { params: Promise<{ id: s
   const { startISO } = await req.json();
   if (!startISO) throw new Error("startISO is required");
   await assertStillUpcoming(id);
-  const result = await rescheduleBooking(id, startISO);
-  return NextResponse.json(result);
+  try {
+    return NextResponse.json(await rescheduleBooking(id, startISO));
+  } catch (error) {
+    if (error instanceof SlotTakenError) return NextResponse.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
 });

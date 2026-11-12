@@ -1,3 +1,4 @@
+import { SlotTakenError } from "./slotError";
 import { prisma, getSettings } from "@/lib/db";
 import { createClientWithDrive } from "@/lib/clients";
 import {
@@ -338,22 +339,29 @@ export async function rescheduleBooking(bookingId: string, newStartISO: string) 
   if (Number.isNaN(start.getTime())) throw new Error("Invalid new start time.");
   const oldDateKey = londonDateKey(booking.startsAt);
 
-  await deleteBookingGoogleEvents(booking);
-  await prisma.booking.update({
-    where: { id: bookingId },
-    // The booking row survives the move, so its payment state travels with it —
-    // a client who has already paid and then reshuffles the time doesn't get
-    // silently marked unpaid.
-    data: {
-      startsAt: start,
-      personalEventId: "",
-      secondaryEventId: "",
-      rescheduleCount: { increment: 1 },
-      // A moved session earns its reminders afresh against the new date — clear
-      // what was already sent so the day-before / morning-of nudge fires again.
-      remindersSentLead: [],
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    await lockBookingTime(tx, start);
+    await assertUnclaimedBookingTime(tx, start, bookingId);
+    // Claim the destination before touching Calendar. If another request moved
+    // or cancelled this row after we read it, leave its calendar events alone.
+    const { count } = await tx.booking.updateMany({
+      where: {
+        id: bookingId,
+        status: "confirmed",
+        startsAt: booking.startsAt,
+        rescheduleCount: booking.rescheduleCount,
+      },
+      data: {
+        startsAt: start,
+        personalEventId: "",
+        secondaryEventId: "",
+        rescheduleCount: { increment: 1 },
+        remindersSentLead: [],
+      },
+    });
+    if (!count) throw new SlotTakenError();
+    await deleteBookingGoogleEvents(booking);
+  }, { timeout: 15_000 });
   await createBookingEvents(bookingId); // re-syncs the new day's Chalk Farm block (Bethnal)
 
   // Moved to a different day — the old day's shared block needs recomputing
