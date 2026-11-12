@@ -1,3 +1,4 @@
+import { WATERLOO_CONTACT_MESSAGE } from "@/lib/booking/contact";
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
     if (company?.trim()) {
       // Bot filled the hidden field — reject quietly, no booking attempted.
       return NextResponse.json({ error: "Something went wrong" }, { status: 400 });
+    }
+    if (clinic === "waterloo") {
+      return NextResponse.json({ error: WATERLOO_CONTACT_MESSAGE }, { status: 403 });
     }
     if (clinic !== "waterloo" && clinic !== "bethnal") {
       return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });

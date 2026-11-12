@@ -1,3 +1,4 @@
+import { WATERLOO_CONTACT_MESSAGE } from "@/lib/booking/contact";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { Clinic } from "@/lib/booking/rules";
@@ -10,6 +11,9 @@ import { portalRoute } from "@/lib/portalRoute";
  */
 export const GET = portalRoute(async (req, client) => {
   const clinic = new URL(req.url).searchParams.get("clinic");
+  if (clinic === "waterloo" && new URL(req.url).searchParams.get("moving") !== "1") {
+    return NextResponse.json({ error: WATERLOO_CONTACT_MESSAGE }, { status: 403 });
+  }
   if (clinic !== "waterloo" && clinic !== "bethnal") {
     return NextResponse.json({ error: "Invalid clinic" }, { status: 400 });
   }

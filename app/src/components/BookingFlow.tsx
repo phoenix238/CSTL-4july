@@ -1,5 +1,6 @@
 "use client";
 
+import { WaterlooContact } from "./WaterlooContact";
 import { useState } from "react";
 import { api, Card, PrimaryButton, Sheet, inputClass, useToast } from "./ui";
 import { BookSlotPicker } from "./BookSlotPicker";
@@ -265,7 +266,7 @@ export function BookingFlow({
           {note && <p className="text-[12px] leading-relaxed whitespace-pre-line text-[oklch(0.45_0.02_60)]">{note}</p>}
         </div>
 
-        <BookSlotPicker
+        {clinic === "waterloo" ? <WaterlooContact /> : <BookSlotPicker
           clinic={clinic}
           selected={selected}
           onSelect={(iso) => {
@@ -284,7 +285,7 @@ export function BookingFlow({
           }}
           boxed={false}
           layout="responsive"
-        />
+        />}
       </Card>
 
       <Sheet open={sheetOpen} onClose={closeSheet} label="Your details">

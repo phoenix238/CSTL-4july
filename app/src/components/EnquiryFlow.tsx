@@ -542,7 +542,7 @@ export function EnquiryFlow({
           emailBody: message,
         }),
       });
-      toast("Offer email sent — it includes a link so they can pick a time themselves");
+      toast(clinic === "waterloo" ? "Offer email sent. You can confirm the time once they reply." : "Offer email sent — it includes a link so they can pick a time themselves");
       void refreshWaiting();
       resetToEmpty();
     } catch (err) {

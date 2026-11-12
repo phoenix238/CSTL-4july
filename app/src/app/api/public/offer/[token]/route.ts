@@ -1,3 +1,4 @@
+import { WATERLOO_CONTACT_MESSAGE } from "@/lib/booking/contact";
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { prisma, getSettings } from "@/lib/db";
@@ -65,6 +66,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
       return NextResponse.json({ error: "expired" }, { status: 404 });
     }
 
+    if (enquiry.clinic === "waterloo") {
+      return NextResponse.json({ error: WATERLOO_CONTACT_MESSAGE }, { status: 403 });
+    }
+
     const client = await prisma.client.findUnique({ where: { id: enquiry.clientId } });
     const freeTimes = await stillFreeOfferedTimes(enquiry.clinic, enquiry.offeredTimes);
     return NextResponse.json({
@@ -96,6 +101,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     }
     if (enquiry.status !== "offered" || !enquiry.clientId || !isClinic(enquiry.clinic)) {
       return NextResponse.json({ error: "expired" }, { status: 404 });
+    }
+
+    if (enquiry.clinic === "waterloo") {
+      return NextResponse.json({ error: WATERLOO_CONTACT_MESSAGE }, { status: 403 });
     }
 
     const start = startISO ? new Date(startISO) : null;

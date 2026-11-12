@@ -19,7 +19,7 @@ const request = z.object({
   name: z.string().trim().min(1).max(200),
   email: z.string().trim().email().max(254),
   phone: z.string().trim().max(50).regex(/^\+?[\d\s().-]+$/).refine((value) => value.replace(/\D/g, "").length >= 7),
-  clinic: z.enum(["waterloo", "bethnal"]),
+  clinic: z.literal("bethnal"),
   startISO: z.string().datetime(),
   company: z.string().trim().max(0).optional(),
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import { WaterlooContact } from "../WaterlooContact";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, Card, CopyButton, inputClass, OutlineButton, PrimaryButton, SectionLabel, Sheet, useToast } from "@/components/ui";
@@ -203,7 +204,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
         </div>
       )}
 
-      <BookSlotPicker
+      {mode === "book" && clinic === "waterloo" ? <WaterlooContact /> : <BookSlotPicker
         clinic={pickerClinic}
         selected={selected}
         onSelect={(iso) => {
@@ -214,7 +215,7 @@ export function ClientPortal({ token, view }: { token: string; view: PortalView 
           `/api/portal/${token}/slots?clinic=${c}${mode === "reschedule" ? "&moving=1" : ""}`
         }
         emptyMessage="No times free at the moment — please check back in a few days, or message Phoenix directly."
-      />
+      />}
 
       <div className="flex flex-wrap gap-2">
         <OutlineButton disabled={busy} onClick={reset}>
